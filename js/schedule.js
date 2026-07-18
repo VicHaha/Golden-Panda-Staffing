@@ -17,11 +17,19 @@ function renderSchedule(){
   const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 28);
   const todayStr = today.toISOString().slice(0,10);
   const windowEndStr = windowEnd.toISOString().slice(0,10);
+  const now = new Date();
 
-  const nearJobs = jobs.filter(j => j.work_date >= todayStr && j.work_date <= windowEndStr);
-  const otherJobs = jobs.filter(j => j.work_date < todayStr || j.work_date > windowEndStr);
+  function hasEnded(j){
+    const end = new Date(j.work_date + 'T' + (j.end_time || '23:59'));
+    return end < now;
+  }
 
-  let html = `<div class="section-title">Next 4 weeks <span class="count-pill">${nearJobs.length}</span></div>`;
+  const nearJobs = jobs.filter(j => !hasEnded(j) && j.work_date <= windowEndStr);
+  const pastJobs = jobs.filter(j => hasEnded(j));
+  const futureJobs = jobs.filter(j => !hasEnded(j) && j.work_date > windowEndStr);
+  const otherJobs = [...pastJobs, ...futureJobs];
+
+  let html = `<div class="section-title">Current and upcoming activity <span class="count-pill">${nearJobs.length}</span></div>`;
 
   if(nearJobs.length === 0){
     html += emptyState('🗓️','Nothing in the next 4 weeks','Tap + to assign a job, or check "earlier & later jobs" below.');
@@ -37,15 +45,19 @@ function renderSchedule(){
     `;
     if(scheduleShowMore){
       html += `<div class="day-group-label" style="margin-top:18px;">Outside the next 4 weeks</div>`;
-      html += renderJobList(otherJobs);
+      html += renderJobList(pastJobs, 'desc');
+      html += renderJobList(futureJobs, 'asc');
     }
   }
 
   return html;
 }
 
-function renderJobList(list){
-  const sorted = [...list].sort((a,b)=> a.work_date.localeCompare(b.work_date));
+function renderJobList(list, sortDir){
+  sortDir = sortDir || 'asc';
+  const sorted = [...list].sort((a,b)=> sortDir === 'desc'
+    ? b.work_date.localeCompare(a.work_date)
+    : a.work_date.localeCompare(b.work_date));
   let lastDate = null;
   let html = '';
   sorted.forEach(j=>{
@@ -59,6 +71,7 @@ function renderJobList(list){
     const d = new Date(j.work_date+'T00:00:00');
     const hrs = timeDiffHours(start, end);
     const position = j.position || 'Promoter';
+
     html += `
       <div class="job-card">
         <div class="job-date">
