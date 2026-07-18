@@ -14,10 +14,21 @@ files **in this order**:
 1. `sql/schema.sql` — creates the tables (promoters, stores, jobs, settings)
 2. `sql/seed.sql` — adds your starting stores (de Market, Isetan, W Mart)
 3. `sql/rls.sql` — turns on Row Level Security with open access for now
-4. `sql/migration_photos.sql` — adds promoter photo support (a `photo_url`
-   column plus a `promoter-photos` storage bucket). Run this once even on
-   an already-running app — it's safe to run again if unsure (uses
-   `if not exists` / `on conflict do nothing` throughout).
+4. `sql/migration_position.sql` — adds the promoter role field (Promoter /
+   Assistant / Mascot) to each job. Safe to run even on an already-running
+   app.
+
+### Heads up: jobs older than 3 months are now deleted automatically
+
+Every time the app loads, it silently deletes any job whose date is more
+than 3 months in the past. This keeps the Schedule tab tidy, but it also
+means the **Reports tab can no longer show pay for a month once it ages
+past 3 months old** — the underlying job records are gone.
+
+**Export (Reports → Export .xlsx) any month you want to keep a record of
+before it turns 3 months old.** If you'd rather keep full history forever
+and only hide old jobs from view instead of deleting them, let me know —
+that's a straightforward change.
 
 If you already ran `schema.sql` and `seed.sql` before, running them again
 is safe (they use `if not exists` / `on conflict do nothing`). Just make

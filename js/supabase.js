@@ -91,7 +91,7 @@ const DB = {
     const { data, error } = await sb
       .from('jobs')
       .select(`
-        id, work_date, start_time, end_time, pay, commission, remarks,
+        id, work_date, start_time, end_time, pay, commission, remarks, position,
         promoter_id, store_id,
         promoters ( id, full_name ),
         stores ( id, name )
@@ -127,25 +127,18 @@ const DB = {
     if(error) throw error;
   },
 
-  // ---------------- Promoter photos ----------------
-  // Uploads a resized image blob to the "promoter-photos" bucket and
-  // returns its public URL. Overwrites any previous photo for this promoter.
-  async uploadPromoterPhoto(promoterId, blob){
-    const path = `${promoterId}/photo.jpg`;
-    const { error: upErr } = await sb.storage
-      .from('promoter-photos')
-      .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-    if(upErr) throw upErr;
-
-    const { data } = sb.storage.from('promoter-photos').getPublicUrl(path);
-    // Cache-bust so the new photo shows immediately even though the URL path is unchanged.
-    return `${data.publicUrl}?t=${Date.now()}`;
-  },
-
-  async deletePromoterPhoto(promoterId){
-    const { error } = await sb.storage
-      .from('promoter-photos')
-      .remove([`${promoterId}/photo.jpg`]);
+  // Removes jobs older than 3 months to keep the schedule tidy.
+  // Runs once per app load. NOTE: this also removes the underlying data
+  // behind old Reports months — export any report you want to keep
+  // before it ages past 3 months.
+  async purgeOldJobs(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('jobs')
+      .delete()
+      .lt('work_date', cutoffStr);
     if(error) throw error;
   }
 };

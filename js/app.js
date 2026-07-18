@@ -62,6 +62,7 @@ function boot(){
 
 async function loadInitialData(){
   try{
+    await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await refreshData();
     setSyncDot(true);
     subscribeRealtime();

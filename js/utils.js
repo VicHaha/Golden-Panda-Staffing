@@ -44,37 +44,3 @@ function setSyncDot(ok){
   const dot = document.getElementById('sync-dot');
   if(dot) dot.classList.toggle('off', !ok);
 }
-
-// Resizes/compresses an image file in the browser before upload — phone
-// camera photos are often 3-8MB, this brings them down to a small JPEG
-// so uploads are fast and the free storage tier lasts longer.
-function resizeImageFile(file, maxDim = 800, quality = 0.82){
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read image file'));
-    reader.onload = () => {
-      img.onerror = () => reject(new Error('Could not decode image file'));
-      img.onload = () => {
-        let { width, height } = img;
-        if(width > height && width > maxDim){
-          height = Math.round(height * (maxDim / width));
-          width = maxDim;
-        }else if(height > maxDim){
-          width = Math.round(width * (maxDim / height));
-          height = maxDim;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        canvas.toBlob(blob=>{
-          if(blob) resolve(blob);
-          else reject(new Error('Could not compress image'));
-        }, 'image/jpeg', quality);
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
