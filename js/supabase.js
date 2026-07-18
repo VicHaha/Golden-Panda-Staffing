@@ -11,7 +11,7 @@ if(typeof window.supabase === 'undefined'){
   throw new Error('Supabase SDK did not load — check that js/vendor/supabase-sdk.js exists and loads before js/supabase.js in index.html.');
 }
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
 // DB — thin wrapper around every table this app touches.
@@ -21,7 +21,7 @@ const DB = {
 
   // ---------------- Promoters ----------------
   async getPromoters(){
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('promoters')
       .select('*')
       .order('full_name');
@@ -30,7 +30,7 @@ const DB = {
   },
 
   async addPromoter(promoter){
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('promoters')
       .insert(promoter)
       .select()
@@ -40,7 +40,7 @@ const DB = {
   },
 
   async updatePromoter(id, promoter){
-    const { error } = await supabase
+    const { error } = await sb
       .from('promoters')
       .update(promoter)
       .eq('id', id);
@@ -48,7 +48,7 @@ const DB = {
   },
 
   async deletePromoter(id){
-    const { error } = await supabase
+    const { error } = await sb
       .from('promoters')
       .delete()
       .eq('id', id);
@@ -57,7 +57,7 @@ const DB = {
 
   // ---------------- Stores ----------------
   async getStores(){
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('stores')
       .select('*')
       .order('name');
@@ -69,7 +69,7 @@ const DB = {
   // Lets the roadshow form accept free-text store names without a separate "manage stores" screen.
   async getOrCreateStore(name){
     const trimmed = name.trim();
-    const { data: existing, error: findErr } = await supabase
+    const { data: existing, error: findErr } = await sb
       .from('stores')
       .select('*')
       .ilike('name', trimmed)
@@ -77,7 +77,7 @@ const DB = {
     if(findErr) throw findErr;
     if(existing && existing.length) return existing[0];
 
-    const { data: created, error: insErr } = await supabase
+    const { data: created, error: insErr } = await sb
       .from('stores')
       .insert({ name: trimmed })
       .select()
@@ -88,7 +88,7 @@ const DB = {
 
   // ---------------- Jobs ----------------
   async getJobs(){
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('jobs')
       .select(`
         id, work_date, start_time, end_time, pay, commission, remarks,
@@ -102,7 +102,7 @@ const DB = {
   },
 
   async addJob(job){
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('jobs')
       .insert(job)
       .select()
@@ -112,7 +112,7 @@ const DB = {
   },
 
   async updateJob(id, job){
-    const { error } = await supabase
+    const { error } = await sb
       .from('jobs')
       .update(job)
       .eq('id', id);
@@ -120,7 +120,7 @@ const DB = {
   },
 
   async deleteJob(id){
-    const { error } = await supabase
+    const { error } = await sb
       .from('jobs')
       .delete()
       .eq('id', id);

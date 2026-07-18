@@ -12,7 +12,7 @@ let realtimeChannel = null;
 function boot(){
   const root = document.getElementById('root');
 
-  if(typeof DB === 'undefined' || typeof supabase === 'undefined'){
+  if(typeof DB === 'undefined' || typeof sb === 'undefined'){
     root.innerHTML = `
       <div class="phone" style="align-items:center; justify-content:center; text-align:center; padding:32px;">
         <div class="brand-mark" style="width:52px;height:52px;font-size:22px;border-radius:14px;margin-bottom:18px;">GP</div>
@@ -84,8 +84,8 @@ async function refreshData(){
 
 // Live sync: any change made from another phone updates this view automatically.
 function subscribeRealtime(){
-  if(realtimeChannel) supabase.removeChannel(realtimeChannel);
-  realtimeChannel = supabase
+  if(realtimeChannel) sb.removeChannel(realtimeChannel);
+  realtimeChannel = sb
     .channel('gp-staffing-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promoters' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteChange)
