@@ -125,5 +125,27 @@ const DB = {
       .delete()
       .eq('id', id);
     if(error) throw error;
+  },
+
+  // ---------------- Promoter photos ----------------
+  // Uploads a resized image blob to the "promoter-photos" bucket and
+  // returns its public URL. Overwrites any previous photo for this promoter.
+  async uploadPromoterPhoto(promoterId, blob){
+    const path = `${promoterId}/photo.jpg`;
+    const { error: upErr } = await sb.storage
+      .from('promoter-photos')
+      .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+    if(upErr) throw upErr;
+
+    const { data } = sb.storage.from('promoter-photos').getPublicUrl(path);
+    // Cache-bust so the new photo shows immediately even though the URL path is unchanged.
+    return `${data.publicUrl}?t=${Date.now()}`;
+  },
+
+  async deletePromoterPhoto(promoterId){
+    const { error } = await sb.storage
+      .from('promoter-photos')
+      .remove([`${promoterId}/photo.jpg`]);
+    if(error) throw error;
   }
 };

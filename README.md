@@ -9,13 +9,15 @@ should not need to touch that file.
 ### 1. Run the SQL in Supabase (if you haven't already)
 
 Go to your Supabase project → **SQL Editor** → New query, and run these
-three files **in this order**:
+files **in this order**:
 
 1. `sql/schema.sql` — creates the tables (promoters, stores, jobs, settings)
 2. `sql/seed.sql` — adds your starting stores (de Market, Isetan, W Mart)
 3. `sql/rls.sql` — turns on Row Level Security with open access for now
-   (your previous zip had this file empty — without it, your data has no
-   protection at all, so don't skip this one)
+4. `sql/migration_photos.sql` — adds promoter photo support (a `photo_url`
+   column plus a `promoter-photos` storage bucket). Run this once even on
+   an already-running app — it's safe to run again if unsure (uses
+   `if not exists` / `on conflict do nothing` throughout).
 
 If you already ran `schema.sql` and `seed.sql` before, running them again
 is safe (they use `if not exists` / `on conflict do nothing`). Just make

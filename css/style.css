@@ -95,6 +95,16 @@ body{
   background:linear-gradient(90deg,var(--gold),var(--gold-deep));
 }
 .badge-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-top:4px;}
+.badge-photo{
+  width:44px; height:44px; border-radius:50%; object-fit:cover; flex-shrink:0;
+  border:2px solid var(--gold-tint); background:var(--bg);
+}
+.badge-photo-placeholder{
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',serif; font-weight:600; font-size:17px; color:var(--gold-deep);
+  background:var(--gold-tint);
+}
+.badge-top > div:last-child{flex:1; min-width:0;}
 .badge-hole{
   position:absolute; top:14px; right:16px;
   width:10px; height:10px; border-radius:50%;
@@ -206,6 +216,19 @@ body{
 .modal-actions{display:flex; gap:10px; margin-top:6px;}
 .modal-actions .btn{flex:1;}
 .field-hint{font-size:11px; color:var(--ink-faint); margin-top:4px;}
+
+.photo-picker{display:flex; align-items:center; gap:14px;}
+.photo-preview{
+  width:64px; height:64px; border-radius:50%; object-fit:cover; flex-shrink:0;
+  border:2px solid var(--line); background:var(--bg);
+}
+.photo-preview-empty{
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; font-family:'Fraunces',serif; font-weight:600; color:var(--ink-faint);
+  background:var(--bg);
+}
+.photo-picker-actions{flex:1; min-width:0;}
+.photo-picker-actions label.btn{display:inline-flex; cursor:pointer;}
 
 /* Reports */
 .month-picker-row{
