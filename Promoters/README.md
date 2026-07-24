@@ -13,25 +13,59 @@ vice versa. Two different links, one shared database.
 ### 1. Run the SQL migrations (if you haven't already)
 
 These are the same migrations from the main app — if you've already run
-them there, skip this step; it's the same Supabase project.
+them there, skip to the ones you haven't:
 
 In Supabase → SQL Editor, run, in order:
 1. `sql/migration_sales_reports.sql` (from the main app's folder)
-2. `sql/migration_sales_promoter.sql` (from the main app's folder) —
-   this one specifically is required for this app, since it's what lets
-   entries be attributed to whoever logged them.
+2. `sql/migration_sales_promoter.sql` (from the main app's folder)
+3. **`sql/migration_auth_lockdown.sql`** (new) — requires a signed-in
+   session to add/edit/delete sales reports. Reading still works for
+   anyone with the link, same as before.
 
-### 2. Deploy this folder as its own site
+### 2. Create the office account (required — the office app needs this)
 
-Same process as the main app, but as a **separate** Netlify Drop upload
-(or separate site if you've signed up) — drag this `gp-stock-report`
-folder in on its own, not merged with the main app's folder. You'll get
-a second, different URL.
+The main office app has no login screen, and isn't getting one — instead
+it signs in automatically in the background using one shared account, so
+it keeps working under the tightened rule from step 1 above.
 
-### 3. Install it on promoters' phones
+1. In Supabase → **Authentication → Users → Add user**.
+2. Email: `office@goldenpanda.internal` (or anything you prefer).
+3. Password: choose one — this isn't shown to office staff, it's just
+   how the app itself authenticates.
+4. Open the main office app's `js/supabase.js`, find:
+   ```js
+   const OFFICE_AUTH_EMAIL = "office@goldenpanda.internal";
+   const OFFICE_AUTH_PASSWORD = "REPLACE_WITH_THE_PASSWORD_YOU_SET_IN_SUPABASE";
+   ```
+   and put in the same email/password you just created. Redeploy the
+   office app after this change.
 
-Send them the URL. Opening it in Chrome/Safari and tapping "Add to Home
-Screen" installs it just like the main app.
+### 3. Turn off email confirmation (recommended)
+
+By default, Supabase makes new accounts click a confirmation link before
+they can log in — which needs a working inbox. For promoters signing up
+with a quick made-up email, that's extra friction they may not be able
+to complete. To skip it:
+
+Supabase → **Authentication → Providers → Email** → turn off **"Confirm
+email"**.
+
+If you'd rather keep confirmation on (more secure, requires real email
+addresses), that's fine too — promoters will just need to check their
+email and click the link once before their first login.
+
+### 4. Deploy this folder as its own site
+
+Same as before — a **separate** Netlify Drop upload (or separate site)
+from the main app, giving you a second, different URL.
+
+### 5. Send promoters the link
+
+First time, each promoter taps **"Create one"** on the login screen,
+enters any email + a password of their choosing, then picks their name
+from the dropdown (as before). After that, they just log in with their
+email/password — the app stays logged in on their phone until they tap
+their name at the top and choose to log out.
 
 ## How it works
 
@@ -51,7 +85,16 @@ Screen" installs it just like the main app.
 
 ## Security note
 
-Same tradeoff as the main app: there's no password, just the URL and a
-name picker. Anyone with the link can log stock as any promoter name.
-Fine for a small team with an unpublished link; let me know if you want
-real login added later.
+Reports themselves (product names, quantities) are still readable by
+anyone with the link, even logged out — only *writing* requires a
+password. Ownership is enforced by account, not just by name: you can
+only edit/delete entries tied to the account you're logged into, and
+that's checked by the database via Supabase Auth, not just hidden by
+the UI.
+
+What this doesn't cover: someone could still sign up with a fake email
+and pick any promoter's name from the dropdown, since there's no link
+verifying that account #123 is really Ahmad and not someone pretending
+to be him. If that matters for your use case, the next step up is
+having the office create each promoter's login directly (rather than
+self-signup) — happy to switch it to that if you'd like.

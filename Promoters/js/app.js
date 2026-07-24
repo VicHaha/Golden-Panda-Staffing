@@ -27,7 +27,99 @@ function boot(){
     return;
   }
 
-  loadPromotersThenGate();
+  checkAuthThenProceed();
+}
+
+async function checkAuthThenProceed(){
+  let session;
+  try{
+    session = await Auth.getSession();
+  }catch(e){
+    console.error(e);
+    session = null;
+  }
+  if(session){
+    loadPromotersThenGate();
+  }else{
+    renderAuthGate('login');
+  }
+}
+
+// mode is 'login' or 'signup'
+function renderAuthGate(mode, prefillEmail){
+  const root = document.getElementById('root');
+  const isSignup = mode === 'signup';
+  root.innerHTML = `
+    <div class="gate">
+      <div class="brand-mark">GP</div>
+      <h2>${isSignup ? 'Create your account' : 'Log in'}</h2>
+      <p>${isSignup
+        ? 'First time here? Set a password to log in with next time.'
+        : 'Enter your email and password to log stock reports.'}</p>
+      <input id="auth-email" type="email" placeholder="Email" value="${prefillEmail ? esc(prefillEmail) : ''}" autocapitalize="off" autocomplete="email">
+      <input id="auth-password" type="password" placeholder="Password" autocomplete="${isSignup?'new-password':'current-password'}">
+      <button class="btn btn-primary btn-block" id="auth-submit-btn" onclick="${isSignup?'submitSignup()':'submitLogin()'}">${isSignup ? 'Create account' : 'Log in'}</button>
+      <p class="fineprint">
+        ${isSignup
+          ? `Already have an account? <a href="#" onclick="event.preventDefault(); renderAuthGate('login')">Log in</a>`
+          : `No account yet? <a href="#" onclick="event.preventDefault(); renderAuthGate('signup')">Create one</a>`}
+      </p>
+    </div>
+  `;
+  document.getElementById('auth-email').focus();
+}
+
+async function submitSignup(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter an email and password'); return; }
+  if(password.length < 6){ showToast('Password must be at least 6 characters'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try{
+    const result = await Auth.signUp(email, password);
+    if(result.session){
+      // Signed in immediately (email confirmation is off in this project).
+      loadPromotersThenGate();
+    }else{
+      // Email confirmation is on — they need to click a link before logging in.
+      showToast('Account created — check your email to confirm, then log in');
+      renderAuthGate('login', email);
+    }
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not create account');
+    btn.disabled = false; btn.textContent = 'Create account';
+  }
+}
+
+async function submitLogin(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter your email and password'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  try{
+    await Auth.signIn(email, password);
+    loadPromotersThenGate();
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not log in');
+    btn.disabled = false; btn.textContent = 'Log in';
+  }
+}
+
+async function logOut(){
+  if(!confirm('Log out of this app on this phone?')) return;
+  localStorage.removeItem('gp_stock_promoter_id');
+  localStorage.removeItem('gp_stock_promoter_name');
+  currentPromoterId = null;
+  currentPromoterName = null;
+  if(realtimeChannel) sb.removeChannel(realtimeChannel);
+  try{ await Auth.signOut(); }catch(e){ console.error(e); }
+  renderAuthGate('login');
 }
 
 async function loadPromotersThenGate(){
@@ -75,13 +167,13 @@ function renderIdentityGate(){
   root.innerHTML = `
     <div class="gate">
       <div class="brand-mark">GP</div>
-      <h2>Who's logging stock?</h2>
+      <h2>Which promoter are you?</h2>
       <p>Pick your name — it stays saved on this phone so you won't need to pick it again next time.</p>
       <select id="gate-promoter">
         ${[...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}
       </select>
       <button class="btn btn-primary btn-block" onclick="submitIdentity()">Continue</button>
-      <p class="fineprint">Not you on this phone in future? Tap your name at the top of the app to switch.</p>
+      <p class="fineprint">Not you on this phone in future? Tap your name at the top of the app to log out.</p>
     </div>
   `;
 }
@@ -98,16 +190,6 @@ function submitIdentity(){
   startApp();
 }
 
-function switchIdentity(){
-  if(!confirm('Switch to a different promoter on this phone?')) return;
-  localStorage.removeItem('gp_stock_promoter_id');
-  localStorage.removeItem('gp_stock_promoter_name');
-  currentPromoterId = null;
-  currentPromoterName = null;
-  if(realtimeChannel) sb.removeChannel(realtimeChannel);
-  renderIdentityGate();
-}
-
 async function startApp(){
   const root = document.getElementById('root');
   root.innerHTML = `
@@ -120,7 +202,7 @@ async function startApp(){
             <p>Stock Report</p>
           </div>
           <div class="sync-dot off" id="sync-dot" title="Syncing"></div>
-          <div class="identity-chip" onclick="switchIdentity()">${esc(currentPromoterName)}</div>
+          <div class="identity-chip" onclick="logOut()">${esc(currentPromoterName)}</div>
         </div>
       </div>
       <div class="content" id="content"></div>

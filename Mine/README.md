@@ -18,8 +18,30 @@ files **in this order**:
    Assistant / Mascot) to each job
 5. `sql/migration_sales_reports.sql` — creates the new `sales_reports`
    table used by the Stock tab
+6. `sql/migration_sales_promoter.sql` — attributes each stock report to
+   the promoter who logged it
+7. `sql/migration_auth_lockdown.sql` — requires a signed-in session to
+   write sales reports (this is what powers password login in the
+   separate promoter-facing stock report app)
 
 All are safe to run again if you're not sure which you've already run.
+
+### 2. Set up the office account (required after step 1.7 above)
+
+Once `migration_auth_lockdown.sql` is run, saving a stock report needs
+an authenticated session — including from this office app. This app has
+no visible login screen; instead it signs in automatically in the
+background using one shared account, so nothing changes for you day to
+day. You just need to create that account once:
+
+1. In Supabase → **Authentication → Users → Add user**. Email:
+   `office@goldenpanda.internal` (or anything you like). Set a password.
+2. Open `js/supabase.js` in this app, find `OFFICE_AUTH_EMAIL` and
+   `OFFICE_AUTH_PASSWORD` near the top, and put in the same email and
+   password. Redeploy.
+
+If you skip this, everything else in the app keeps working — only
+saving/editing/deleting Stock tab entries will fail until it's set up.
 
 ### What's new in this version
 
@@ -51,10 +73,9 @@ and only hide old jobs from view instead of deleting them, let me know —
 that's a straightforward change.
 
 If you already ran `schema.sql` and `seed.sql` before, running them again
-is safe (they use `if not exists` / `on conflict do nothing`). Just make
-sure `rls.sql` gets run.
+is safe (they use `if not exists` / `on conflict do nothing`).
 
-### 2. Enable Realtime (optional, for live multi-phone sync)
+### 3. Enable Realtime (optional, for live multi-phone sync)
 
 In Supabase → **Database → Replication**, turn on replication for the
 `promoters`, `jobs`, and `stores` tables. This makes changes made on one
@@ -62,7 +83,7 @@ phone appear on another within a second or two, without needing to
 refresh. If you skip this step, the app still works fine — you'd just
 need to switch tabs or reopen the app to see another phone's changes.
 
-### 3. Deploy the app to a real URL
+### 4. Deploy the app to a real URL
 
 Same as before — two easy free options:
 
@@ -74,13 +95,13 @@ Same as before — two easy free options:
 **Firebase Hosting / Vercel / GitHub Pages** also all work fine for a
 static site like this — use whichever you're already comfortable with.
 
-### 4. Install it on your phone
+### 5. Install it on your phone
 
 1. Open the deployed URL in Chrome (Android) or Safari (iPhone).
 2. Android: **⋮ menu → Install app**. iPhone: **Share → Add to Home Screen**.
 3. It opens full-screen from your home screen like a native app.
 
-### 5. Test it
+### 6. Test it
 
 Add a promoter, assign them to a job, check the Reports tab for the
 month you picked. Everyone who opens the same deployed URL sees the

@@ -11,6 +11,33 @@ if(typeof window.supabase === 'undefined'){
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ============================================================
+// Auth — each promoter signs in with their own email + password.
+// Supabase persists the session in the browser automatically, so once
+// logged in on a phone, they stay logged in until they log out.
+// ============================================================
+const Auth = {
+  async getSession(){
+    const { data, error } = await sb.auth.getSession();
+    if(error) throw error;
+    return data.session;
+  },
+  async signUp(email, password){
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if(error) throw error;
+    return data;
+  },
+  async signIn(email, password){
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    return data;
+  },
+  async signOut(){
+    const { error } = await sb.auth.signOut();
+    if(error) throw error;
+  }
+};
+
 // Only the reads/writes this stand-alone app needs — promoters and
 // stores are read-only lookups here (managed from the main office app).
 const DB = {

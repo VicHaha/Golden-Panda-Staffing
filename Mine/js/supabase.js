@@ -14,6 +14,29 @@ if(typeof window.supabase === 'undefined'){
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
+// Invisible office sign-in.
+//
+// sales_reports now requires a signed-in session to write to (see
+// sql/migration_auth_lockdown.sql) so that the promoter-facing app can
+// enforce a real password. This app has no login screen and isn't meant
+// to — instead it signs in automatically, in the background, using one
+// shared "office" account. Office staff never see this happen.
+//
+// SETUP REQUIRED: create this account once in Supabase Dashboard →
+// Authentication → Users → Add user, then put the same email/password
+// here. See the README for the exact steps.
+// ============================================================
+const OFFICE_AUTH_EMAIL = "office@goldenpanda.internal";
+const OFFICE_AUTH_PASSWORD = "REPLACE_WITH_THE_PASSWORD_YOU_SET_IN_SUPABASE";
+
+let officeSignInPromise = sb.auth.signInWithPassword({
+  email: OFFICE_AUTH_EMAIL,
+  password: OFFICE_AUTH_PASSWORD
+}).then(({ error }) => {
+  if(error) console.error('Office auto sign-in failed — sales report saving will not work until this is fixed:', error.message);
+});
+
+// ============================================================
 // DB — thin wrapper around every table this app touches.
 // Field names match sql/schema.sql exactly.
 // ============================================================
