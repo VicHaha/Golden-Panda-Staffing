@@ -5,6 +5,22 @@
 const JOB_POSITIONS = ['Promoter', 'Assistant', 'Mascot'];
 let scheduleShowMore = false; // toggled by the "Show earlier & later jobs" button
 
+// Default shift presets: pay auto-fills when a position is chosen.
+// Promoter has two common shift lengths, so it gets a second dropdown
+// to pick between them (or "Custom" to type your own).
+const SHIFT_PRESETS = {
+  Promoter: [
+    { key:'p_full', start:'10:00', end:'18:00', pay:140, label:'10:00–18:00 · RM140' },
+    { key:'p_half', start:'10:30', end:'13:30', pay:60,  label:'10:30–13:30 · RM60' }
+  ],
+  Mascot: [
+    { key:'m_std', start:'11:00', end:'13:00', pay:100, label:'11:00–13:00 · RM100' }
+  ],
+  Assistant: [
+    { key:'a_std', start:'11:00', end:'13:00', pay:80, label:'11:00–13:00 · RM80' }
+  ]
+};
+
 function renderSchedule(){
   if(promoters.length===0){
     return emptyState('📅','Add promoters first','You need at least one promoter before building the schedule.');
@@ -117,9 +133,13 @@ function openJobForm(id){
       </div>
       <div class="field">
         <label>Position</label>
-        <select id="f-position">
+        <select id="f-position" onchange="onPositionChange(true)">
           ${JOB_POSITIONS.map(pos=>`<option value="${pos}" ${currentPosition===pos?'selected':''}>${pos}</option>`).join('')}
         </select>
+      </div>
+      <div class="field">
+        <label>Shift (sets default pay)</label>
+        <select id="f-shift-preset" onchange="applyShiftPreset(this.value)"></select>
       </div>
       <div class="field">
         <label>Store / location</label>
@@ -144,6 +164,55 @@ function openJobForm(id){
   `;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+
+  // Build the shift-preset list for the current position, and try to
+  // match it to this job's existing values (edit) or apply the first
+  // preset's defaults (new job).
+  onPositionChange(!editing);
+  if(editing){
+    const matchKey = findMatchingPresetKey(currentPosition, shortTime(editing.start_time), shortTime(editing.end_time), Number(editing.pay));
+    document.getElementById('f-shift-preset').value = matchKey || 'custom';
+  }
+}
+
+function buildShiftPresetOptions(position){
+  const presets = SHIFT_PRESETS[position] || [];
+  const opts = presets.map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  return opts + `<option value="custom">Custom (set manually)</option>`;
+}
+
+function findMatchingPresetKey(position, start, end, pay){
+  const presets = SHIFT_PRESETS[position] || [];
+  const match = presets.find(p => p.start === start && p.end === end && Number(p.pay) === Number(pay));
+  return match ? match.key : null;
+}
+
+// Rebuilds the shift-preset dropdown for whichever position is now selected.
+// applyDefault=true also fills in the first preset's time/pay (used when
+// the person actively changes position, or opens the form for a new job).
+function onPositionChange(applyDefault){
+  const position = document.getElementById('f-position').value;
+  const presetSelect = document.getElementById('f-shift-preset');
+  presetSelect.innerHTML = buildShiftPresetOptions(position);
+  if(applyDefault){
+    const presets = SHIFT_PRESETS[position] || [];
+    if(presets.length){
+      presetSelect.value = presets[0].key;
+      applyShiftPreset(presets[0].key);
+    }else{
+      presetSelect.value = 'custom';
+    }
+  }
+}
+
+function applyShiftPreset(key){
+  if(key === 'custom') return;
+  const position = document.getElementById('f-position').value;
+  const preset = (SHIFT_PRESETS[position] || []).find(p => p.key === key);
+  if(!preset) return;
+  document.getElementById('f-start').value = preset.start;
+  document.getElementById('f-end').value = preset.end;
+  document.getElementById('f-pay').value = preset.pay;
 }
 
 async function saveJobForm(id){

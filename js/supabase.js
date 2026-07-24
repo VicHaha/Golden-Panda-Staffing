@@ -140,5 +140,44 @@ const DB = {
       .delete()
       .lt('work_date', cutoffStr);
     if(error) throw error;
+  },
+
+  // ---------------- Sales & stock reports ----------------
+  async getSalesReports(){
+    const { data, error } = await sb
+      .from('sales_reports')
+      .select(`
+        id, work_date, store_id, product_name, opening_qty, sales_qty, closing_qty, remarks,
+        stores ( id, name )
+      `)
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  async addSalesReport(entry){
+    const { data, error } = await sb
+      .from('sales_reports')
+      .insert(entry)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async updateSalesReport(id, entry){
+    const { error } = await sb
+      .from('sales_reports')
+      .update({ ...entry, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if(error) throw error;
+  },
+
+  async deleteSalesReport(id){
+    const { error } = await sb
+      .from('sales_reports')
+      .delete()
+      .eq('id', id);
+    if(error) throw error;
   }
 };

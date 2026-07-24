@@ -15,8 +15,28 @@ files **in this order**:
 2. `sql/seed.sql` — adds your starting stores (de Market, Isetan, W Mart)
 3. `sql/rls.sql` — turns on Row Level Security with open access for now
 4. `sql/migration_position.sql` — adds the promoter role field (Promoter /
-   Assistant / Mascot) to each job. Safe to run even on an already-running
-   app.
+   Assistant / Mascot) to each job
+5. `sql/migration_sales_reports.sql` — creates the new `sales_reports`
+   table used by the Stock tab
+
+All are safe to run again if you're not sure which you've already run.
+
+### What's new in this version
+
+- **Default pay per position** — in the job form, picking a Position now
+  shows a "Shift" dropdown with the standard pay presets (e.g. Promoter
+  10:00–18:00 = RM140, or 10:30–13:30 = RM60; Mascot = RM100; Assistant =
+  RM80). Picking one auto-fills start time, end time, and pay — all still
+  editable afterward if a job needs a one-off rate. Choose "Custom" to
+  skip the presets entirely.
+- **Roadshow days now counts distinct dates** — if 4 promoters work the
+  same Saturday, that's 1 roadshow day, not 4, both in the summary stat
+  and in each promoter's day count.
+- **New "Stock" tab** between Schedule and Reports — log opening stock,
+  units sold, and closing stock per product for any working date. Entries
+  are grouped by date and collapse/expand by tapping the date header. If
+  the closing count doesn't match opening minus sold, it's flagged with a
+  variance badge (useful for spotting shrinkage or miscounts).
 
 ### Heads up: jobs older than 3 months are now deleted automatically
 

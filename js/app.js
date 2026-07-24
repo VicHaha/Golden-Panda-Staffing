@@ -5,6 +5,7 @@
 let promoters = [];
 let jobs = [];
 let stores = [];
+let salesReports = [];
 let currentTab = 'promoters';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
@@ -50,6 +51,10 @@ function boot(){
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
           Schedule
         </button>
+        <button class="tab" data-tab="sales" onclick="switchTab('sales')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          Stock
+        </button>
         <button class="tab" data-tab="reports" onclick="switchTab('reports')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
           Reports
@@ -74,12 +79,13 @@ async function loadInitialData(){
   switchTab('promoters');
 }
 
-// Re-fetches promoters, jobs, and stores from Supabase.
+// Re-fetches promoters, jobs, stores, and sales reports from Supabase.
 async function refreshData(){
-  const [p, j, s] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores()]);
+  const [p, j, s, sr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports()]);
   promoters = p;
   jobs = j;
   stores = s;
+  salesReports = sr;
   setSyncDot(true);
 }
 
@@ -91,6 +97,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promoters' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });
@@ -117,7 +124,8 @@ function switchTab(tab){
 function openFab(){
   if(currentTab==='promoters') openPromoterForm();
   else if(currentTab==='schedule') openJobForm();
-  else showToast('Switch to Promoters or Schedule to add');
+  else if(currentTab==='sales') openSalesForm();
+  else showToast('Switch to Promoters, Schedule, or Stock to add');
 }
 
 function render(){
@@ -126,6 +134,7 @@ function render(){
   if(!c) return;
   if(currentTab==='promoters') c.innerHTML = renderPromoters();
   else if(currentTab==='schedule') c.innerHTML = renderSchedule();
+  else if(currentTab==='sales') c.innerHTML = renderSales();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
 }

@@ -6,16 +6,21 @@ function renderReports(){
   const monthJobs = jobs.filter(j=>j.work_date.startsWith(reportMonth));
   const byPromoter = {};
   monthJobs.forEach(j=>{
-    if(!byPromoter[j.promoter_id]) byPromoter[j.promoter_id] = {pay:0, commission:0, count:0};
+    if(!byPromoter[j.promoter_id]) byPromoter[j.promoter_id] = {pay:0, commission:0, dates:new Set()};
     byPromoter[j.promoter_id].pay += Number(j.pay||0);
     byPromoter[j.promoter_id].commission += Number(j.commission||0);
-    byPromoter[j.promoter_id].count += 1;
+    byPromoter[j.promoter_id].dates.add(j.work_date);
   });
   const rows = Object.entries(byPromoter).map(([pid, agg])=>{
     const p = promoters.find(x=>x.id===pid);
-    return {name: p?p.full_name:'(removed promoter)', ic: p?p.ic_number:'', ...agg, total: agg.pay+agg.commission};
+    return {
+      name: p?p.full_name:'(removed promoter)', ic: p?p.ic_number:'',
+      pay: agg.pay, commission: agg.commission, count: agg.dates.size,
+      total: agg.pay+agg.commission
+    };
   }).sort((a,b)=>b.total-a.total);
 
+  const distinctDays = new Set(monthJobs.map(j=>j.work_date)).size;
   const grandTotal = rows.reduce((s,r)=>s+r.total,0);
   const monthLabel = new Date(reportMonth+'-01').toLocaleDateString('en-GB',{month:'long', year:'numeric'});
 
@@ -27,7 +32,7 @@ function renderReports(){
     </div>
     <div class="summary-strip">
       <div class="stat-card"><div class="num">${rows.length}</div><div class="lbl">Promoters paid</div></div>
-      <div class="stat-card"><div class="num">${monthJobs.length}</div><div class="lbl">Roadshow days</div></div>
+      <div class="stat-card"><div class="num">${distinctDays}</div><div class="lbl">Roadshow days</div></div>
       <div class="stat-card"><div class="num">RM ${grandTotal.toFixed(0)}</div><div class="lbl">Total payout</div></div>
     </div>
   `;
@@ -62,10 +67,10 @@ function exportExcel(){
   if(monthJobs.length===0){ showToast('No jobs to export for this month'); return; }
   const byPromoter = {};
   monthJobs.forEach(j=>{
-    if(!byPromoter[j.promoter_id]) byPromoter[j.promoter_id] = {pay:0, commission:0, count:0};
+    if(!byPromoter[j.promoter_id]) byPromoter[j.promoter_id] = {pay:0, commission:0, dates:new Set()};
     byPromoter[j.promoter_id].pay += Number(j.pay||0);
     byPromoter[j.promoter_id].commission += Number(j.commission||0);
-    byPromoter[j.promoter_id].count += 1;
+    byPromoter[j.promoter_id].dates.add(j.work_date);
   });
   const rows = Object.entries(byPromoter).map(([pid, agg])=>{
     const p = promoters.find(x=>x.id===pid);
@@ -74,7 +79,7 @@ function exportExcel(){
       'IC Number': p?p.ic_number||'':'',
       'Bank Name': p?p.bank_name||'':'',
       'Bank Account': p?p.bank_account||'':'',
-      'Roadshow Days': agg.count,
+      'Roadshow Days': agg.dates.size,
       'Total Pay (RM)': Number(agg.pay.toFixed(2)),
       'Total Commission (RM)': Number(agg.commission.toFixed(2)),
       'Total Payout (RM)': Number((agg.pay+agg.commission).toFixed(2))
