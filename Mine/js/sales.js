@@ -8,6 +8,7 @@ let salesExpandedDates = new Set(); // which date groups are currently expanded
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
 const PRODUCT_SUGGESTIONS = [
+  'Gift Set',
   'Bio Dishwash 1L (Bidara)',
   'Bio Dishwash 1L (Ginger)',
   'Bio Dishwash 1L (Melon)',
