@@ -147,8 +147,9 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, product_name, opening_qty, sales_qty, closing_qty, remarks,
-        stores ( id, name )
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks,
+        stores ( id, name ),
+        promoters ( id, full_name )
       `)
       .order('work_date', { ascending: false });
     if(error) throw error;

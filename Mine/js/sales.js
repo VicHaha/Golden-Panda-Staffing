@@ -5,6 +5,25 @@
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
 
+// Suggested products — shown as autocomplete, but the field stays free
+// text so new products can always be typed in and added on the fly.
+const PRODUCT_SUGGESTIONS = [
+  'Bio Dishwash 1L (Bidara)',
+  'Bio Dishwash 1L (Ginger)',
+  'Bio Dishwash 1L (Melon)',
+  'Refill Bio Dishwash 480ml (Bidara)',
+  'Refill Bio Dishwash 480ml (Ginger)',
+  'Refill Bio Dishwash 480ml (Melon)'
+];
+
+// Combines the fixed suggestions above with any product names already
+// used in past reports, so custom products you've added before show up
+// as suggestions too — the list grows on its own.
+function getProductSuggestions(){
+  const used = salesReports.map(r => r.product_name).filter(Boolean);
+  return [...new Set([...PRODUCT_SUGGESTIONS, ...used])].sort();
+}
+
 function renderSales(){
   if(salesReports.length===0){
     return emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for a roadshow date.');
@@ -25,7 +44,6 @@ function renderSales(){
     const expanded = salesExpandedDates.has(date);
     const totalSales = items.reduce((s,i)=>s + Number(i.sales_qty||0), 0);
     const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
-
     html += `
       <div class="sales-group">
         <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
@@ -56,6 +74,7 @@ function renderSalesItems(items){
             Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
           </div>
+          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <div class="job-actions">
@@ -95,7 +114,18 @@ function openSalesForm(id){
           ${stores.map(s=>`<option value="${s.id}" ${editing&&editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label>Product name</label><input id="s-product" value="${editing?esc(editing.product_name):''}" placeholder="e.g. Golden Panda Floor Cleaner 1L"></div>
+      <div class="field">
+        <label>Logged by (optional)</label>
+        <select id="s-promoter">
+          <option value="">— Not specified —</option>
+          ${[...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Product name</label>
+        <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. Bio Dishwash 1L (Bidara)">
+        <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+      </div>
       <div class="field-row">
         <div class="field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
         <div class="field"><label>Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
@@ -115,6 +145,7 @@ function openSalesForm(id){
 async function saveSalesForm(id){
   const work_date = document.getElementById('s-date').value;
   const store_id = document.getElementById('s-store').value || null;
+  const promoter_id = document.getElementById('s-promoter').value || null;
   const product_name = document.getElementById('s-product').value.trim();
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
@@ -128,7 +159,7 @@ async function saveSalesForm(id){
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
-    const payload = { work_date, store_id, product_name, opening_qty, sales_qty, closing_qty, remarks };
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{
