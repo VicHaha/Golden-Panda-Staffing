@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gp-stock-report-shell-v1';
+const CACHE_NAME = 'gp-stock-report-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -10,7 +10,16 @@ const SHELL_FILES = [
   './js/sales.js',
   './js/app.js',
   './assets/icon-192.png',
-  './assets/icon-512.png'
+  './assets/icon-512.png',
+  './css/fonts.css',
+  './assets/fonts/fraunces-latin-500-normal.woff2',
+  './assets/fonts/fraunces-latin-600-normal.woff2',
+  './assets/fonts/fraunces-latin-700-normal.woff2',
+  './assets/fonts/inter-latin-400-normal.woff2',
+  './assets/fonts/inter-latin-500-normal.woff2',
+  './assets/fonts/inter-latin-600-normal.woff2',
+  './assets/fonts/inter-latin-700-normal.woff2',
+  './assets/fonts/ibm-plex-mono-latin-500-normal.woff2'
 ];
 
 self.addEventListener('install', event => {

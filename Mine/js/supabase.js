@@ -26,8 +26,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Authentication → Users → Add user, then put the same email/password
 // here. See the README for the exact steps.
 // ============================================================
-const OFFICE_AUTH_EMAIL = "victoriatsn10@gmail.com";
-const OFFICE_AUTH_PASSWORD = "GP123456";
+const OFFICE_AUTH_EMAIL = "office@goldenpanda.internal";
+const OFFICE_AUTH_PASSWORD = "REPLACE_WITH_THE_PASSWORD_YOU_SET_IN_SUPABASE";
 
 let officeSignInPromise = sb.auth.signInWithPassword({
   email: OFFICE_AUTH_EMAIL,
@@ -170,7 +170,7 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks,
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url,
         stores ( id, name ),
         promoters ( id, full_name )
       `)

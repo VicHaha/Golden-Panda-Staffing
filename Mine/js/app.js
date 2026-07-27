@@ -70,6 +70,8 @@ async function loadInitialData(){
     await officeSignInPromise; // ensure the app is authenticated before any writes can happen
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await refreshData();
+    await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
+    await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
     subscribeRealtime();
   }catch(e){

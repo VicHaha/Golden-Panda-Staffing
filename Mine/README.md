@@ -23,8 +23,23 @@ files **in this order**:
 7. `sql/migration_auth_lockdown.sql` — requires a signed-in session to
    write sales reports (this is what powers password login in the
    separate promoter-facing stock report app)
+8. `sql/migration_sales_photo.sql` — adds a `photo_url` column so stock
+   reports can carry an attached photo (hosted on Cloudinary, not
+   Supabase — see step 3 below)
 
 All are safe to run again if you're not sure which you've already run.
+
+### One-time cleanup: remove "PG Mall" from the store list
+
+Run this once — it's a data fix, not a schema change, so it's not a
+numbered migration file:
+
+```sql
+delete from stores where name ilike 'PG Mall';
+```
+
+Any past jobs/reports that referenced it will just show as
+"(store removed)" instead of breaking.
 
 ### 2. Set up the office account (required after step 1.7 above)
 
@@ -43,7 +58,37 @@ day. You just need to create that account once:
 If you skip this, everything else in the app keeps working — only
 saving/editing/deleting Stock tab entries will fail until it's set up.
 
+### 3. Set up Cloudinary for stock photos (required for the photo feature)
+
+Stock report photos are hosted on **Cloudinary**, not Supabase — its
+free tier gives ~25GB versus Supabase Storage's 500MB, and this keeps
+photos completely separate from your database quota.
+
+1. Create a free account at https://cloudinary.com
+2. Your Dashboard shows a **"Cloud name"** near the top — copy it.
+3. Go to **Settings → Upload → Upload presets → Add upload preset**.
+   Set **Signing Mode** to **Unsigned**. Save, and copy the preset name.
+4. Open `js/cloudinary.js` in both this app and the promoter app, and
+   replace `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` with
+   the values from steps 2–3. Redeploy both apps.
+
+Until this is set up, everything else works fine — only the photo
+upload button will show an error if tapped.
+
 ### What's new in this version
+
+- **Self-hosted fonts** — headers no longer flash between a fallback
+  font and the real one on load, since the font files now ship with the
+  app instead of loading from Google Fonts.
+- **Stock photos** — attach a photo to any stock report (see Cloudinary
+  setup above). Stored outside Supabase entirely.
+- **Auto-seeded daily stock rows** — every known product gets a row for
+  today automatically, with opening stock carried over from yesterday's
+  closing count, so promoters just fill in numbers instead of creating
+  each product from scratch daily.
+- **Promoters can now edit any stock entry for today** (not just their
+  own), including ones you added from this app — but once a date isn't
+  "today" anymore, only this office app can still edit it.
 
 - **Default pay per position** — in the job form, picking a Position now
   shows a "Shift" dropdown with the standard pay presets (e.g. Promoter
@@ -75,7 +120,7 @@ that's a straightforward change.
 If you already ran `schema.sql` and `seed.sql` before, running them again
 is safe (they use `if not exists` / `on conflict do nothing`).
 
-### 3. Enable Realtime (optional, for live multi-phone sync)
+### 4. Enable Realtime (optional, for live multi-phone sync)
 
 In Supabase → **Database → Replication**, turn on replication for the
 `promoters`, `jobs`, and `stores` tables. This makes changes made on one
@@ -83,7 +128,7 @@ phone appear on another within a second or two, without needing to
 refresh. If you skip this step, the app still works fine — you'd just
 need to switch tabs or reopen the app to see another phone's changes.
 
-### 4. Deploy the app to a real URL
+### 5. Deploy the app to a real URL
 
 Same as before — two easy free options:
 
@@ -95,13 +140,13 @@ Same as before — two easy free options:
 **Firebase Hosting / Vercel / GitHub Pages** also all work fine for a
 static site like this — use whichever you're already comfortable with.
 
-### 5. Install it on your phone
+### 6. Install it on your phone
 
 1. Open the deployed URL in Chrome (Android) or Safari (iPhone).
 2. Android: **⋮ menu → Install app**. iPhone: **Share → Add to Home Screen**.
 3. It opens full-screen from your home screen like a native app.
 
-### 6. Test it
+### 7. Test it
 
 Add a promoter, assign them to a job, check the Reports tab for the
 month you picked. Everyone who opens the same deployed URL sees the

@@ -215,6 +215,8 @@ async function startApp(){
 async function loadInitialData(){
   try{
     await refreshData();
+    await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
+    await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
     subscribeRealtime();
   }catch(e){

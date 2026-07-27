@@ -18,9 +18,11 @@ them there, skip to the ones you haven't:
 In Supabase → SQL Editor, run, in order:
 1. `sql/migration_sales_reports.sql` (from the main app's folder)
 2. `sql/migration_sales_promoter.sql` (from the main app's folder)
-3. **`sql/migration_auth_lockdown.sql`** (new) — requires a signed-in
-   session to add/edit/delete sales reports. Reading still works for
-   anyone with the link, same as before.
+3. `sql/migration_auth_lockdown.sql` — requires a signed-in session to
+   add/edit/delete sales reports. Reading still works for anyone with
+   the link, same as before.
+4. `sql/migration_sales_photo.sql` — adds a `photo_url` column for the
+   new photo attachment feature.
 
 ### 2. Create the office account (required — the office app needs this)
 
@@ -54,12 +56,29 @@ If you'd rather keep confirmation on (more secure, requires real email
 addresses), that's fine too — promoters will just need to check their
 email and click the link once before their first login.
 
-### 4. Deploy this folder as its own site
+### 4. Set up Cloudinary for stock photos (required for the photo feature)
+
+Stock report photos are hosted on **Cloudinary**, not Supabase — its
+free tier gives ~25GB versus Supabase Storage's 500MB, keeping photos
+completely separate from your database quota.
+
+1. Create a free account at https://cloudinary.com
+2. Your Dashboard shows a **"Cloud name"** near the top — copy it.
+3. Go to **Settings → Upload → Upload presets → Add upload preset**.
+   Set **Signing Mode** to **Unsigned**. Save, and copy the preset name.
+4. Open `js/cloudinary.js` in both this app and the main office app, and
+   replace `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` with
+   the values from steps 2–3. Redeploy both apps.
+
+Until this is set up, everything else works fine — only the photo
+upload button will show an error if tapped.
+
+### 5. Deploy this folder as its own site
 
 Same as before — a **separate** Netlify Drop upload (or separate site)
 from the main app, giving you a second, different URL.
 
-### 5. Send promoters the link
+### 6. Send promoters the link
 
 First time, each promoter taps **"Create one"** on the login screen,
 enters any email + a password of their choosing, then picks their name
@@ -69,28 +88,30 @@ their name at the top and choose to log out.
 
 ## How it works
 
-- **First open**: picks their name from a dropdown of your existing
-  promoters (managed in the main app). This is remembered on that phone
-  going forward — they won't need to pick it again.
-- **Logging**: pick a date (autocompletes from the schedule), optionally
-  a store, then product name, opening stock, sales quantity, and closing
-  stock. Saved instantly to the same database the office app reads from.
-- **Ownership**: a promoter can only edit or delete their own entries —
-  everyone can see the full shared list, grouped and collapsible by date,
-  but editing someone else's entry is blocked. This keeps multiple people
-  logging into the same date without overwriting each other's data.
+- **First open**: log in or create an account (email + password), then
+  pick your name from a dropdown of existing promoters (managed in the
+  main app). Both are remembered on that phone going forward.
+- **Today's products are pre-filled automatically** — every known SKU
+  gets a row for today with opening stock carried over from yesterday's
+  closing count, so there's usually nothing to "add," just numbers to
+  fill in and save.
+- **Editing is locked to today** — any logged-in promoter can edit or
+  delete *any* entry dated today, including ones the office added —
+  there's no per-person ownership restriction anymore. Once a date is
+  no longer today, it's locked (🔒) for everyone here; only the office
+  app can still edit past dates.
+- **Photos** — attach a photo to any entry (camera or gallery). Stored
+  on Cloudinary, not Supabase — see setup step 4.
 - **No promoter management here** — adding/removing promoters still
   happens only in the main office app. If a promoter isn't in the
   dropdown, add them there first.
 
 ## Security note
 
-Reports themselves (product names, quantities) are still readable by
+Reports themselves (product names, quantities, photos) are readable by
 anyone with the link, even logged out — only *writing* requires a
-password. Ownership is enforced by account, not just by name: you can
-only edit/delete entries tied to the account you're logged into, and
-that's checked by the database via Supabase Auth, not just hidden by
-the UI.
+password, enforced by the database via Supabase Auth, not just hidden
+in the UI.
 
 What this doesn't cover: someone could still sign up with a fake email
 and pick any promoter's name from the dropdown, since there's no link
