@@ -16,9 +16,9 @@
 //    Set "Signing Mode" to "Unsigned". Copy the preset name below.
 // ============================================================
 const CLOUDINARY_CLOUD_NAME = "ckroa66g";
-const CLOUDINARY_UPLOAD_PRESET = "ml_default";
+const CLOUDINARY_UPLOAD_PRESET = "Golden Panda";
 
-const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "ckroa66g";
+const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "Golden Panda";
 
 // Uploads an image blob to Cloudinary and returns its hosted URL.
 async function uploadPhotoToCloudinary(blob){
