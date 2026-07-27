@@ -153,7 +153,6 @@ function openSalesForm(id){
           <div class="photo-picker-actions">
             <label class="btn btn-ghost" for="s-photo">Take / choose photo</label>
             <input type="file" id="s-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewSalesPhoto(this)">
-            <div class="field-hint">Stored outside Supabase — no storage quota used.</div>
           </div>
         </div>
         <input type="hidden" id="s-photo-url" value="${editing&&editing.photo_url?esc(editing.photo_url):''}">
