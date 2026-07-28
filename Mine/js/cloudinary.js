@@ -15,10 +15,10 @@
 // 3. Settings → Upload → Upload presets → Add upload preset.
 //    Set "Signing Mode" to "Unsigned". Copy the preset name below.
 // ============================================================
-const CLOUDINARY_CLOUD_NAME = "REPLACE_WITH_YOUR_CLOUD_NAME";
-const CLOUDINARY_UPLOAD_PRESET = "REPLACE_WITH_YOUR_UNSIGNED_PRESET";
+const CLOUDINARY_CLOUD_NAME = "ckroa66g";
+const CLOUDINARY_UPLOAD_PRESET = "Golden Panda";
 
-const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "REPLACE_WITH_YOUR_CLOUD_NAME";
+const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "ckroa66g";
 
 // Uploads an image blob to Cloudinary and returns its hosted URL.
 async function uploadPhotoToCloudinary(blob){

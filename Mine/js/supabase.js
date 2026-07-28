@@ -26,8 +26,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Authentication → Users → Add user, then put the same email/password
 // here. See the README for the exact steps.
 // ============================================================
-const OFFICE_AUTH_EMAIL = "office@goldenpanda.internal";
-const OFFICE_AUTH_PASSWORD = "REPLACE_WITH_THE_PASSWORD_YOU_SET_IN_SUPABASE";
+const OFFICE_AUTH_EMAIL = "victoriatsn10@gmail.com";
+const OFFICE_AUTH_PASSWORD = "GP123456";
 
 let officeSignInPromise = sb.auth.signInWithPassword({
   email: OFFICE_AUTH_EMAIL,
