@@ -207,8 +207,20 @@ function openSalesForm(id){
   if(editing && isPastDate(editing.work_date)){
     showToast('This working date is in the past and is locked'); return;
   }
-  // Suggest dates that are actually on the schedule, most recent first.
-  const scheduledDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
+  // Only actual working dates from the Schedule tab can be picked — no
+  // free-text "Other" date anymore — so the Stock tab can't end up with
+  // (and auto-populate) a day nobody was actually scheduled to work.
+  let scheduleDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
+  // If editing an older entry whose date has since dropped off the
+  // schedule (e.g. that job was later removed), keep it selectable so
+  // saving doesn't silently move the report to a different date.
+  if(editing && !scheduleDates.includes(editing.work_date)){
+    scheduleDates = [editing.work_date, ...scheduleDates].sort((a,b)=>b.localeCompare(a));
+  }
+  if(scheduleDates.length === 0){
+    showToast('Add a working date in Schedule first'); return;
+  }
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -216,9 +228,10 @@ function openSalesForm(id){
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
       <div class="field">
         <label>Date</label>
-        <input id="s-date" list="scheduled-dates" type="date" value="${editing?editing.work_date:(scheduledDates[0]||todayStr())}">
-        <datalist id="scheduled-dates">${scheduledDates.map(d=>`<option value="${d}">`).join('')}</datalist>
-        <div class="field-hint">Pulled from your schedule — pick a working date, or type any date.</div>
+        <select id="s-date">
+          ${scheduleDates.map(d=>`<option value="${d}" ${(editing?editing.work_date:scheduleDates[0])===d?'selected':''}>${formatDateLong(d)}</option>`).join('')}
+        </select>
+        <div class="field-hint">Only working dates from your Schedule can be picked — add a job there first if a date is missing.</div>
       </div>
       <div class="field">
         <label>Store (optional)</label>
