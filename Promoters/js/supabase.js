@@ -93,7 +93,7 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks,
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url,
         stores ( id, name ),
         promoters ( id, full_name )
       `)
@@ -123,6 +123,49 @@ const DB = {
   async deleteSalesReport(id){
     const { error } = await sb
       .from('sales_reports')
+      .delete()
+      .eq('id', id);
+    if(error) throw error;
+  },
+
+  // ---------------- Day photos (unlimited per working date) ----------------
+  async getDayPhotos(){
+    const { data, error } = await sb
+      .from('day_photos')
+      .select('*')
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  // Each save inserts a new row rather than overwriting whatever's
+  // already there for that date — any number of day photos allowed per date.
+  async addDayPhoto(work_date, entry){
+    const { data, error } = await sb
+      .from('day_photos')
+      .insert({ work_date, ...entry })
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  // Edits one specific day photo already saved (by its row id) without
+  // touching any other photo on the same date.
+  async updateDayPhoto(id, entry){
+    const { data, error } = await sb
+      .from('day_photos')
+      .update({ ...entry, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async deleteDayPhoto(id){
+    const { error } = await sb
+      .from('day_photos')
       .delete()
       .eq('id', id);
     if(error) throw error;

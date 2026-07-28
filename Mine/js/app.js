@@ -6,6 +6,7 @@ let promoters = [];
 let jobs = [];
 let stores = [];
 let salesReports = [];
+let dayPhotos = [];
 let currentTab = 'promoters';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
@@ -69,7 +70,11 @@ async function loadInitialData(){
   try{
     await officeSignInPromise; // ensure the app is authenticated before any writes can happen
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
+    await DB.purgeOldSalesReports().catch(e=>console.warn('Purge old sales reports failed (non-fatal):', e));
+    await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));
     await refreshData();
+    await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
+    await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
     subscribeRealtime();
   }catch(e){
@@ -82,11 +87,12 @@ async function loadInitialData(){
 
 // Re-fetches promoters, jobs, stores, and sales reports from Supabase.
 async function refreshData(){
-  const [p, j, s, sr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports()]);
+  const [p, j, s, sr, dp] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos()]);
   promoters = p;
   jobs = j;
   stores = s;
   salesReports = sr;
+  dayPhotos = dp;
   setSyncDot(true);
 }
 
@@ -99,6 +105,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });

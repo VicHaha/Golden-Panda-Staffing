@@ -2,7 +2,7 @@
 // flaky connection — actual data still needs internet, since it lives in
 // Supabase. This does NOT cache Supabase data for offline editing.
 
-const CACHE_NAME = 'golden-panda-shell-v3';
+const CACHE_NAME = 'golden-panda-shell-v5';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -16,7 +16,16 @@ const SHELL_FILES = [
   './js/report.js',
   './js/app.js',
   './assets/icon-192.png',
-  './assets/icon-512.png'
+  './assets/icon-512.png',
+  './css/fonts.css',
+  './assets/fonts/fraunces-latin-500-normal.woff2',
+  './assets/fonts/fraunces-latin-600-normal.woff2',
+  './assets/fonts/fraunces-latin-700-normal.woff2',
+  './assets/fonts/inter-latin-400-normal.woff2',
+  './assets/fonts/inter-latin-500-normal.woff2',
+  './assets/fonts/inter-latin-600-normal.woff2',
+  './assets/fonts/inter-latin-700-normal.woff2',
+  './assets/fonts/ibm-plex-mono-latin-500-normal.woff2'
 ];
 
 self.addEventListener('install', event => {

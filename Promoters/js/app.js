@@ -6,6 +6,7 @@ let promoters = [];
 let stores = [];
 let scheduledDates = [];
 let salesReports = [];
+let dayPhotos = [];
 let realtimeChannel = null;
 let currentPromoterId = localStorage.getItem('gp_stock_promoter_id') || null;
 let currentPromoterName = localStorage.getItem('gp_stock_promoter_name') || null;
@@ -215,6 +216,8 @@ async function startApp(){
 async function loadInitialData(){
   try{
     await refreshData();
+    await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
+    await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
     subscribeRealtime();
   }catch(e){
@@ -226,10 +229,11 @@ async function loadInitialData(){
 }
 
 async function refreshData(){
-  const [s, sd, sr] = await Promise.all([DB.getStores(), DB.getScheduledDates(), DB.getSalesReports()]);
+  const [s, sd, sr, dp] = await Promise.all([DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos()]);
   stores = s;
   scheduledDates = sd;
   salesReports = sr;
+  dayPhotos = dp;
   setSyncDot(true);
 }
 
@@ -238,6 +242,7 @@ function subscribeRealtime(){
   realtimeChannel = sb
     .channel('gp-stock-report-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
