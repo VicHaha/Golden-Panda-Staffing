@@ -26,8 +26,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Authentication → Users → Add user, then put the same email/password
 // here. See the README for the exact steps.
 // ============================================================
-const OFFICE_AUTH_EMAIL = "victoriatsn10@gmail.com";
-const OFFICE_AUTH_PASSWORD = "GP123456";
+const OFFICE_AUTH_EMAIL = "office@goldenpanda.internal";
+const OFFICE_AUTH_PASSWORD = "REPLACE_WITH_THE_PASSWORD_YOU_SET_IN_SUPABASE";
 
 let officeSignInPromise = sb.auth.signInWithPassword({
   email: OFFICE_AUTH_EMAIL,
@@ -205,6 +205,23 @@ const DB = {
     if(error) throw error;
   },
 
+  // Removes sales/stock reports older than 3 months, same cutoff as
+  // purgeOldJobs, to keep the Supabase table small. NOTE: any photo_url
+  // on a purged row points to Cloudinary, not Supabase Storage — deleting
+  // the row does NOT delete the photo from Cloudinary; that's a separate
+  // cleanup (Cloudinary dashboard or API) if you also need to reclaim
+  // space there.
+  async purgeOldSalesReports(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('sales_reports')
+      .delete()
+      .lt('work_date', cutoffStr);
+    if(error) throw error;
+  },
+
   // ---------------- Day photos (one overall photo per working date) ----------------
   async getDayPhotos(){
     const { data, error } = await sb
@@ -215,22 +232,49 @@ const DB = {
     return data;
   },
 
-  // One row per work_date — saving again replaces it (upsert on work_date).
-  async saveDayPhoto(work_date, entry){
+  // Unlimited day photos per working date — each save inserts a new row
+  // rather than overwriting whatever's already there for that date.
+  async addDayPhoto(work_date, entry){
     const { data, error } = await sb
       .from('day_photos')
-      .upsert({ work_date, ...entry, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .insert({ work_date, ...entry })
       .select()
       .single();
     if(error) throw error;
     return data;
   },
 
-  async deleteDayPhoto(work_date){
+  // Edits one specific day photo already saved (by its row id) without
+  // touching any other photo on the same date.
+  async updateDayPhoto(id, entry){
+    const { data, error } = await sb
+      .from('day_photos')
+      .update({ ...entry, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async deleteDayPhoto(id){
     const { error } = await sb
       .from('day_photos')
       .delete()
-      .eq('work_date', work_date);
+      .eq('id', id);
+    if(error) throw error;
+  },
+
+  // Same 3-month cutoff as purgeOldJobs/purgeOldSalesReports. Same
+  // Cloudinary caveat applies — the photo file itself isn't removed.
+  async purgeOldDayPhotos(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('day_photos')
+      .delete()
+      .lt('work_date', cutoffStr);
     if(error) throw error;
   }
 };

@@ -161,13 +161,15 @@ function renderSalesItems(items, isToday){
   }).join('');
 }
 
-// The one overall photo for a working date (booth/table setup, etc.) —
-// separate from each product's own opening/sales/closing row.
+// Any number of overall photos allowed per working date (booth/table
+// setup, crowd shots, etc.) — separate from each product's own
+// opening/sales/closing row. Renders one row per saved photo, plus an
+// "add" row when today, so another can be added on top.
 function renderDayPhotoRow(date, isToday){
-  const dp = dayPhotos.find(d => d.work_date === date);
-  return `
+  const photos = dayPhotos.filter(d => d.work_date === date);
+  const photoRows = photos.map(dp => `
     <div class="sales-item day-photo-row">
-      ${dp && dp.photo_url
+      ${dp.photo_url
         ? `<img class="sales-item-photo" src="${esc(dp.photo_url)}" alt="Day photo" onclick="window.open('${esc(dp.photo_url)}','_blank')">`
         : `<div class="sales-item-photo sales-item-photo-empty">📷</div>`}
       <div class="sales-item-main">
@@ -176,12 +178,29 @@ function renderDayPhotoRow(date, isToday){
       </div>
       ${isToday ? `
         <div class="job-actions">
-          <div class="icon-btn" onclick="openDayPhotoForm('${date}')">✎</div>
-          ${dp ? `<div class="icon-btn danger" onclick="deleteDayPhotoRow('${date}')">✕</div>` : ''}
+          <div class="icon-btn" onclick="openDayPhotoForm('${date}','${dp.id}')">✎</div>
+          <div class="icon-btn danger" onclick="deleteDayPhotoRow('${dp.id}')">✕</div>
         </div>
-      ` : `<div class="sales-locked" title="Only today's photo can be edited">🔒</div>`}
+      ` : `<div class="sales-locked" title="Only today's photos can be edited">🔒</div>`}
+    </div>
+  `).join('');
+
+  if(!isToday) return photoRows;
+
+  const addRow = `
+    <div class="sales-item day-photo-row">
+      <div class="sales-item-photo sales-item-photo-empty">📷</div>
+      <div class="sales-item-main">
+        <div class="sales-item-name">Add day photo</div>
+        <div class="sales-item-stats">Add as many as you need for this date</div>
+      </div>
+      <div class="job-actions">
+        <div class="icon-btn" onclick="openDayPhotoForm('${date}')">＋</div>
+      </div>
     </div>
   `;
+
+  return photoRows + addRow;
 }
 
 function toggleSalesDate(date){
@@ -290,17 +309,17 @@ async function deleteSalesReport(id){
 
 // ---------------- Day photo (one overall photo per working date) ----------------
 
-function openDayPhotoForm(date){
+function openDayPhotoForm(date, id){
   const today = todayStr();
   if(date !== today){
     showToast("Only today's photo can be edited"); return;
   }
-  const existing = dayPhotos.find(d => d.work_date === date);
+  const existing = id ? dayPhotos.find(d => d.id === id) : null;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">Day photo — ${formatDateLong(date)}</div>
+      <div class="modal-title">${existing ? 'Edit' : 'Add'} day photo — ${formatDateLong(date)}</div>
       <div class="field">
         <label>Photo</label>
         <div class="photo-picker">
@@ -309,14 +328,14 @@ function openDayPhotoForm(date){
           <div class="photo-picker-actions">
             <label class="btn btn-ghost" for="dp-photo">Take / choose photo</label>
             <input type="file" id="dp-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewDayPhoto(this)">
-            <div class="field-hint">One overall photo for the whole date — stored outside Supabase, no storage quota used.</div>
+            <div class="field-hint">You can add as many photos as you need for this date — stored outside Supabase, no storage quota used.</div>
           </div>
         </div>
         <input type="hidden" id="dp-photo-url" value="${existing&&existing.photo_url?esc(existing.photo_url):''}">
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}')">Save</button>
+        <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}','${id||''}')">Save</button>
       </div>
     </div>
   `;
@@ -336,7 +355,7 @@ async function previewDayPhoto(input){
   reader.readAsDataURL(file);
 }
 
-async function saveDayPhotoForm(date){
+async function saveDayPhotoForm(date, id){
   if(date !== todayStr()){
     showToast("Only today's photo can be edited"); return;
   }
@@ -356,7 +375,11 @@ async function saveDayPhotoForm(date){
       photo_url = await uploadPhotoToCloudinary(compressed);
     }
     btn.textContent = 'Saving…';
-    await DB.saveDayPhoto(date, { store_id: null, promoter_id: currentPromoterId, photo_url });
+    if(id){
+      await DB.updateDayPhoto(id, { store_id: null, promoter_id: currentPromoterId, photo_url });
+    }else{
+      await DB.addDayPhoto(date, { store_id: null, promoter_id: currentPromoterId, photo_url });
+    }
     await refreshData();
     closeModal();
     render();
@@ -369,13 +392,14 @@ async function saveDayPhotoForm(date){
   }
 }
 
-async function deleteDayPhotoRow(date){
-  if(date !== todayStr()){
-    showToast("Only today's photo can be deleted"); return;
+async function deleteDayPhotoRow(id){
+  const dp = dayPhotos.find(d => d.id === id);
+  if(dp && dp.work_date !== todayStr()){
+    showToast("Only today's photos can be deleted"); return;
   }
-  if(!confirm('Delete the day photo for this date?')) return;
+  if(!confirm('Delete this day photo?')) return;
   try{
-    await DB.deleteDayPhoto(date);
+    await DB.deleteDayPhoto(id);
     await refreshData();
     render();
     showToast('Day photo deleted');

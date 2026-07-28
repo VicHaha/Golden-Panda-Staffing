@@ -128,7 +128,7 @@ const DB = {
     if(error) throw error;
   },
 
-  // ---------------- Day photos (one overall photo per working date) ----------------
+  // ---------------- Day photos (unlimited per working date) ----------------
   async getDayPhotos(){
     const { data, error } = await sb
       .from('day_photos')
@@ -138,22 +138,36 @@ const DB = {
     return data;
   },
 
-  // One row per work_date — saving again replaces it (upsert on work_date).
-  async saveDayPhoto(work_date, entry){
+  // Each save inserts a new row rather than overwriting whatever's
+  // already there for that date — any number of day photos allowed per date.
+  async addDayPhoto(work_date, entry){
     const { data, error } = await sb
       .from('day_photos')
-      .upsert({ work_date, ...entry, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .insert({ work_date, ...entry })
       .select()
       .single();
     if(error) throw error;
     return data;
   },
 
-  async deleteDayPhoto(work_date){
+  // Edits one specific day photo already saved (by its row id) without
+  // touching any other photo on the same date.
+  async updateDayPhoto(id, entry){
+    const { data, error } = await sb
+      .from('day_photos')
+      .update({ ...entry, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async deleteDayPhoto(id){
     const { error } = await sb
       .from('day_photos')
       .delete()
-      .eq('work_date', work_date);
+      .eq('id', id);
     if(error) throw error;
   }
 };
