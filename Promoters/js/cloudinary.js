@@ -18,8 +18,7 @@
 const CLOUDINARY_CLOUD_NAME = "ckroa66g";
 const CLOUDINARY_UPLOAD_PRESET = "Golden Panda";
 
-const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "ckroa66g";
-
+const CLOUDINARY_CONFIGURED = CLOUDINARY_CLOUD_NAME !== "REPLACE_WITH_YOUR_CLOUD_NAME";
 // Uploads an image blob to Cloudinary and returns its hosted URL.
 async function uploadPhotoToCloudinary(blob){
   if(!CLOUDINARY_CONFIGURED){
