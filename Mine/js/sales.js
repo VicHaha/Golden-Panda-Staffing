@@ -1,9 +1,9 @@
 // ============================================================
 // Sales & Stock — per-product opening/sales/closing counts,
 // grouped by working date, expand/collapse per date.
-// Only today's and future-dated entries are editable — once a working
-// date is in the past it's locked for everyone, admin included, same
-// as the promoter-facing app.
+// This is the office/admin app — admin can edit or delete any date's
+// sales records, past included. (The promoter-facing app still locks
+// past dates for promoters; see its own js/sales.js.)
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
@@ -30,11 +30,6 @@ function getProductSuggestions(){
 
 function todayStr(){
   return new Date().toISOString().slice(0,10);
-}
-
-// Past = strictly before today. Today and any future working date stay editable.
-function isPastDate(date){
-  return date < todayStr();
 }
 
 // Auto-creates stock rows for the next working date on the schedule that
@@ -128,7 +123,6 @@ function renderSales(){
     const totalSales = items.reduce((s,i)=>s + Number(i.sales_qty||0), 0);
     const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
     const isToday = date === today;
-    const editable = !isPastDate(date);
     html += `
       <div class="sales-group">
         <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
@@ -138,7 +132,7 @@ function renderSales(){
           </div>
           <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
         </button>
-        ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date, editable)}${renderSalesItems(items, editable)}</div>` : ''}
+        ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date)}${renderSalesItems(items)}</div>` : ''}
       </div>
     `;
   });
@@ -146,7 +140,7 @@ function renderSales(){
   return html;
 }
 
-function renderSalesItems(items, editable){
+function renderSalesItems(items){
   return items.map(i=>{
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const expectedClosing = opening - sales;
@@ -162,12 +156,10 @@ function renderSalesItems(items, editable){
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
-        ${editable ? `
-          <div class="job-actions">
-            <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
-            <div class="icon-btn danger" onclick="deleteSalesReport('${i.id}')">✕</div>
-          </div>
-        ` : `<div class="sales-locked" title="This working date is in the past and is locked">🔒</div>`}
+        <div class="job-actions">
+          <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
+          <div class="icon-btn danger" onclick="deleteSalesReport('${i.id}')">✕</div>
+        </div>
       </div>
     `;
   }).join('');
@@ -175,7 +167,7 @@ function renderSalesItems(items, editable){
 
 // The one overall photo for a working date (booth/table setup, etc.) —
 // separate from each product's own opening/sales/closing row.
-function renderDayPhotoRow(date, editable){
+function renderDayPhotoRow(date){
   const dp = dayPhotos.find(d => d.work_date === date);
   return `
     <div class="sales-item day-photo-row">
@@ -184,14 +176,10 @@ function renderDayPhotoRow(date, editable){
         : `<div class="sales-item-photo sales-item-photo-empty">📷</div>`}
       <div class="sales-item-main">
         <div class="sales-item-name">Day photo</div>
-        <div class="sales-item-stats">Overall photo for this date — not tied to any one product</div>
+      <div class="job-actions">
+        <div class="icon-btn" onclick="openDayPhotoForm('${date}')">✎</div>
+        ${dp ? `<div class="icon-btn danger" onclick="deleteDayPhotoRow('${date}')">✕</div>` : ''}
       </div>
-      ${editable ? `
-        <div class="job-actions">
-          <div class="icon-btn" onclick="openDayPhotoForm('${date}')">✎</div>
-          ${dp ? `<div class="icon-btn danger" onclick="deleteDayPhotoRow('${date}')">✕</div>` : ''}
-        </div>
-      ` : `<div class="sales-locked" title="This working date is in the past and is locked">🔒</div>`}
     </div>
   `;
 }
@@ -204,23 +192,8 @@ function toggleSalesDate(date){
 
 function openSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  if(editing && isPastDate(editing.work_date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
-  // Only actual working dates from the Schedule tab can be picked — no
-  // free-text "Other" date anymore — so the Stock tab can't end up with
-  // (and auto-populate) a day nobody was actually scheduled to work.
-  let scheduleDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
-  // If editing an older entry whose date has since dropped off the
-  // schedule (e.g. that job was later removed), keep it selectable so
-  // saving doesn't silently move the report to a different date.
-  if(editing && !scheduleDates.includes(editing.work_date)){
-    scheduleDates = [editing.work_date, ...scheduleDates].sort((a,b)=>b.localeCompare(a));
-  }
-  if(scheduleDates.length === 0){
-    showToast('Add a working date in Schedule first'); return;
-  }
-
+  // Suggest dates that are actually on the schedule, most recent first.
+  const scheduledDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -228,10 +201,9 @@ function openSalesForm(id){
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
       <div class="field">
         <label>Date</label>
-        <select id="s-date">
-          ${scheduleDates.map(d=>`<option value="${d}" ${(editing?editing.work_date:scheduleDates[0])===d?'selected':''}>${formatDateLong(d)}</option>`).join('')}
-        </select>
-        <div class="field-hint">Only working dates from your Schedule can be picked — add a job there first if a date is missing.</div>
+        <input id="s-date" list="scheduled-dates" type="date" value="${editing?editing.work_date:(scheduledDates[0]||todayStr())}">
+        <datalist id="scheduled-dates">${scheduledDates.map(d=>`<option value="${d}">`).join('')}</datalist>
+        <div class="field-hint">Pulled from your schedule — pick a working date, or type any date.</div>
       </div>
       <div class="field">
         <label>Store (optional)</label>
@@ -270,13 +242,7 @@ function openSalesForm(id){
 
 async function saveSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  if(editing && isPastDate(editing.work_date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   const work_date = document.getElementById('s-date').value;
-  if(id && isPastDate(work_date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   const store_id = document.getElementById('s-store').value || null;
   const promoter_id = document.getElementById('s-promoter').value || null;
   const product_name = document.getElementById('s-product').value.trim();
@@ -317,10 +283,6 @@ async function saveSalesForm(id){
 }
 
 async function deleteSalesReport(id){
-  const entry = salesReports.find(r=>r.id===id);
-  if(entry && isPastDate(entry.work_date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   if(!confirm('Delete this product\'s stock report?')) return;
   try{
     await DB.deleteSalesReport(id);
@@ -336,9 +298,6 @@ async function deleteSalesReport(id){
 // ---------------- Day photo (one overall photo per working date) ----------------
 
 function openDayPhotoForm(date){
-  if(isPastDate(date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   const existing = dayPhotos.find(d => d.work_date === date);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -381,9 +340,6 @@ async function previewDayPhoto(input){
 }
 
 async function saveDayPhotoForm(date){
-  if(isPastDate(date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   const photoFile = document.getElementById('dp-photo').files[0];
   let photo_url = document.getElementById('dp-photo-url').value || null;
 
@@ -414,9 +370,6 @@ async function saveDayPhotoForm(date){
 }
 
 async function deleteDayPhotoRow(date){
-  if(isPastDate(date)){
-    showToast('This working date is in the past and is locked'); return;
-  }
   if(!confirm('Delete the day photo for this date?')) return;
   try{
     await DB.deleteDayPhoto(date);
