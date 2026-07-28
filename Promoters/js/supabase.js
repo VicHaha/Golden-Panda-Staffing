@@ -126,5 +126,34 @@ const DB = {
       .delete()
       .eq('id', id);
     if(error) throw error;
+  },
+
+  // ---------------- Day photos (one overall photo per working date) ----------------
+  async getDayPhotos(){
+    const { data, error } = await sb
+      .from('day_photos')
+      .select('*')
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  // One row per work_date — saving again replaces it (upsert on work_date).
+  async saveDayPhoto(work_date, entry){
+    const { data, error } = await sb
+      .from('day_photos')
+      .upsert({ work_date, ...entry, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async deleteDayPhoto(work_date){
+    const { error } = await sb
+      .from('day_photos')
+      .delete()
+      .eq('work_date', work_date);
+    if(error) throw error;
   }
 };

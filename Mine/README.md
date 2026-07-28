@@ -26,6 +26,9 @@ files **in this order**:
 8. `sql/migration_sales_photo.sql` — adds a `photo_url` column so stock
    reports can carry an attached photo (hosted on Cloudinary, not
    Supabase — see step 3 below)
+9. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
+   overall photo per working date (separate from each product's own
+   stock row — see "Day photo row" below)
 
 All are safe to run again if you're not sure which you've already run.
 
@@ -80,15 +83,25 @@ upload button will show an error if tapped.
 - **Self-hosted fonts** — headers no longer flash between a fallback
   font and the real one on load, since the font files now ship with the
   app instead of loading from Google Fonts.
-- **Stock photos** — attach a photo to any stock report (see Cloudinary
-  setup above). Stored outside Supabase entirely.
-- **Auto-seeded daily stock rows** — every known product gets a row for
-  today automatically, with opening stock carried over from yesterday's
-  closing count, so promoters just fill in numbers instead of creating
-  each product from scratch daily.
+- **Day photo row** — each working date now gets one extra row for a
+  single overall photo (e.g. the booth/table setup), separate from each
+  product's own stock row. Per-product photo upload has been removed —
+  a photo is a once-per-date thing, not a once-per-product thing.
+  Stored outside Supabase entirely (Cloudinary).
+- **Schedule-aware auto-seeded stock rows** — every known product's row
+  gets carried forward automatically, but only into the *next working
+  date on the schedule* that has actually arrived — not into every
+  calendar day. e.g. if the last stock records are from last Sunday and
+  the next roadshow day on the Schedule tab is next Saturday, rows only
+  get created for Saturday (once it arrives), carrying opening stock
+  over from Sunday's closing count.
 - **Promoters can now edit any stock entry for today** (not just their
   own), including ones you added from this app — but once a date isn't
   "today" anymore, only this office app can still edit it.
+- **Past dates are now locked in this office app too** — once a working
+  date is in the past, its stock rows and day photo are locked here as
+  well (shown with a 🔒), matching the promoter app. Today's and any
+  future-dated entries stay fully editable from here.
 
 - **Default pay per position** — in the job form, picking a Position now
   shows a "Shift" dropdown with the standard pay presets (e.g. Promoter

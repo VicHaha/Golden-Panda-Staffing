@@ -23,6 +23,8 @@ In Supabase → SQL Editor, run, in order:
    the link, same as before.
 4. `sql/migration_sales_photo.sql` — adds a `photo_url` column for the
    new photo attachment feature.
+5. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
+   overall photo per working date, separate from each product's own row.
 
 ### 2. Create the office account (required — the office app needs this)
 

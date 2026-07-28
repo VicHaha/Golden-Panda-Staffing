@@ -6,6 +6,7 @@ let promoters = [];
 let jobs = [];
 let stores = [];
 let salesReports = [];
+let dayPhotos = [];
 let currentTab = 'promoters';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
@@ -84,11 +85,12 @@ async function loadInitialData(){
 
 // Re-fetches promoters, jobs, stores, and sales reports from Supabase.
 async function refreshData(){
-  const [p, j, s, sr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports()]);
+  const [p, j, s, sr, dp] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos()]);
   promoters = p;
   jobs = j;
   stores = s;
   salesReports = sr;
+  dayPhotos = dp;
   setSyncDot(true);
 }
 
@@ -101,6 +103,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });

@@ -1,8 +1,9 @@
 // ============================================================
 // Sales & Stock — per-product opening/sales/closing counts,
 // grouped by working date, expand/collapse per date.
-// As the office/admin app, editing is unrestricted by date — the
-// promoter-facing app is the one limited to same-day edits.
+// Only today's and future-dated entries are editable — once a working
+// date is in the past it's locked for everyone, admin included, same
+// as the promoter-facing app.
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
@@ -31,25 +32,59 @@ function todayStr(){
   return new Date().toISOString().slice(0,10);
 }
 
-// Auto-creates today's row for every known SKU that doesn't already
-// have one yet, so the daily list is pre-populated. Safe to call every
-// load — only inserts what's missing. Opening stock carries over from
-// that product's most recent prior closing count.
+// Past = strictly before today. Today and any future working date stay editable.
+function isPastDate(date){
+  return date < todayStr();
+}
+
+// Auto-creates stock rows for the next working date on the schedule that
+// has actually arrived — not simply every calendar day — carrying opening
+// stock forward from that product's most recent prior closing count.
+// e.g. if the last stock records are from last Sunday and the next
+// scheduled roadshow day is next Saturday, rows only get created for
+// Saturday (once Saturday has arrived), skipping the days in between
+// that were never on the schedule. Safe to call every load — it only
+// inserts what's missing, and catches up one working date at a time.
 async function ensureTodaysStockRows(){
   const today = todayStr();
-  const todaysProducts = new Set(salesReports.filter(r=>r.work_date===today).map(r=>r.product_name));
-  const missing = PRODUCT_SUGGESTIONS.filter(p => !todaysProducts.has(p));
+
+  // Every working date on the schedule that has already arrived, earliest first.
+  const scheduledAsc = [...new Set(jobs.map(j => j.work_date))]
+    .filter(d => d <= today)
+    .sort();
+  if(scheduledAsc.length === 0) return;
+
+  const stockDates = new Set(salesReports.map(r => r.work_date));
+  const lastStockDate = stockDates.size ? [...stockDates].sort().pop() : null;
+
+  // Only bring stock forward into scheduled dates that come after the
+  // most recent date already carrying stock records (or every arrived
+  // scheduled date, if no stock has ever been logged yet).
+  const targets = lastStockDate
+    ? scheduledAsc.filter(d => d > lastStockDate)
+    : scheduledAsc;
+
+  for(const date of targets){
+    await ensureStockRowsForDate(date);
+  }
+}
+
+// Creates any missing product rows for one specific working date, carrying
+// opening stock over from that product's most recent prior closing count.
+async function ensureStockRowsForDate(date){
+  const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => r.product_name));
+  const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(p));
   if(missing.length === 0) return;
 
   for(const product of missing){
     const priorEntries = salesReports
-      .filter(r => r.product_name === product && r.work_date < today)
+      .filter(r => r.product_name === product && r.work_date < date)
       .sort((a,b) => b.work_date.localeCompare(a.work_date));
     const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
 
     try{
-      await DB.addSalesReport({
-        work_date: today,
+      const created = await DB.addSalesReport({
+        work_date: date,
         store_id: null,
         promoter_id: null,
         product_name: product,
@@ -59,14 +94,17 @@ async function ensureTodaysStockRows(){
         remarks: null,
         photo_url: null
       });
+      // Keep the local cache current so a later target date processed in
+      // this same run carries over from the row we just created.
+      salesReports.push(created);
     }catch(e){
-      console.warn('Could not auto-create row for', product, e);
+      console.warn('Could not auto-create row for', product, 'on', date, e);
     }
   }
 }
 
 function renderSales(){
-  if(salesReports.length===0){
+  if(salesReports.length===0 && dayPhotos.length===0){
     return emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for a roadshow date.');
   }
 
@@ -75,6 +113,9 @@ function renderSales(){
   salesReports.forEach(r=>{
     if(!byDate[r.work_date]) byDate[r.work_date] = [];
     byDate[r.work_date].push(r);
+  });
+  dayPhotos.forEach(dp=>{
+    if(!byDate[dp.work_date]) byDate[dp.work_date] = [];
   });
   const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
@@ -87,6 +128,7 @@ function renderSales(){
     const totalSales = items.reduce((s,i)=>s + Number(i.sales_qty||0), 0);
     const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
     const isToday = date === today;
+    const editable = !isPastDate(date);
     html += `
       <div class="sales-group">
         <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
@@ -96,7 +138,7 @@ function renderSales(){
           </div>
           <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
         </button>
-        ${expanded ? `<div class="sales-group-body">${renderSalesItems(items)}</div>` : ''}
+        ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date, editable)}${renderSalesItems(items, editable)}</div>` : ''}
       </div>
     `;
   });
@@ -104,14 +146,13 @@ function renderSales(){
   return html;
 }
 
-function renderSalesItems(items){
+function renderSalesItems(items, editable){
   return items.map(i=>{
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const expectedClosing = opening - sales;
     const variance = closing - expectedClosing;
     return `
       <div class="sales-item">
-        ${i.photo_url ? `<img class="sales-item-photo" src="${esc(i.photo_url)}" alt="${esc(i.product_name)}" onclick="window.open('${esc(i.photo_url)}','_blank')">` : ''}
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(i.product_name)}</div>
           <div class="sales-item-stats">
@@ -121,13 +162,38 @@ function renderSalesItems(items){
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
-        <div class="job-actions">
-          <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
-          <div class="icon-btn danger" onclick="deleteSalesReport('${i.id}')">✕</div>
-        </div>
+        ${editable ? `
+          <div class="job-actions">
+            <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
+            <div class="icon-btn danger" onclick="deleteSalesReport('${i.id}')">✕</div>
+          </div>
+        ` : `<div class="sales-locked" title="This working date is in the past and is locked">🔒</div>`}
       </div>
     `;
   }).join('');
+}
+
+// The one overall photo for a working date (booth/table setup, etc.) —
+// separate from each product's own opening/sales/closing row.
+function renderDayPhotoRow(date, editable){
+  const dp = dayPhotos.find(d => d.work_date === date);
+  return `
+    <div class="sales-item day-photo-row">
+      ${dp && dp.photo_url
+        ? `<img class="sales-item-photo" src="${esc(dp.photo_url)}" alt="Day photo" onclick="window.open('${esc(dp.photo_url)}','_blank')">`
+        : `<div class="sales-item-photo sales-item-photo-empty">📷</div>`}
+      <div class="sales-item-main">
+        <div class="sales-item-name">Day photo</div>
+        <div class="sales-item-stats">Overall photo for this date — not tied to any one product</div>
+      </div>
+      ${editable ? `
+        <div class="job-actions">
+          <div class="icon-btn" onclick="openDayPhotoForm('${date}')">✎</div>
+          ${dp ? `<div class="icon-btn danger" onclick="deleteDayPhotoRow('${date}')">✕</div>` : ''}
+        </div>
+      ` : `<div class="sales-locked" title="This working date is in the past and is locked">🔒</div>`}
+    </div>
+  `;
 }
 
 function toggleSalesDate(date){
@@ -138,6 +204,9 @@ function toggleSalesDate(date){
 
 function openSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
+  if(editing && isPastDate(editing.work_date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
   // Suggest dates that are actually on the schedule, most recent first.
   const scheduledDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
   const overlay = document.createElement('div');
@@ -145,18 +214,6 @@ function openSalesForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
-      <div class="field">
-        <label>Photo (optional)</label>
-        <div class="photo-picker">
-          <img id="photo-preview" class="photo-preview" src="${editing&&editing.photo_url?esc(editing.photo_url):''}" style="${editing&&editing.photo_url?'':'display:none;'}">
-          <div id="photo-preview-empty" class="photo-preview photo-preview-empty" style="${editing&&editing.photo_url?'display:none;':''}">📷</div>
-          <div class="photo-picker-actions">
-            <label class="btn btn-ghost" for="s-photo">Take / choose photo</label>
-            <input type="file" id="s-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewSalesPhoto(this)">
-          </div>
-        </div>
-        <input type="hidden" id="s-photo-url" value="${editing&&editing.photo_url?esc(editing.photo_url):''}">
-      </div>
       <div class="field">
         <label>Date</label>
         <input id="s-date" list="scheduled-dates" type="date" value="${editing?editing.work_date:(scheduledDates[0]||todayStr())}">
@@ -198,20 +255,15 @@ function openSalesForm(id){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 }
 
-async function previewSalesPhoto(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    document.getElementById('photo-preview').src = reader.result;
-    document.getElementById('photo-preview').style.display = '';
-    document.getElementById('photo-preview-empty').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
-}
-
 async function saveSalesForm(id){
+  const editing = id ? salesReports.find(r=>r.id===id) : null;
+  if(editing && isPastDate(editing.work_date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
   const work_date = document.getElementById('s-date').value;
+  if(id && isPastDate(work_date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
   const store_id = document.getElementById('s-store').value || null;
   const promoter_id = document.getElementById('s-promoter').value || null;
   const product_name = document.getElementById('s-product').value.trim();
@@ -219,8 +271,10 @@ async function saveSalesForm(id){
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
   const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
   const remarks = document.getElementById('s-remarks').value.trim();
-  const photoFile = document.getElementById('s-photo').files[0];
-  let photo_url = document.getElementById('s-photo-url').value || null;
+  // Photos are no longer captured per product — see the "Day photo" row
+  // for one overall photo per working date. Editing an older row that
+  // still has a legacy photo_url leaves it untouched.
+  const photo_url = editing ? (editing.photo_url || null) : null;
 
   if(!work_date || !product_name){
     showToast('Date and product name are required'); return;
@@ -229,12 +283,6 @@ async function saveSalesForm(id){
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
-    if(photoFile){
-      btn.textContent = 'Uploading photo…';
-      const compressed = await compressImageFile(photoFile);
-      photo_url = await uploadPhotoToCloudinary(compressed);
-    }
-
     btn.textContent = 'Saving…';
     const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url };
     if(id){
@@ -256,12 +304,112 @@ async function saveSalesForm(id){
 }
 
 async function deleteSalesReport(id){
+  const entry = salesReports.find(r=>r.id===id);
+  if(entry && isPastDate(entry.work_date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
   if(!confirm('Delete this product\'s stock report?')) return;
   try{
     await DB.deleteSalesReport(id);
     await refreshData();
     render();
     showToast('Stock report deleted');
+  }catch(e){
+    console.error(e);
+    showToast('Could not delete — ' + (e.message || 'check your connection'));
+  }
+}
+
+// ---------------- Day photo (one overall photo per working date) ----------------
+
+function openDayPhotoForm(date){
+  if(isPastDate(date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
+  const existing = dayPhotos.find(d => d.work_date === date);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-title">Day photo — ${formatDateLong(date)}</div>
+      <div class="field">
+        <label>Photo</label>
+        <div class="photo-picker">
+          <img id="photo-preview" class="photo-preview" src="${existing&&existing.photo_url?esc(existing.photo_url):''}" style="${existing&&existing.photo_url?'':'display:none;'}">
+          <div id="photo-preview-empty" class="photo-preview photo-preview-empty" style="${existing&&existing.photo_url?'display:none;':''}">📷</div>
+          <div class="photo-picker-actions">
+            <label class="btn btn-ghost" for="dp-photo">Take / choose photo</label>
+            <input type="file" id="dp-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewDayPhoto(this)">
+            <div class="field-hint">One overall photo for the whole date — stored outside Supabase, no storage quota used.</div>
+          </div>
+        </div>
+        <input type="hidden" id="dp-photo-url" value="${existing&&existing.photo_url?esc(existing.photo_url):''}">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}')">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+async function previewDayPhoto(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('photo-preview').src = reader.result;
+    document.getElementById('photo-preview').style.display = '';
+    document.getElementById('photo-preview-empty').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveDayPhotoForm(date){
+  if(isPastDate(date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
+  const photoFile = document.getElementById('dp-photo').files[0];
+  let photo_url = document.getElementById('dp-photo-url').value || null;
+
+  if(!photoFile && !photo_url){
+    showToast('Choose a photo first'); return;
+  }
+
+  const btn = document.getElementById('day-photo-save-btn');
+  btn.disabled = true;
+  try{
+    if(photoFile){
+      btn.textContent = 'Uploading photo…';
+      const compressed = await compressImageFile(photoFile);
+      photo_url = await uploadPhotoToCloudinary(compressed);
+    }
+    btn.textContent = 'Saving…';
+    await DB.saveDayPhoto(date, { store_id: null, promoter_id: null, photo_url });
+    await refreshData();
+    closeModal();
+    render();
+    showToast('Day photo saved');
+  }catch(e){
+    console.error(e);
+    showToast('Could not save — ' + (e.message || 'check your connection'));
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+async function deleteDayPhotoRow(date){
+  if(isPastDate(date)){
+    showToast('This working date is in the past and is locked'); return;
+  }
+  if(!confirm('Delete the day photo for this date?')) return;
+  try{
+    await DB.deleteDayPhoto(date);
+    await refreshData();
+    render();
+    showToast('Day photo deleted');
   }catch(e){
     console.error(e);
     showToast('Could not delete — ' + (e.message || 'check your connection'));
