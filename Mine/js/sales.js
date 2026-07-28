@@ -176,6 +176,7 @@ function renderDayPhotoRow(date){
         : `<div class="sales-item-photo sales-item-photo-empty">📷</div>`}
       <div class="sales-item-main">
         <div class="sales-item-name">Day photo</div>
+      </div>
       <div class="job-actions">
         <div class="icon-btn" onclick="openDayPhotoForm('${date}')">✎</div>
         ${dp ? `<div class="icon-btn danger" onclick="deleteDayPhotoRow('${date}')">✕</div>` : ''}
