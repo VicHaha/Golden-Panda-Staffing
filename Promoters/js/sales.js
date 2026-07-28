@@ -328,7 +328,6 @@ function openDayPhotoForm(date, id){
           <div class="photo-picker-actions">
             <label class="btn btn-ghost" for="dp-photo">Take / choose photo</label>
             <input type="file" id="dp-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewDayPhoto(this)">
-            <div class="field-hint">You can add as many photos as you need for this date — stored outside Supabase, no storage quota used.</div>
           </div>
         </div>
         <input type="hidden" id="dp-photo-url" value="${existing&&existing.photo_url?esc(existing.photo_url):''}">
