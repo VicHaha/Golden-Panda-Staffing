@@ -170,7 +170,7 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url,
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, free_gift_qty, remarks, photo_url,
         stores ( id, name ),
         promoters ( id, full_name )
       `)
@@ -276,5 +276,23 @@ const DB = {
       .delete()
       .lt('work_date', cutoffStr);
     if(error) throw error;
+  },
+
+  // ---------------- Shift reports (read-only here — logged from the Promoters app) ----------------
+  // Powers the Analysis tab's "Shift Engagement" view. No add/update/delete
+  // here on purpose: promoters log these from their own app; the office
+  // app only reads them for analysis.
+  async getShiftReports(){
+    const { data, error } = await sb
+      .from('shift_reports')
+      .select(`
+        id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
+        avg_engagement_time, customer_feedback, notes,
+        stores ( id, name ),
+        promoters ( id, full_name )
+      `)
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
   }
 };

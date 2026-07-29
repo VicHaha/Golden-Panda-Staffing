@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gp-stock-report-shell-v2';
+const CACHE_NAME = 'gp-stock-report-shell-v3';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const SHELL_FILES = [
   './js/supabase.js',
   './js/utils.js',
   './js/sales.js',
+  './js/shift.js',
   './js/app.js',
   './assets/icon-192.png',
   './assets/icon-512.png',

@@ -7,6 +7,8 @@ let stores = [];
 let scheduledDates = [];
 let salesReports = [];
 let dayPhotos = [];
+let shiftReports = [];
+let currentTab = 'sales';
 let realtimeChannel = null;
 let currentPromoterId = localStorage.getItem('gp_stock_promoter_id') || null;
 let currentPromoterName = localStorage.getItem('gp_stock_promoter_name') || null;
@@ -200,14 +202,24 @@ async function startApp(){
           <div class="brand-mark">GP</div>
           <div class="brand-text">
             <h1>Golden Panda</h1>
-            <p>Stock Report</p>
+            <p>Field Reports</p>
           </div>
           <div class="sync-dot off" id="sync-dot" title="Syncing"></div>
           <div class="identity-chip" onclick="logOut()">${esc(currentPromoterName)}</div>
         </div>
       </div>
       <div class="content" id="content"></div>
-      <div class="fab" id="fab"><button onclick="openSalesForm()" aria-label="Add">+</button></div>
+      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add">+</button></div>
+      <div class="tabbar">
+        <button class="tab" data-tab="sales" onclick="switchTab('sales')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          Stock
+        </button>
+        <button class="tab" data-tab="shift" onclick="switchTab('shift')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3h6v3H9z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 12h6M9 16h4"/></svg>
+          Shift Report
+        </button>
+      </div>
     </div>
   `;
   await loadInitialData();
@@ -225,15 +237,16 @@ async function loadInitialData(){
     setSyncDot(false);
     showToast('Could not connect — check your internet connection');
   }
-  render();
+  switchTab('sales');
 }
 
 async function refreshData(){
-  const [s, sd, sr, dp] = await Promise.all([DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos()]);
+  const [s, sd, sr, dp, shr] = await Promise.all([DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports()]);
   stores = s;
   scheduledDates = sd;
   salesReports = sr;
   dayPhotos = dp;
+  shiftReports = shr;
   setSyncDot(true);
 }
 
@@ -243,6 +256,7 @@ function subscribeRealtime(){
     .channel('gp-stock-report-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
@@ -259,10 +273,22 @@ async function handleRemoteChange(){
   }
 }
 
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  render();
+}
+
+function openFab(){
+  if(currentTab==='shift') openShiftForm();
+  else openSalesForm();
+}
+
 function render(){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
-  c.innerHTML = renderSales();
+  c.innerHTML = currentTab==='shift' ? renderShift() : renderSales();
 }
 
 // ---------- Service worker (offline shell + installability) ----------

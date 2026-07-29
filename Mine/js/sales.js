@@ -142,7 +142,7 @@ function renderSales(){
 
 function renderSalesItems(items){
   return items.map(i=>{
-    const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
+    const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0), freeGift = Number(i.free_gift_qty||0);
     const expectedClosing = opening - sales;
     const variance = closing - expectedClosing;
     return `
@@ -150,7 +150,7 @@ function renderSalesItems(items){
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(i.product_name)}</div>
           <div class="sales-item-stats">
-            Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>
+            Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>${freeGift ? ` · Free gift <b>${freeGift}</b>` : ''}
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
           </div>
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
@@ -248,6 +248,7 @@ function openSalesForm(id){
         <div class="field"><label>Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
         <div class="field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
       </div>
+      <div class="field"><label>Free gifts given (optional)</label><input id="s-free-gift" type="number" min="0" step="1" value="${editing&&editing.free_gift_qty?editing.free_gift_qty:''}" placeholder="0"></div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -268,6 +269,7 @@ async function saveSalesForm(id){
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
   const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
+  const free_gift_qty = parseFloat(document.getElementById('s-free-gift').value) || 0;
   const remarks = document.getElementById('s-remarks').value.trim();
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
@@ -282,7 +284,7 @@ async function saveSalesForm(id){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url };
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, free_gift_qty, remarks, photo_url };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{

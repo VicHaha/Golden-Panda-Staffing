@@ -7,6 +7,7 @@ let jobs = [];
 let stores = [];
 let salesReports = [];
 let dayPhotos = [];
+let shiftReports = [];
 let currentTab = 'promoters';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
@@ -56,6 +57,10 @@ function boot(){
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
           Stock
         </button>
+        <button class="tab" data-tab="analysis" onclick="switchTab('analysis')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12" y="8" width="3" height="10" rx="0.5"/><rect x="17" y="4" width="3" height="14" rx="0.5"/></svg>
+          Analysis
+        </button>
         <button class="tab" data-tab="reports" onclick="switchTab('reports')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
           Reports
@@ -85,14 +90,15 @@ async function loadInitialData(){
   switchTab('promoters');
 }
 
-// Re-fetches promoters, jobs, stores, and sales reports from Supabase.
+// Re-fetches promoters, jobs, stores, sales reports, day photos, and shift reports from Supabase.
 async function refreshData(){
-  const [p, j, s, sr, dp] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos()]);
+  const [p, j, s, sr, dp, shr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports()]);
   promoters = p;
   jobs = j;
   stores = s;
   salesReports = sr;
   dayPhotos = dp;
+  shiftReports = shr;
   setSyncDot(true);
 }
 
@@ -106,6 +112,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });
@@ -143,8 +150,10 @@ function render(){
   if(currentTab==='promoters') c.innerHTML = renderPromoters();
   else if(currentTab==='schedule') c.innerHTML = renderSchedule();
   else if(currentTab==='sales') c.innerHTML = renderSales();
+  else if(currentTab==='analysis') c.innerHTML = renderAnalysis();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
+  if(currentTab==='analysis') wireAnalysisControls();
 }
 
 // ---------- Service worker (offline shell + installability) ----------
