@@ -29,6 +29,10 @@ files **in this order**:
 9. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
    overall photo per working date (separate from each product's own
    stock row — see "Day photo row" below)
+10. `sql/migration_day_photos_multi.sql` — allows unlimited day photos
+    per date instead of just one
+11. `sql/migration_promoter_active.sql` — normalizes the `active` column
+    used by the new promoter hide/show feature
 
 All are safe to run again if you're not sure which you've already run.
 
@@ -79,6 +83,22 @@ Until this is set up, everything else works fine — only the photo
 upload button will show an error if tapped.
 
 ### What's new in this version
+
+- **Hide/show promoters** — no longer just delete-or-keep. "Hide" a
+  promoter who's left or is on leave and they disappear from new job/
+  stock-log pickers immediately, but their name, past schedule, and pay
+  history all stay intact. Hidden promoters sit in a collapsed section
+  at the bottom of the Promoters tab, and "Show" brings them straight
+  back. This also cuts off their login in the promoter-facing stock app.
+- **Gift Set, Flyer, and Small Samples** are now part of the daily
+  auto-seeded product list alongside your sellable SKUs, but handled
+  differently since they're free: no opening/closing stock tracking (no
+  carry-over night to night), and they're excluded from "sold" totals —
+  the app just tracks how many were given out, tagged "Free item".
+- **Stock report Excel export** — the Stock tab now has the same
+  month-picker + Export .xlsx controls as the Reports tab. Same 3-month
+  auto-cleanup applies to stock records as to jobs, so export any month
+  you want to keep before it ages out.
 
 - **Self-hosted fonts** — headers no longer flash between a fallback
   font and the real one on load, since the font files now ship with the

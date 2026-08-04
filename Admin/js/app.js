@@ -145,6 +145,7 @@ function render(){
   else if(currentTab==='sales') c.innerHTML = renderSales();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
+  if(currentTab==='sales') wireStockExportControls();
 }
 
 // ---------- Service worker (offline shell + installability) ----------

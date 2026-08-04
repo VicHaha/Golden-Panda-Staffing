@@ -25,6 +25,12 @@ In Supabase → SQL Editor, run, in order:
    new photo attachment feature.
 5. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
    overall photo per working date, separate from each product's own row.
+6. `sql/migration_day_photos_multi.sql` — allows unlimited day photos
+   per date instead of just one.
+7. `sql/migration_promoter_active.sql` — normalizes the `active` column
+   used by the office app's promoter hide/show feature. Hiding a
+   promoter logs them out of this app and removes them from the
+   "which promoter are you?" picker.
 
 ### 2. Create the office account (required — the office app needs this)
 
@@ -97,6 +103,10 @@ their name at the top and choose to log out.
   gets a row for today with opening stock carried over from yesterday's
   closing count, so there's usually nothing to "add," just numbers to
   fill in and save.
+- **Gift Set, Flyer, and Small Samples are free giveaways, not sales** —
+  they show up in the same daily list, but with no opening/closing stock
+  fields, no carry-over, and they're excluded from "sold" totals. Just
+  log how many were given out.
 - **Editing is locked to today** — any logged-in promoter can edit or
   delete *any* entry dated today, including ones the office added —
   there's no per-person ownership restriction anymore. Once a date is

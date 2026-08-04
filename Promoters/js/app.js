@@ -138,8 +138,10 @@ async function loadPromotersThenGate(){
     return;
   }
 
-  // If a saved identity no longer matches a real promoter (deleted, etc), forget it.
-  if(currentPromoterId && !promoters.find(p => p.id === currentPromoterId)){
+  // If a saved identity no longer matches a real, active promoter
+  // (deleted or hidden by the office), forget it and ask again.
+  const savedPromoter = promoters.find(p => p.id === currentPromoterId);
+  if(currentPromoterId && (!savedPromoter || savedPromoter.active === false)){
     localStorage.removeItem('gp_stock_promoter_id');
     localStorage.removeItem('gp_stock_promoter_name');
     currentPromoterId = null;
@@ -155,7 +157,8 @@ async function loadPromotersThenGate(){
 
 function renderIdentityGate(){
   const root = document.getElementById('root');
-  if(promoters.length === 0){
+  const selectable = promoters.filter(p => p.active !== false);
+  if(selectable.length === 0){
     root.innerHTML = `
       <div class="gate">
         <div class="brand-mark">GP</div>
@@ -171,7 +174,7 @@ function renderIdentityGate(){
       <h2>Which promoter are you?</h2>
       <p>Pick your name — it stays saved on this phone so you won't need to pick it again next time.</p>
       <select id="gate-promoter">
-        ${[...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}
+        ${[...selectable].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}
       </select>
       <button class="btn btn-primary btn-block" onclick="submitIdentity()">Continue</button>
       <p class="fineprint">Not you on this phone in future? Tap your name at the top of the app to log out.</p>

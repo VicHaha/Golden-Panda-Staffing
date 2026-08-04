@@ -7,11 +7,17 @@
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
+let stockExportMode = 'monthly'; // 'monthly' | 'daily'
+let stockExportMonth = new Date().toISOString().slice(0,7);
+let stockExportDate = todayStr();
 
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
 const PRODUCT_SUGGESTIONS = [
   'Gift Set',
+  'Flyer',
+  'Small Samples',
+  'Coupons',
   'Bio Dishwash 1L (Bidara)',
   'Bio Dishwash 1L (Ginger)',
   'Bio Dishwash 1L (Melon)',
@@ -19,6 +25,25 @@ const PRODUCT_SUGGESTIONS = [
   'Refill Bio Dishwash 480ml (Ginger)',
   'Refill Bio Dishwash 480ml (Melon)'
 ];
+
+// Auto-seeded giveaway items — used only as the DEFAULT "free item" guess
+// for a product name (when auto-creating a date's rows, or prefilling the
+// checkbox as you type a new product). Every row also carries its own
+// editable is_free_item flag (see isFreeItem below) so this default can
+// always be overridden by hand, per row. Matched case-insensitively so
+// someone typing "gift set" or "GIFT SET" still gets treated the same way.
+const GIVEAWAY_ITEMS = ['Gift Set', 'Flyer', 'Small Samples', 'Coupons'];
+function isGiveaway(productName){
+  return GIVEAWAY_ITEMS.some(g => g.toLowerCase() === (productName||'').trim().toLowerCase());
+}
+
+// The actual, authoritative "is this a free item?" check for a saved row —
+// uses the row's own editable is_free_item flag, falling back to the
+// name-based guess only for legacy rows saved before that column existed.
+function isFreeItem(report){
+  if(report && (report.is_free_item === true || report.is_free_item === false)) return report.is_free_item;
+  return isGiveaway(report && report.product_name);
+}
 
 // Combines the fixed suggestions above with any product names already
 // used in past reports, so custom products you've added before show up
@@ -66,16 +91,24 @@ async function ensureTodaysStockRows(){
 
 // Creates any missing product rows for one specific working date, carrying
 // opening stock over from that product's most recent prior closing count.
+// Gift Set/Flyer/Small Samples/Coupons are auto-seeded as free items by
+// default and never carry stock over — they always start each date at 0,
+// since they're not tracked inventory. This is just the starting default;
+// is_free_item stays editable per row afterwards from the stock report form.
 async function ensureStockRowsForDate(date){
   const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => r.product_name));
   const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(p));
   if(missing.length === 0) return;
 
   for(const product of missing){
-    const priorEntries = salesReports
-      .filter(r => r.product_name === product && r.work_date < date)
-      .sort((a,b) => b.work_date.localeCompare(a.work_date));
-    const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
+    const giveaway = isGiveaway(product);
+    let carryOver = 0;
+    if(!giveaway){
+      const priorEntries = salesReports
+        .filter(r => r.product_name === product && r.work_date < date)
+        .sort((a,b) => b.work_date.localeCompare(a.work_date));
+      carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
+    }
 
     try{
       const created = await DB.addSalesReport({
@@ -87,7 +120,8 @@ async function ensureStockRowsForDate(date){
         sales_qty: 0,
         closing_qty: carryOver,
         remarks: null,
-        photo_url: null
+        photo_url: null,
+        is_free_item: giveaway
       });
       // Keep the local cache current so a later target date processed in
       // this same run carries over from the row we just created.
@@ -99,8 +133,21 @@ async function ensureStockRowsForDate(date){
 }
 
 function renderSales(){
+  const exportControls = `
+    <div class="export-mode-row">
+      <button class="mode-btn ${stockExportMode==='daily'?'active':''}" id="stock-export-mode-daily">Daily</button>
+      <button class="mode-btn ${stockExportMode==='monthly'?'active':''}" id="stock-export-mode-monthly">Monthly</button>
+    </div>
+    <div class="month-picker-row">
+      ${stockExportMode==='daily'
+        ? `<input id="stock-date-input" type="date" value="${stockExportDate}">`
+        : `<input id="stock-month-input" type="month" value="${stockExportMonth}">`}
+      <button class="btn btn-gold" id="stock-export-btn">Export .xlsx</button>
+    </div>
+  `;
+
   if(salesReports.length===0 && dayPhotos.length===0){
-    return emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for a roadshow date.');
+    return exportControls + emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for a roadshow date.');
   }
 
   // Group entries by work_date, newest date first.
@@ -116,11 +163,13 @@ function renderSales(){
   const today = todayStr();
 
   let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
+  html += exportControls;
 
   dates.forEach(date=>{
     const items = byDate[date];
     const expanded = salesExpandedDates.has(date);
-    const totalSales = items.reduce((s,i)=>s + Number(i.sales_qty||0), 0);
+    const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
+    const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
     const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
     const isToday = date === today;
     html += `
@@ -128,7 +177,7 @@ function renderSales(){
         <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
           <div>
             <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-            <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold</div>
+            <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}</div>
           </div>
           <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
         </button>
@@ -142,17 +191,25 @@ function renderSales(){
 
 function renderSalesItems(items){
   return items.map(i=>{
-    const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
-    const expectedClosing = opening - sales;
-    const variance = closing - expectedClosing;
+    const giveaway = isFreeItem(i);
+    const sales = Number(i.sales_qty||0);
+    let statsHtml;
+    if(giveaway){
+      statsHtml = `Given out <b>${sales}</b> <span class="count-pill">Free item</span>`;
+    }else{
+      const opening = Number(i.opening_qty||0), closing = Number(i.closing_qty||0);
+      const expectedClosing = opening - sales;
+      const variance = closing - expectedClosing;
+      statsHtml = `
+        Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>
+        ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
+      `;
+    }
     return `
       <div class="sales-item">
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(i.product_name)}</div>
-          <div class="sales-item-stats">
-            Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>
-            ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
-          </div>
+          <div class="sales-item-stats">${statsHtml}</div>
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
@@ -167,40 +224,25 @@ function renderSalesItems(items){
 
 // Any number of overall photos allowed per working date (booth/table
 // setup, crowd shots, etc.) — separate from each product's own
-// opening/sales/closing row. Renders one row per saved photo, plus an
-// always-available "add" row so another can be added on top.
+// opening/sales/closing row. All of a date's photos sit in a single
+// horizontally-scrolling row of thumbnails, with an "add" tile right
+// after the last photo so another can be added on top.
 function renderDayPhotoRow(date){
   const photos = dayPhotos.filter(d => d.work_date === date);
-  const photoRows = photos.map(dp => `
-    <div class="sales-item day-photo-row">
+  const photoThumbs = photos.map(dp => `
+    <div class="day-photo-thumb" onclick="openDayPhotoForm('${date}','${dp.id}')" title="Edit day photo">
       ${dp.photo_url
-        ? `<img class="sales-item-photo" src="${esc(dp.photo_url)}" alt="Day photo" onclick="window.open('${esc(dp.photo_url)}','_blank')">`
-        : `<div class="sales-item-photo sales-item-photo-empty">📷</div>`}
-      <div class="sales-item-main">
-        <div class="sales-item-name">Day photo</div>
-        <div class="sales-item-stats">Overall photo for this date — not tied to any one product</div>
-      </div>
-      <div class="job-actions">
-        <div class="icon-btn" onclick="openDayPhotoForm('${date}','${dp.id}')">✎</div>
-        <div class="icon-btn danger" onclick="deleteDayPhotoRow('${dp.id}')">✕</div>
-      </div>
+        ? `<img src="${esc(dp.photo_url)}" alt="Day photo">`
+        : `<div class="day-photo-thumb-empty">📷</div>`}
+      <button class="day-photo-thumb-delete" onclick="event.stopPropagation(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>
     </div>
   `).join('');
 
-  const addRow = `
-    <div class="sales-item day-photo-row">
-      <div class="sales-item-photo sales-item-photo-empty">📷</div>
-      <div class="sales-item-main">
-        <div class="sales-item-name">Add day photo</div>
-        <div class="sales-item-stats">Add as many as you need for this date</div>
-      </div>
-      <div class="job-actions">
-        <div class="icon-btn" onclick="openDayPhotoForm('${date}')">＋</div>
-      </div>
-    </div>
+  const addThumb = `
+    <div class="day-photo-thumb day-photo-add" onclick="openDayPhotoForm('${date}')" title="Add day photo">＋</div>
   `;
 
-  return photoRows + addRow;
+  return `<div class="day-photo-strip">${photoThumbs}${addThumb}</div>`;
 }
 
 function toggleSalesDate(date){
@@ -235,18 +277,25 @@ function openSalesForm(id){
         <label>Logged by (optional)</label>
         <select id="s-promoter">
           <option value="">— Not specified —</option>
-          ${[...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('')}
+          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}${!isActive(p)?' (hidden)':''}</option>`).join('')}
         </select>
       </div>
       <div class="field">
         <label>Product name</label>
-        <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. Bio Dishwash 1L (Bidara)">
+        <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. Bio Dishwash 1L (Bidara)" oninput="onProductNameChange()">
         <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
       </div>
+      <div class="field">
+        <label class="checkbox-row">
+          <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">
+          Free item (given away, not sold)
+        </label>
+        <div class="field-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
+      </div>
       <div class="field-row">
-        <div class="field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
-        <div class="field"><label>Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
-        <div class="field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
+        <div class="field" id="opening-field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
+        <div class="field"><label id="s-sales-label">Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
+        <div class="field" id="closing-field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
       </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
@@ -257,6 +306,43 @@ function openSalesForm(id){
   `;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  // Once the person has hand-toggled the checkbox, typing further in the
+  // product name field stops overriding their choice.
+  salesFormFreeItemTouched = false;
+  applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
+}
+
+// Tracks whether the person has manually ticked/unticked the "Free item"
+// checkbox in the currently-open form — once true, typing in the product
+// name field no longer overwrites their choice.
+let salesFormFreeItemTouched = false;
+
+// Re-guesses the "Free item" checkbox from the product name as you type —
+// but only until the person manually touches the checkbox themselves.
+function onProductNameChange(){
+  if(!salesFormFreeItemTouched){
+    document.getElementById('s-free-item').checked = isGiveaway(document.getElementById('s-product').value);
+  }
+  applyFreeItemFieldLayout();
+}
+
+function onFreeItemToggle(){
+  salesFormFreeItemTouched = true;
+  applyFreeItemFieldLayout();
+}
+
+// Hides opening/closing stock fields and relabels "Sales qty" to
+// "Quantity given out" when the "Free item" checkbox is ticked — free
+// items aren't tracked as inventory.
+function applyFreeItemFieldLayout(){
+  const giveaway = document.getElementById('s-free-item').checked;
+  document.getElementById('opening-field').style.display = giveaway ? 'none' : '';
+  document.getElementById('closing-field').style.display = giveaway ? 'none' : '';
+  document.getElementById('s-sales-label').textContent = giveaway ? 'Quantity given out' : 'Sales qty';
+  if(giveaway){
+    document.getElementById('s-opening').value = 0;
+    document.getElementById('s-closing').value = 0;
+  }
 }
 
 async function saveSalesForm(id){
@@ -265,9 +351,10 @@ async function saveSalesForm(id){
   const store_id = document.getElementById('s-store').value || null;
   const promoter_id = document.getElementById('s-promoter').value || null;
   const product_name = document.getElementById('s-product').value.trim();
-  const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
+  const is_free_item = document.getElementById('s-free-item').checked;
+  const opening_qty = is_free_item ? 0 : (parseFloat(document.getElementById('s-opening').value) || 0);
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
-  const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
+  const closing_qty = is_free_item ? 0 : (parseFloat(document.getElementById('s-closing').value) || 0);
   const remarks = document.getElementById('s-remarks').value.trim();
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
@@ -282,7 +369,7 @@ async function saveSalesForm(id){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url };
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{
@@ -312,6 +399,56 @@ async function deleteSalesReport(id){
     console.error(e);
     showToast('Could not delete — ' + (e.message || 'check your connection'));
   }
+}
+
+// ---------------- Excel export (month by month) ----------------
+
+function wireStockExportControls(){
+  const dailyBtn = document.getElementById('stock-export-mode-daily');
+  if(dailyBtn) dailyBtn.addEventListener('click', ()=>{ stockExportMode = 'daily'; render(); });
+  const monthlyBtn = document.getElementById('stock-export-mode-monthly');
+  if(monthlyBtn) monthlyBtn.addEventListener('click', ()=>{ stockExportMode = 'monthly'; render(); });
+  const di = document.getElementById('stock-date-input');
+  if(di) di.addEventListener('change', e=>{ stockExportDate = e.target.value; render(); });
+  const mi = document.getElementById('stock-month-input');
+  if(mi) mi.addEventListener('change', e=>{ stockExportMonth = e.target.value; render(); });
+  const eb = document.getElementById('stock-export-btn');
+  if(eb) eb.addEventListener('click', exportStockExcel);
+}
+
+function exportStockExcel(){
+  const daily = stockExportMode === 'daily';
+  const periodReports = daily
+    ? salesReports.filter(r=>r.work_date === stockExportDate)
+    : salesReports.filter(r=>r.work_date.startsWith(stockExportMonth));
+  const periodLabel = daily ? stockExportDate : stockExportMonth;
+
+  if(periodReports.length===0){ showToast(`No stock reports to export for this ${daily?'date':'month'}`); return; }
+
+  const rows = [...periodReports]
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || a.product_name.localeCompare(b.product_name))
+    .map(r=>{
+      const giveaway = isFreeItem(r);
+      const opening = Number(r.opening_qty||0), sales = Number(r.sales_qty||0), closing = Number(r.closing_qty||0);
+      return {
+        'Date': r.work_date,
+        'Product': r.product_name,
+        'Type': giveaway ? 'Giveaway (free)' : 'Product',
+        'Store': r.stores ? r.stores.name : '',
+        'Opening Stock': giveaway ? '' : opening,
+        'Sold / Given Out': sales,
+        'Closing Stock': giveaway ? '' : closing,
+        'Logged By': r.promoters ? r.promoters.full_name : '',
+        'Remarks': r.remarks || ''
+      };
+    });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
+  XLSX.writeFile(wb, `Golden_Panda_Stock_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
+  showToast('Excel file downloaded');
 }
 
 // ---------------- Day photo (one overall photo per working date) ----------------

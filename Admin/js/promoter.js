@@ -1,34 +1,82 @@
 // ============================================================
-// Promoters — list, add, edit, delete
+// Promoters — list, add, edit, hide/show, delete
 // ============================================================
+
+let showHiddenPromoters = false;
+
+function isActive(p){
+  return p.active !== false; // treat null/undefined as active too (old rows before this feature existed)
+}
 
 function renderPromoters(){
   if(promoters.length===0){
     return emptyState('👤','No promoters yet','Tap the + button to add your first promoter.');
   }
-  const sorted = [...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name));
+  const active = [...promoters].filter(isActive).sort((a,b)=>a.full_name.localeCompare(b.full_name));
+  const hidden = [...promoters].filter(p=>!isActive(p)).sort((a,b)=>a.full_name.localeCompare(b.full_name));
+
+  let html = `
+    <div class="section-title">Your team <span class="count-pill">${active.length}</span></div>
+    ${active.length===0 ? emptyState('👤','No active promoters','Everyone is hidden — tap "Show hidden" below to bring someone back.') : active.map(renderPromoterBadge).join('')}
+  `;
+
+  if(hidden.length > 0){
+    html += `
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleHiddenPromoters()">
+        ${showHiddenPromoters ? 'Hide' : 'Show'} hidden promoters (${hidden.length})
+      </button>
+    `;
+    if(showHiddenPromoters){
+      html += `<div class="day-group-label" style="margin-top:18px;">Hidden</div>`;
+      html += hidden.map(renderPromoterBadge).join('');
+    }
+  }
+
+  return html;
+}
+
+function renderPromoterBadge(p){
+  const hidden = !isActive(p);
   return `
-    <div class="section-title">Your team <span class="count-pill">${promoters.length}</span></div>
-    ${sorted.map(p=>`
-      <div class="badge">
-        <div class="badge-hole"></div>
-        <div class="badge-top">
-          <div>
-            <div class="badge-name">${esc(p.full_name)}</div>
-            <span class="badge-ic">${esc(p.ic_number||'—')}</span>
-          </div>
-        </div>
-        <div class="badge-meta">
-          <b>Age:</b> ${p.age||'—'} &nbsp;·&nbsp; <b>Phone:</b> ${esc(p.phone||'—')}<br>
-          <b>Address:</b> ${esc(p.address||'—')}
-        </div>
-        <div class="badge-actions">
-          <button class="btn btn-ghost" onclick="openPromoterForm('${p.id}')">Edit</button>
-          <button class="btn btn-danger-ghost" onclick="deletePromoter('${p.id}')">Delete</button>
+    <div class="badge${hidden ? ' badge-hidden' : ''}">
+      <div class="badge-hole"></div>
+      <div class="badge-top">
+        <div>
+          <div class="badge-name">${esc(p.full_name)} ${hidden ? '<span class="count-pill">Hidden</span>' : ''}</div>
+          <span class="badge-ic">${esc(p.ic_number||'—')}</span>
         </div>
       </div>
-    `).join('')}
+      <div class="badge-meta">
+        <b>Age:</b> ${p.age||'—'} &nbsp;·&nbsp; <b>Phone:</b> ${esc(p.phone||'—')}<br>
+        <b>Address:</b> ${esc(p.address||'—')}
+      </div>
+      <div class="badge-actions">
+        <button class="btn btn-ghost" onclick="openPromoterForm('${p.id}')">Edit</button>
+        <button class="btn btn-ghost" onclick="togglePromoterActive('${p.id}')">${hidden ? 'Show' : 'Hide'}</button>
+        <button class="btn btn-danger-ghost" onclick="deletePromoter('${p.id}')">Delete</button>
+      </div>
+    </div>
   `;
+}
+
+function toggleHiddenPromoters(){
+  showHiddenPromoters = !showHiddenPromoters;
+  render();
+}
+
+async function togglePromoterActive(id){
+  const p = promoters.find(x=>x.id===id);
+  if(!p) return;
+  const currentlyActive = isActive(p);
+  try{
+    await DB.updatePromoter(id, { active: !currentlyActive });
+    await refreshData();
+    render();
+    showToast(currentlyActive ? 'Promoter hidden — no longer selectable for new jobs or stock reports' : 'Promoter shown again');
+  }catch(e){
+    console.error(e);
+    showToast('Could not update — ' + (e.message || 'check your connection'));
+  }
 }
 
 function openPromoterForm(id){
@@ -76,7 +124,7 @@ async function savePromoterForm(id){
     if(id){
       await DB.updatePromoter(id, payload);
     }else{
-      await DB.addPromoter(payload);
+      await DB.addPromoter({ ...payload, active: true });
     }
     await refreshData();
     closeModal();
@@ -91,8 +139,8 @@ async function savePromoterForm(id){
 async function deletePromoter(id){
   const linkedJobs = jobs.filter(j=>j.promoter_id===id).length;
   const msg = linkedJobs>0
-    ? `This promoter has ${linkedJobs} job(s) on the schedule, which will also be deleted. Continue?`
-    : 'Delete this promoter?';
+    ? `This promoter has ${linkedJobs} job(s) on the schedule, which will also be deleted. Continue? (Tip: use "Hide" instead if you just want them out of the way but keep their history.)`
+    : 'Delete this promoter? (Tip: use "Hide" instead if you just want them out of the way but keep their history.)';
   if(!confirm(msg)) return;
   try{
     await DB.deletePromoter(id); // jobs cascade-delete via the DB foreign key (on delete cascade)

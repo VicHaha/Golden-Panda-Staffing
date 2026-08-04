@@ -128,7 +128,7 @@ function openJobForm(id){
       <div class="field">
         <label>Promoter</label>
         <select id="f-promoter">
-          ${[...promoters].sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('')}
+          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}${!isActive(p)?' (hidden)':''}</option>`).join('')}
         </select>
       </div>
       <div class="field">
