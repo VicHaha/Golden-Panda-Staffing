@@ -169,5 +169,46 @@ const DB = {
       .delete()
       .eq('id', id);
     if(error) throw error;
+  },
+
+  // ---------------- Shift reports (engagement/conversion, per promoter/date/shift) ----------------
+  async getShiftReports(){
+    const { data, error } = await sb
+      .from('shift_reports')
+      .select(`
+        id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
+        avg_engagement_time, customer_feedback, notes,
+        stores ( id, name ),
+        promoters ( id, full_name )
+      `)
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  async addShiftReport(entry){
+    const { data, error } = await sb
+      .from('shift_reports')
+      .insert(entry)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async updateShiftReport(id, entry){
+    const { error } = await sb
+      .from('shift_reports')
+      .update({ ...entry, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if(error) throw error;
+  },
+
+  async deleteShiftReport(id){
+    const { error } = await sb
+      .from('shift_reports')
+      .delete()
+      .eq('id', id);
+    if(error) throw error;
   }
 };

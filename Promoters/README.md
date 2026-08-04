@@ -25,12 +25,6 @@ In Supabase → SQL Editor, run, in order:
    new photo attachment feature.
 5. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
    overall photo per working date, separate from each product's own row.
-6. `sql/migration_day_photos_multi.sql` — allows unlimited day photos
-   per date instead of just one.
-7. `sql/migration_promoter_active.sql` — normalizes the `active` column
-   used by the office app's promoter hide/show feature. Hiding a
-   promoter logs them out of this app and removes them from the
-   "which promoter are you?" picker.
 
 ### 2. Create the office account (required — the office app needs this)
 
@@ -114,6 +108,12 @@ their name at the top and choose to log out.
   app can still edit past dates.
 - **Photos** — attach a photo to any entry (camera or gallery). Stored
   on Cloudinary, not Supabase — see setup step 4.
+- **Shift Report tab** — a second tab alongside Stock. Log one entry per
+  shift (Before Break 10am–2pm / After Break 3pm–6pm) with people
+  engaged, successful engagements, purchases, average engagement time,
+  and optional customer feedback and notes. Same today-only editing
+  rule as stock reports, and it's stored in its own `shift_reports`
+  table for analytics.
 - **No promoter management here** — adding/removing promoters still
   happens only in the main office app. If a promoter isn't in the
   dropdown, add them there first.
