@@ -170,7 +170,7 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url,
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
         stores ( id, name ),
         promoters ( id, full_name )
       `)

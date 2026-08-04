@@ -83,9 +83,10 @@ async function ensureTodaysStockRows(){
 // Creates any missing product rows for one specific working date, carrying
 // opening stock over from that product's most recent prior closing count.
 // Gift Set/Flyer/Small Samples/Coupons are auto-seeded as free items by
-// default and never carry stock over — they always start each date at 0,
-// since they're not tracked inventory. This is just the starting default;
-// is_free_item stays editable per row afterwards from the stock report form.
+// default (is_free_item stays editable per row afterwards from the stock
+// report form) — but they carry opening stock forward exactly like any
+// other product, since "given out" is now calculated as opening − closing
+// rather than typed in by hand.
 async function ensureStockRowsForDate(date){
   const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => r.product_name));
   const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(p));
@@ -93,13 +94,10 @@ async function ensureStockRowsForDate(date){
 
   for(const product of missing){
     const giveaway = isGiveaway(product);
-    let carryOver = 0;
-    if(!giveaway){
-      const priorEntries = salesReports
-        .filter(r => r.product_name === product && r.work_date < date)
-        .sort((a,b) => b.work_date.localeCompare(a.work_date));
-      carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
-    }
+    const priorEntries = salesReports
+      .filter(r => r.product_name === product && r.work_date < date)
+      .sort((a,b) => b.work_date.localeCompare(a.work_date));
+    const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
 
     try{
       const created = await DB.addSalesReport({
@@ -169,19 +167,14 @@ function renderSales(){
 function renderSalesItems(items, isToday){
   return items.map(i=>{
     const giveaway = isFreeItem(i);
-    const sales = Number(i.sales_qty||0);
-    let statsHtml;
-    if(giveaway){
-      statsHtml = `Given out <b>${sales}</b> <span class="count-pill">Free item</span>`;
-    }else{
-      const opening = Number(i.opening_qty||0), closing = Number(i.closing_qty||0);
-      const expectedClosing = opening - sales;
-      const variance = closing - expectedClosing;
-      statsHtml = `
-        Open <b>${opening}</b> · Sold <b>${sales}</b> · Close <b>${closing}</b>
-        ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
-      `;
-    }
+    const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
+    const expectedClosing = opening - sales;
+    const variance = closing - expectedClosing;
+    const statsHtml = `
+      Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b>
+      ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
+      ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
+    `;
     return `
       <div class="sales-item">
         <div class="sales-item-main">
@@ -264,9 +257,14 @@ function openSalesForm(id){
         <div class="field-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
       </div>
       <div class="field-row">
-        <div class="field" id="opening-field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
-        <div class="field"><label id="s-sales-label">Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
-        <div class="field" id="closing-field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
+        <div class="field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
+        <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
+        <div class="field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
+      </div>
+      <div class="field" id="given-out-field" style="display:none;">
+        <label>Given out (auto)</label>
+        <input id="s-given-out-display" type="text" value="0" readonly disabled>
+        <div class="field-hint">Calculated automatically: opening stock − closing stock.</div>
       </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
@@ -300,18 +298,27 @@ function onFreeItemToggle(){
   applyFreeItemFieldLayout();
 }
 
-// Hides opening/closing stock fields and relabels "Sales qty" to
-// "Quantity given out" when the "Free item" checkbox is ticked — free
-// items aren't tracked as inventory.
+// For free items, opening/closing stock is still recorded, but the "Sales
+// qty" field is hidden and replaced with a read-only "Given out" figure
+// computed automatically as opening − closing — no manual entry needed.
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
-  document.getElementById('opening-field').style.display = giveaway ? 'none' : '';
-  document.getElementById('closing-field').style.display = giveaway ? 'none' : '';
-  document.getElementById('s-sales-label').textContent = giveaway ? 'Quantity given out' : 'Sales qty';
-  if(giveaway){
-    document.getElementById('s-opening').value = 0;
-    document.getElementById('s-closing').value = 0;
-  }
+  document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
+  document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
+  if(giveaway) updateGivenOutPreview();
+}
+
+// Keeps the read-only "Given out" figure in sync as opening/closing stock
+// is typed, whenever the "Free item" checkbox is ticked.
+function updateGivenOutPreview(){
+  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
+  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
+  const given = Math.max(0, opening - closing);
+  document.getElementById('s-given-out-display').value = given;
+}
+
+function onStockFieldInput(){
+  if(document.getElementById('s-free-item').checked) updateGivenOutPreview();
 }
 
 async function saveSalesForm(id){
@@ -319,9 +326,11 @@ async function saveSalesForm(id){
   const store_id = document.getElementById('s-store').value || null;
   const product_name = document.getElementById('s-product').value.trim();
   const is_free_item = document.getElementById('s-free-item').checked;
-  const opening_qty = is_free_item ? 0 : (parseFloat(document.getElementById('s-opening').value) || 0);
-  const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
-  const closing_qty = is_free_item ? 0 : (parseFloat(document.getElementById('s-closing').value) || 0);
+  const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
+  const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
+  // Free items: "given out" is never typed in — it's always opening minus
+  // closing. Regular products: sales qty is entered by hand as before.
+  const sales_qty = is_free_item ? Math.max(0, opening_qty - closing_qty) : (parseFloat(document.getElementById('s-sales').value) || 0);
   const remarks = document.getElementById('s-remarks').value.trim();
   const editing = id ? salesReports.find(r=>r.id===id) : null;
   // Photos are no longer captured per product — see the "Day photo" row
