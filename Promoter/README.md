@@ -27,6 +27,10 @@ In Supabase → SQL Editor, run, in order:
    overall photo per working date, separate from each product's own row.
 6. `sql/migration_shift_report_age_range.sql` — adds the customer age
    range field to shift reports.
+7. `sql/migration_admin_login.sql` (from the main app's folder) — wires
+   up admin login in the office app; doesn't change anything in this
+   app directly, but needs to be run once against the same Supabase
+   project.
 
 ### 2. Create the office account (required — the office app needs this)
 
@@ -103,19 +107,25 @@ their name at the top and choose to log out.
   they show up in the same daily list, but with no opening/closing stock
   fields, no carry-over, and they're excluded from "sold" totals. Just
   log how many were given out.
-- **Editing is locked to today** — any logged-in promoter can edit or
-  delete *any* entry dated today, including ones the office added —
-  there's no per-person ownership restriction anymore. Once a date is
-  no longer today, it's locked (🔒) for everyone here; only the office
-  app can still edit past dates.
+- **Editing is locked to today** for **stock reports** — any logged-in
+  promoter can edit or delete *any* stock entry dated today, including
+  ones the office added — there's no per-person ownership restriction.
+  Once a date is no longer today, it's locked (🔒) for everyone here;
+  only the office app can still edit past stock dates. Past dates are
+  also hidden from the Stock list by default — tap "Show past reports"
+  to see them (still read-only from here).
+  **Shift reports work differently** — see the Shift Report tab below.
 - **Photos** — attach a photo to any entry (camera or gallery). Stored
   on Cloudinary, not Supabase — see setup step 4.
 - **Shift Report tab** — a second tab alongside Stock. Log one entry per
   shift (Before Break 10am–2pm / After Break 3pm–6pm) with people
   engaged, successful engagements, purchases, average engagement time,
-  customer age range, and optional customer feedback and notes. Same
-  today-only editing rule as stock reports, and it's stored in its own
-  `shift_reports` table for analytics.
+  customer age range, and optional customer feedback and notes. Unlike
+  stock reports, shift reports stay editable/deletable after their
+  working date has passed — any logged-in promoter can fix old numbers,
+  not just today's. The list itself hides dates before today by
+  default, with a "Show past reports" toggle to bring them back into
+  view, stored in its own `shift_reports` table for analytics.
 - **Schedule tab** — a third, view-only tab showing the same rolling
   4-week roadshow calendar as the main office app: date, time, location,
   and position for every scheduled job, not just this promoter's own —

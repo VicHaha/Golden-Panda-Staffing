@@ -4,6 +4,11 @@
 // This is the office/admin app — admin can edit or delete any date's
 // sales records, past included. (The promoter-facing app still locks
 // past dates for promoters; see its own js/sales.js.)
+//
+// Also owns the app's one and only Excel export (see exportStockExcel
+// below) — one workbook per day/month covering both stock and shift
+// data, raw rows plus the Analysis tab's summary rollups. The Analysis
+// tab itself is view-only, so this is the only place to export from.
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
@@ -58,11 +63,20 @@ function todayStr(){
 }
 
 // Distinct work_dates that actually have a stock report logged, most
-// recent first — used to restrict daily date pickers (here, and in
-// Analysis) to only dates with real data, instead of a free-form
-// calendar. Lives here since salesReports is this file's data.
+// recent first — used to restrict daily date pickers to only dates with
+// real data, instead of a free-form calendar. Lives here since
+// salesReports is this file's data.
 function stockLoggedDatesDesc(){
   return [...new Set(salesReports.map(r => r.work_date))].sort((a,b)=> b.localeCompare(a));
+}
+
+// Union of every date that has *either* a stock report or a shift report
+// logged, most recent first. Used by the Stock tab's daily export picker
+// (which now bundles both) and by the Analysis tab's viewing picker —
+// so a day with only a shift report logged still shows up.
+function combinedLoggedDatesDesc(){
+  const set = new Set([...stockLoggedDatesDesc(), ...shiftReports.map(r=>r.work_date)]);
+  return [...set].sort((a,b)=> b.localeCompare(a));
 }
 
 // Auto-creates stock rows for the next working date on the schedule that
@@ -139,7 +153,7 @@ async function ensureStockRowsForDate(date){
 }
 
 function renderSales(){
-  const loggedDates = stockLoggedDatesDesc();
+  const loggedDates = combinedLoggedDatesDesc();
   // If the currently-selected export date has no stock logged, fall back
   // to the most recent date that actually has data.
   if(stockExportMode === 'daily' && loggedDates.length && !loggedDates.includes(stockExportDate)){
@@ -159,6 +173,7 @@ function renderSales(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}">`}
       <button class="btn btn-gold" id="stock-export-btn">Export .xlsx</button>
     </div>
+    <div class="field-hint" style="margin:-6px 0 14px;">One Excel file for this period — raw stock &amp; shift reports plus the Analysis summaries, all in one place.</div>
   `;
 
   if(salesReports.length===0 && dayPhotos.length===0){
@@ -269,6 +284,7 @@ function openSalesForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
+      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName||'')}</b></div>
       <div class="field">
         <label>Date</label>
         <input id="s-date" list="scheduled-dates" type="date" value="${editing?editing.work_date:(scheduledDates[0]||todayStr())}">
@@ -442,7 +458,12 @@ async function deleteSalesReport(id){
   }
 }
 
-// ---------------- Excel export (month by month) ----------------
+// ---------------- Excel export (day or month, everything in one file) ----------------
+// This is the ONE export in the app — the Analysis tab is view-only.
+// One workbook per period: raw stock reports, raw shift reports, and the
+// same summary rollups the Analysis tab shows on screen (products, store
+// performance, shift engagement, age range, feedback), so nothing has to
+// be exported twice from two different tabs.
 
 function wireStockExportControls(){
   const dailyBtn = document.getElementById('stock-export-mode-daily');
@@ -459,36 +480,154 @@ function wireStockExportControls(){
 
 function exportStockExcel(){
   const daily = stockExportMode === 'daily';
-  const periodReports = daily
-    ? salesReports.filter(r=>r.work_date === stockExportDate)
-    : salesReports.filter(r=>r.work_date.startsWith(stockExportMonth));
   const periodLabel = daily ? stockExportDate : stockExportMonth;
+  const inPeriod = daily
+    ? (d) => d === stockExportDate
+    : (d) => d.startsWith(stockExportMonth);
 
-  if(periodReports.length===0){ showToast(`No stock reports to export for this ${daily?'date':'month'}`); return; }
+  const salesRows = salesReports.filter(r => inPeriod(r.work_date));
+  const shiftRows = shiftReports.filter(r => inPeriod(r.work_date));
 
-  const rows = [...periodReports]
-    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || a.product_name.localeCompare(b.product_name))
+  if(salesRows.length === 0 && shiftRows.length === 0){
+    showToast(`No reports to export for this ${daily ? 'date' : 'month'}`);
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  const shiftBlockLabel = k => k === 'before_break' ? 'Before Break' : k === 'after_break' ? 'After Break' : (k||'');
+
+  // ---- Raw: Stock Reports — every logged row, unaggregated ----
+  const stockRawRows = [...salesRows]
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || (a.product_name||'').localeCompare(b.product_name||''))
     .map(r=>{
       const giveaway = isFreeItem(r);
-      const opening = Number(r.opening_qty||0), sales = Number(r.sales_qty||0), closing = Number(r.closing_qty||0);
       return {
         'Date': r.work_date,
         'Product': r.product_name,
         'Type': giveaway ? 'Giveaway (free)' : 'Product',
         'Store': r.stores ? r.stores.name : '',
-        'Opening Stock': opening,
-        'Sold / Given Out': sales,
-        'Closing Stock': closing,
+        'Opening Stock': Number(r.opening_qty||0),
+        'Sold / Given Out': Number(r.sales_qty||0),
+        'Closing Stock': Number(r.closing_qty||0),
         'Logged By': r.promoters ? displayName(r.promoters) : '',
         'Remarks': r.remarks || ''
       };
     });
+  const wsStockRaw = XLSX.utils.json_to_sheet(stockRawRows);
+  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, wsStockRaw, 'Stock Reports (Raw)');
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
-  XLSX.writeFile(wb, `Golden_Panda_Stock_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
+  // ---- Raw: Shift Reports — every logged row, unaggregated ----
+  const shiftRawRows = [...shiftRows]
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || (a.shift||'').localeCompare(b.shift||''))
+    .map(r=>({
+      'Date': r.work_date,
+      'Shift Block': shiftBlockLabel(r.shift),
+      'Store': r.stores ? r.stores.name : '',
+      'Promoter': r.promoters ? displayName(r.promoters) : '',
+      'Engaged': Number(r.engaged||0),
+      'Successful Engagements': Number(r.successful_engagements||0),
+      'Purchases': Number(r.purchases||0),
+      'Conversion %': Number(r.engaged||0) > 0 ? Math.round((Number(r.purchases||0)/Number(r.engaged||0))*100) : '',
+      'Avg Engagement Time (min)': r.avg_engagement_time!=null && r.avg_engagement_time!=='' ? Number(r.avg_engagement_time) : '',
+      'Customer Age Range': r.customer_age_range ? (AGE_RANGE_LABELS[r.customer_age_range] || r.customer_age_range) : '',
+      'Customer Feedback': r.customer_feedback || '',
+      'Notes': r.notes || ''
+    }));
+  const wsShiftRaw = XLSX.utils.json_to_sheet(shiftRawRows);
+  wsShiftRaw['!cols'] = [{wch:12},{wch:13},{wch:20},{wch:18},{wch:9},{wch:14},{wch:11},{wch:12},{wch:14},{wch:16},{wch:40},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, wsShiftRaw, 'Shift Reports (Raw)');
+
+  // ---- Summary: Products (top sellers, then giveaways) ----
+  const soldByProduct = {}, givenByProduct = {};
+  salesRows.forEach(r=>{
+    const qty = Number(r.sales_qty||0);
+    const bucket = isFreeItem(r) ? givenByProduct : soldByProduct;
+    bucket[r.product_name] = (bucket[r.product_name]||0) + qty;
+  });
+  const productRows = [
+    ...Object.entries(soldByProduct).sort((a,b)=>b[1]-a[1]).map(([name, qty])=>({ 'Product': name, 'Type': 'Product', 'Quantity': qty })),
+    ...Object.entries(givenByProduct).sort((a,b)=>b[1]-a[1]).map(([name, qty])=>({ 'Product': name, 'Type': 'Giveaway (free)', 'Quantity': qty }))
+  ];
+  const wsProducts = XLSX.utils.json_to_sheet(productRows);
+  wsProducts['!cols'] = [{wch:28},{wch:16},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
+
+  // ---- Summary: Store performance (units sold + engagement, per store) ----
+  const byStore = {};
+  const bump = (name) => byStore[name] || (byStore[name] = { sold:0, engaged:0, purchases:0 });
+  salesRows.filter(r=>!isFreeItem(r)).forEach(r=>{
+    bump(r.stores ? r.stores.name : '(store removed)').sold += Number(r.sales_qty||0);
+  });
+  shiftRows.forEach(r=>{
+    const s = bump(r.stores ? r.stores.name : '(store not specified)');
+    s.engaged += Number(r.engaged||0);
+    s.purchases += Number(r.purchases||0);
+  });
+  const storeRows = Object.entries(byStore)
+    .filter(([,v]) => v.sold > 0 || v.engaged > 0)
+    .sort((a,b)=> b[1].sold - a[1].sold)
+    .map(([name, v])=>({
+      'Store': name,
+      'Units Sold': v.sold,
+      'Customers Engaged': v.engaged,
+      'Purchases': v.purchases,
+      'Conversion %': v.engaged > 0 ? Math.round((v.purchases/v.engaged)*100) : ''
+    }));
+  const wsStores = XLSX.utils.json_to_sheet(storeRows);
+  wsStores['!cols'] = [{wch:22},{wch:12},{wch:16},{wch:12},{wch:13}];
+  XLSX.utils.book_append_sheet(wb, wsStores, 'Store Performance');
+
+  // ---- Summary: Shift engagement (Before Break vs After Break) ----
+  const shiftSummaryRows = ANALYSIS_SHIFT_BLOCKS.map(block=>{
+    const rows = shiftRows.filter(r => r.shift === block.key);
+    const engaged = rows.reduce((s,r)=> s + Number(r.engaged||0), 0);
+    const successful = rows.reduce((s,r)=> s + Number(r.successful_engagements||0), 0);
+    const purchases = rows.reduce((s,r)=> s + Number(r.purchases||0), 0);
+    const timeRows = rows.filter(r => r.avg_engagement_time!=null && r.avg_engagement_time!=='');
+    const avgTime = timeRows.length ? (timeRows.reduce((s,r)=> s + Number(r.avg_engagement_time||0), 0) / timeRows.length) : null;
+    return {
+      'Shift Block': block.full,
+      'Engaged': engaged,
+      'Successful': successful,
+      'Purchases': purchases,
+      'Conversion %': engaged > 0 ? Math.round((purchases/engaged)*100) : '',
+      'Avg Engagement Time (min)': avgTime!=null ? Number(avgTime.toFixed(1)) : ''
+    };
+  });
+  const wsShift = XLSX.utils.json_to_sheet(shiftSummaryRows);
+  wsShift['!cols'] = [{wch:22},{wch:10},{wch:11},{wch:11},{wch:13},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, wsShift, 'Shift Engagement');
+
+  // ---- Summary: Customer age range ----
+  const ageCounts = {};
+  AGE_RANGE_ORDER.forEach(k=> ageCounts[k] = 0);
+  shiftRows.filter(r=>r.customer_age_range).forEach(r=>{ if(ageCounts[r.customer_age_range]!=null) ageCounts[r.customer_age_range]++; });
+  const ageRows = AGE_RANGE_ORDER.map(k=>({ 'Age Range': AGE_RANGE_LABELS[k], 'Count': ageCounts[k] }));
+  const wsAge = XLSX.utils.json_to_sheet(ageRows);
+  wsAge['!cols'] = [{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsAge, 'Age Range');
+
+  // ---- Summary: Feedback & notes ----
+  const feedbackRows = shiftRows
+    .filter(r => (r.customer_feedback && r.customer_feedback.trim()) || (r.notes && r.notes.trim()))
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date))
+    .flatMap(r=>{
+      const rows = [];
+      const shiftLabel = shiftBlockLabel(r.shift);
+      if(r.customer_feedback && r.customer_feedback.trim()){
+        rows.push({ 'Date': r.work_date, 'Shift': shiftLabel, 'Promoter': r.promoters?displayName(r.promoters):'', 'Store': r.stores?r.stores.name:'', 'Type': 'Feedback', 'Text': r.customer_feedback });
+      }
+      if(r.notes && r.notes.trim()){
+        rows.push({ 'Date': r.work_date, 'Shift': shiftLabel, 'Promoter': r.promoters?displayName(r.promoters):'', 'Store': r.stores?r.stores.name:'', 'Type': 'Notes', 'Text': r.notes });
+      }
+      return rows;
+    });
+  const wsFeedback = XLSX.utils.json_to_sheet(feedbackRows);
+  wsFeedback['!cols'] = [{wch:12},{wch:13},{wch:16},{wch:18},{wch:9},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, wsFeedback, 'Feedback');
+
+  XLSX.writeFile(wb, `Golden_Panda_Report_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
   showToast('Excel file downloaded');
 }
 

@@ -260,5 +260,19 @@ const DB = {
       .delete()
       .eq('id', id);
     if(error) throw error;
+  },
+
+  // Removes shift reports older than 3 months — same rolling cutoff the
+  // office app applies to jobs/sales/day photos, so records age out of
+  // both apps together. Runs once per app load; harmless to run twice.
+  async purgeOldShiftReports(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('shift_reports')
+      .delete()
+      .lt('work_date', cutoffStr);
+    if(error) throw error;
   }
 };

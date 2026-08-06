@@ -125,6 +125,7 @@ function openJobForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit job' : 'Assign job'}</div>
+      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName||'')}</b></div>
       <div class="field">
         <label>Promoter</label>
         <select id="f-promoter">

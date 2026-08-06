@@ -12,6 +12,13 @@ let currentTab = 'roster';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
 
+// The signed-in admin's identity — set once login + the one-time "type
+// your name" step are done. Everything saved to the database from this
+// app onward is tagged with currentAdminName (see js/supabase.js).
+let currentAdminId = null;
+let currentAdminName = null;
+let currentAdminEmail = null;
+
 function boot(){
   const root = document.getElementById('root');
 
@@ -30,6 +37,163 @@ function boot(){
     return;
   }
 
+  checkAuthThenProceed();
+}
+
+// ---------- Admin login gate ----------
+
+async function checkAuthThenProceed(){
+  let session;
+  try{
+    session = await Auth.getSession();
+  }catch(e){
+    console.error(e);
+    session = null;
+  }
+  if(session){
+    loadAdminIdentityThenProceed(session.user);
+  }else{
+    renderAuthGate('login');
+  }
+}
+
+// mode is 'login' or 'signup'
+function renderAuthGate(mode, prefillEmail){
+  const root = document.getElementById('root');
+  const isSignup = mode === 'signup';
+  root.innerHTML = `
+    <div class="gate">
+      <div class="brand-mark">GP</div>
+      <h2>${isSignup ? 'Create your admin account' : 'Office log in'}</h2>
+      <p>${isSignup
+        ? 'First time here? Set a password to log in with next time.'
+        : 'Enter your email and password to open the office app.'}</p>
+      <input id="auth-email" type="email" placeholder="Email" value="${prefillEmail ? esc(prefillEmail) : ''}" autocapitalize="off" autocomplete="email">
+      <input id="auth-password" type="password" placeholder="Password" autocomplete="${isSignup?'new-password':'current-password'}">
+      <button class="btn btn-primary btn-block" id="auth-submit-btn" onclick="${isSignup?'submitAdminSignup()':'submitAdminLogin()'}">${isSignup ? 'Create account' : 'Log in'}</button>
+      <p class="fineprint">
+        ${isSignup
+          ? `Already have an account? <a href="#" onclick="event.preventDefault(); renderAuthGate('login')">Log in</a>`
+          : `No account yet? <a href="#" onclick="event.preventDefault(); renderAuthGate('signup')">Create one</a>`}
+      </p>
+    </div>
+  `;
+  document.getElementById('auth-email').focus();
+}
+
+async function submitAdminSignup(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter an email and password'); return; }
+  if(password.length < 6){ showToast('Password must be at least 6 characters'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try{
+    const result = await Auth.signUp(email, password);
+    if(result.session){
+      loadAdminIdentityThenProceed(result.session.user);
+    }else{
+      showToast('Account created — check your email to confirm, then log in');
+      renderAuthGate('login', email);
+    }
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not create account');
+    btn.disabled = false; btn.textContent = 'Create account';
+  }
+}
+
+async function submitAdminLogin(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter your email and password'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  try{
+    const result = await Auth.signIn(email, password);
+    loadAdminIdentityThenProceed(result.user);
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not log in');
+    btn.disabled = false; btn.textContent = 'Log in';
+  }
+}
+
+// After signing in, look up (or create) this admin's row in `users` so
+// every record they save can be attributed to a real typed name rather
+// than just an email address.
+async function loadAdminIdentityThenProceed(user){
+  let row;
+  try{
+    row = await AdminDirectory.getMyRow(user.id);
+  }catch(e){
+    console.error(e);
+    document.getElementById('root').innerHTML = `
+      <div class="gate">
+        <div class="brand-mark">GP</div>
+        <h2>Couldn't connect</h2>
+        <p>Check your internet connection and reload the page.</p>
+      </div>
+    `;
+    return;
+  }
+  if(row){
+    currentAdminId = row.id;
+    currentAdminName = row.full_name;
+    currentAdminEmail = row.email;
+    startApp();
+  }else{
+    renderAdminNameGate(user);
+  }
+}
+
+function renderAdminNameGate(user){
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="gate">
+      <div class="brand-mark">GP</div>
+      <h2>What's your name?</h2>
+      <p>This is shown on everything you add or edit, so the rest of the team knows who entered it.</p>
+      <input id="gate-admin-name" placeholder="e.g. Victoria Tan" autocomplete="name">
+      <button class="btn btn-primary btn-block" onclick="submitAdminName('${user.id}','${esc(user.email||'')}')">Continue</button>
+      <p class="fineprint">You can't change this later without asking a developer — take a moment to get it right.</p>
+    </div>
+  `;
+  document.getElementById('gate-admin-name').focus();
+}
+
+async function submitAdminName(userId, userEmail){
+  const nameInput = document.getElementById('gate-admin-name');
+  const full_name = nameInput.value.trim();
+  if(!full_name){ showToast('Enter your name'); return; }
+  try{
+    const row = await AdminDirectory.createMyRow(userId, userEmail, full_name);
+    currentAdminId = row.id;
+    currentAdminName = row.full_name;
+    currentAdminEmail = row.email;
+    startApp();
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not save your name');
+  }
+}
+
+async function logOutAdmin(){
+  if(!confirm('Log out of the office app on this device?')) return;
+  currentAdminId = null;
+  currentAdminName = null;
+  currentAdminEmail = null;
+  if(realtimeChannel) sb.removeChannel(realtimeChannel);
+  try{ await Auth.signOut(); }catch(e){ console.error(e); }
+  renderAuthGate('login');
+}
+
+// ---------- Main app shell (only reached once logged in) ----------
+
+function startApp(){
+  const root = document.getElementById('root');
   root.innerHTML = `
     <div class="phone">
       <div class="app-header">
@@ -40,6 +204,7 @@ function boot(){
             <p>Roadshow Staffing</p>
           </div>
           <div class="sync-dot off" id="sync-dot" title="Syncing"></div>
+          <div class="identity-chip" onclick="logOutAdmin()">${esc(currentAdminName)}</div>
         </div>
       </div>
       <div class="content" id="content"></div>
@@ -69,10 +234,10 @@ function boot(){
 
 async function loadInitialData(){
   try{
-    await officeSignInPromise; // ensure the app is authenticated before any writes can happen
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await DB.purgeOldSalesReports().catch(e=>console.warn('Purge old sales reports failed (non-fatal):', e));
     await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));
+    await DB.purgeOldShiftReports().catch(e=>console.warn('Purge old shift reports failed (non-fatal):', e));
     await refreshData();
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up

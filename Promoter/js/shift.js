@@ -1,10 +1,13 @@
 // ============================================================
 // Promoter Shift Report — engagement & conversion numbers for the
-// Before Break / After Break shifts. Grouped-by-date view, same
-// edit-only-today rule as Sales & stock reports.
+// Before Break / After Break shifts. Grouped-by-date view. Unlike
+// Sales & stock reports, shift reports stay editable/deletable by any
+// logged-in promoter even after the working date has passed — only the
+// list itself defaults to hiding older dates (see shiftShowPast below).
 // ============================================================
 
 let shiftExpandedDates = new Set();
+let shiftShowPast = false;
 
 const SHIFT_LABELS = {
   before_break: 'Before Break (10am–2pm)',
@@ -37,36 +40,60 @@ function renderShift(){
     if(!byDate[r.work_date]) byDate[r.work_date] = [];
     byDate[r.work_date].push(r);
   });
-  const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
+  const allDates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
 
-  let html = `<div class="section-title">Shift reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
+  // Past reports are hidden by default so the list stays focused on
+  // what's current — tap "Show past reports" to bring the history back.
+  // They're still fully editable once shown (see renderShiftItems).
+  const nearDates = allDates.filter(d => d >= today);
+  const pastDates = allDates.filter(d => d < today);
+  const visibleDates = shiftShowPast ? allDates : nearDates;
 
-  dates.forEach(date=>{
-    const items = byDate[date].sort((a,b)=> a.shift.localeCompare(b.shift));
-    const expanded = shiftExpandedDates.has(date);
-    const totalEngaged = items.reduce((s,i)=>s + Number(i.engaged||0), 0);
-    const totalPurchases = items.reduce((s,i)=>s + Number(i.purchases||0), 0);
-    const isToday = date === today;
+  let html = `<div class="section-title">Shift reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
 
+  if(visibleDates.length === 0){
+    html += emptyState('📋','No shift reports yet','Tap + to log engagement numbers for a shift.');
+  }else{
+    visibleDates.forEach(date=>{
+      const items = byDate[date].sort((a,b)=> a.shift.localeCompare(b.shift));
+      const expanded = shiftExpandedDates.has(date);
+      const totalEngaged = items.reduce((s,i)=>s + Number(i.engaged||0), 0);
+      const totalPurchases = items.reduce((s,i)=>s + Number(i.purchases||0), 0);
+      const isToday = date === today;
+
+      html += `
+        <div class="sales-group">
+          <button class="sales-group-header" onclick="toggleShiftDate('${date}')">
+            <div>
+              <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
+              <div class="sales-group-sub">${items.length} shift${items.length>1?'s':''} logged · ${totalEngaged} engaged · ${totalPurchases} purchases</div>
+            </div>
+            <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
+          </button>
+          ${expanded ? `<div class="sales-group-body">${renderShiftItems(items)}</div>` : ''}
+        </div>
+      `;
+    });
+  }
+
+  if(pastDates.length > 0){
     html += `
-      <div class="sales-group">
-        <button class="sales-group-header" onclick="toggleShiftDate('${date}')">
-          <div>
-            <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-            <div class="sales-group-sub">${items.length} shift${items.length>1?'s':''} logged · ${totalEngaged} engaged · ${totalPurchases} purchases</div>
-          </div>
-          <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
-        </button>
-        ${expanded ? `<div class="sales-group-body">${renderShiftItems(items, isToday)}</div>` : ''}
-      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleShiftShowPast()">
+        ${shiftShowPast ? 'Hide' : 'Show'} past reports (${pastDates.length})
+      </button>
     `;
-  });
+  }
 
   return html;
 }
 
-function renderShiftItems(items, isToday){
+function toggleShiftShowPast(){
+  shiftShowPast = !shiftShowPast;
+  render();
+}
+
+function renderShiftItems(items){
   return items.map(i=>{
     const engaged = Number(i.engaged||0);
     const successful = Number(i.successful_engagements||0);
@@ -87,12 +114,10 @@ function renderShiftItems(items, isToday){
           ${i.customer_feedback ? `<div class="sales-item-remarks">“${esc(i.customer_feedback)}”</div>` : ''}
           ${i.notes ? `<div class="sales-item-remarks">${esc(i.notes)}</div>` : ''}
         </div>
-        ${isToday ? `
-          <div class="job-actions">
-            <div class="icon-btn" onclick="openShiftForm('${i.id}')">✎</div>
-            <div class="icon-btn danger" onclick="deleteShiftReport('${i.id}')">✕</div>
-          </div>
-        ` : `<div class="sales-locked" title="Only today's reports can be edited">🔒</div>`}
+        <div class="job-actions">
+          <div class="icon-btn" onclick="openShiftForm('${i.id}')">✎</div>
+          <div class="icon-btn danger" onclick="deleteShiftReport('${i.id}')">✕</div>
+        </div>
       </div>
     `;
   }).join('');
@@ -107,15 +132,13 @@ function toggleShiftDate(date){
 function openShiftForm(id){
   const editing = id ? shiftReports.find(r=>r.id===id) : null;
   const today = todayStr();
-  if(editing && editing.work_date !== today){
-    showToast("Only today's reports can be edited"); return;
-  }
+  const formDate = editing ? editing.work_date : today;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit shift report' : 'Add shift report'}</div>
-      <div class="field-hint" style="margin-bottom:12px;">Logging as <b>${esc(currentPromoterName)}</b> · ${formatDateLong(today)}</div>
+      <div class="field-hint" style="margin-bottom:12px;">Logging as <b>${esc(currentPromoterName)}</b> · ${formatDateLong(formDate)}</div>
       <div class="field">
         <label>Shift</label>
         <select id="sh-shift">
@@ -163,7 +186,11 @@ function openShiftForm(id){
 }
 
 async function saveShiftForm(id){
-  const work_date = todayStr(); // promoters can only ever save into today
+  // New reports are always logged against today; editing an existing
+  // report keeps its original working date (a promoter fixing last
+  // week's numbers shouldn't accidentally move them onto today).
+  const editing = id ? shiftReports.find(r=>r.id===id) : null;
+  const work_date = editing ? editing.work_date : todayStr();
   const shift = document.getElementById('sh-shift').value;
   const store_id = document.getElementById('sh-store').value || null;
   const engaged = parseInt(document.getElementById('sh-engaged').value, 10) || 0;
@@ -193,6 +220,7 @@ async function saveShiftForm(id){
       await DB.addShiftReport(payload);
     }
     shiftExpandedDates.add(work_date);
+    if(work_date < todayStr()) shiftShowPast = true;
     await refreshData();
     closeModal();
     render();
@@ -206,10 +234,6 @@ async function saveShiftForm(id){
 }
 
 async function deleteShiftReport(id){
-  const entry = shiftReports.find(r=>r.id===id);
-  if(entry && entry.work_date !== todayStr()){
-    showToast("Only today's reports can be deleted"); return;
-  }
   if(!confirm('Delete this shift report?')) return;
   try{
     await DB.deleteShiftReport(id);

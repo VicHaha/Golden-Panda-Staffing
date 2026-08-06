@@ -5,6 +5,7 @@
 // ============================================================
 
 let salesExpandedDates = new Set();
+let salesShowPast = false;
 
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
@@ -134,34 +135,58 @@ function renderSales(){
   dayPhotos.forEach(dp=>{
     if(!byDate[dp.work_date]) byDate[dp.work_date] = [];
   });
-  const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
+  const allDates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
 
-  let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
+  // Past dates are hidden by default — tap "Show past reports" to bring
+  // them back. They're read-only here either way (editing stays
+  // locked to today), this only affects whether they clutter the list.
+  const nearDates = allDates.filter(d => d >= today);
+  const pastDates = allDates.filter(d => d < today);
+  const visibleDates = salesShowPast ? allDates : nearDates;
 
-  dates.forEach(date=>{
-    const items = byDate[date];
-    const expanded = salesExpandedDates.has(date);
-    const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
-    const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
-    const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
-    const isToday = date === today;
+  let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
 
+  if(visibleDates.length === 0){
+    html += emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
+  }else{
+    visibleDates.forEach(date=>{
+      const items = byDate[date];
+      const expanded = salesExpandedDates.has(date);
+      const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
+      const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
+      const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
+      const isToday = date === today;
+
+      html += `
+        <div class="sales-group">
+          <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
+            <div>
+              <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
+              <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}</div>
+            </div>
+            <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
+          </button>
+          ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date, isToday)}${renderSalesItems(items, isToday)}</div>` : ''}
+        </div>
+      `;
+    });
+  }
+
+  if(pastDates.length > 0){
     html += `
-      <div class="sales-group">
-        <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
-          <div>
-            <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-            <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}</div>
-          </div>
-          <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
-        </button>
-        ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date, isToday)}${renderSalesItems(items, isToday)}</div>` : ''}
-      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowPast()">
+        ${salesShowPast ? 'Hide' : 'Show'} past reports (${pastDates.length})
+      </button>
     `;
-  });
+  }
 
   return html;
+}
+
+function toggleSalesShowPast(){
+  salesShowPast = !salesShowPast;
+  render();
 }
 
 function renderSalesItems(items, isToday){
