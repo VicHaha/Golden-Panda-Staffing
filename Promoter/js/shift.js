@@ -11,8 +11,20 @@ const SHIFT_LABELS = {
   after_break: 'After Break (3pm–6pm)'
 };
 
+const AGE_RANGE_LABELS = {
+  under_18: 'Under 18',
+  '18_25': '18–25',
+  '26_35': '26–35',
+  '36_50': '36–50',
+  '50_plus': '50+'
+};
+
 function shiftLabel(shift){
   return SHIFT_LABELS[shift] || shift;
+}
+
+function ageRangeLabel(range){
+  return AGE_RANGE_LABELS[range] || range;
 }
 
 function renderShift(){
@@ -70,7 +82,8 @@ function renderShiftItems(items, isToday){
             ${avgTime ? ` · ${esc(avgTime)}` : ''}
           </div>
           ${i.stores ? `<div class="sales-item-remarks">${esc(i.stores.name)}</div>` : ''}
-          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
+          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
+          ${i.customer_age_range ? `<div class="sales-item-remarks">Customer age range: ${esc(ageRangeLabel(i.customer_age_range))}</div>` : ''}
           ${i.customer_feedback ? `<div class="sales-item-remarks">“${esc(i.customer_feedback)}”</div>` : ''}
           ${i.notes ? `<div class="sales-item-remarks">${esc(i.notes)}</div>` : ''}
         </div>
@@ -126,6 +139,17 @@ function openShiftForm(id){
         <label>Avg engagement time (minutes)</label>
         <input id="sh-avg-time" type="number" min="0" step="0.1" value="${editing&&editing.avg_engagement_time!=null?editing.avg_engagement_time:''}" placeholder="e.g. 3.5">
       </div>
+      <div class="field">
+        <label>Customer age range</label>
+        <select id="sh-age-range">
+          <option value="">— Not specified —</option>
+          <option value="under_18" ${editing&&editing.customer_age_range==='under_18'?'selected':''}>${AGE_RANGE_LABELS.under_18}</option>
+          <option value="18_25" ${editing&&editing.customer_age_range==='18_25'?'selected':''}>${AGE_RANGE_LABELS['18_25']}</option>
+          <option value="26_35" ${editing&&editing.customer_age_range==='26_35'?'selected':''}>${AGE_RANGE_LABELS['26_35']}</option>
+          <option value="36_50" ${editing&&editing.customer_age_range==='36_50'?'selected':''}>${AGE_RANGE_LABELS['36_50']}</option>
+          <option value="50_plus" ${editing&&editing.customer_age_range==='50_plus'?'selected':''}>${AGE_RANGE_LABELS['50_plus']}</option>
+        </select>
+      </div>
       <div class="field"><label>Customer feedback (optional)</label><input id="sh-feedback" value="${editing?esc(editing.customer_feedback||''):''}" placeholder="e.g. Liked the scent, found it pricey"></div>
       <div class="field"><label>Notes (optional)</label><input id="sh-notes" value="${editing?esc(editing.notes||''):''}" placeholder="e.g. Slow foot traffic after 4pm"></div>
       <div class="modal-actions">
@@ -147,6 +171,7 @@ async function saveShiftForm(id){
   const purchases = parseInt(document.getElementById('sh-purchases').value, 10) || 0;
   const avgTimeRaw = document.getElementById('sh-avg-time').value;
   const avg_engagement_time = avgTimeRaw === '' ? null : parseFloat(avgTimeRaw);
+  const customer_age_range = document.getElementById('sh-age-range').value || null;
   const customer_feedback = document.getElementById('sh-feedback').value.trim() || null;
   const notes = document.getElementById('sh-notes').value.trim() || null;
 
@@ -160,7 +185,7 @@ async function saveShiftForm(id){
   const btn = document.getElementById('shift-save-btn');
   btn.disabled = true;
   try{
-    const payload = { work_date, shift, store_id, promoter_id: currentPromoterId, engaged, successful_engagements, purchases, avg_engagement_time, customer_feedback, notes };
+    const payload = { work_date, shift, store_id, promoter_id: currentPromoterId, engaged, successful_engagements, purchases, avg_engagement_time, customer_age_range, customer_feedback, notes };
     btn.textContent = 'Saving…';
     if(id){
       await DB.updateShiftReport(id, payload);

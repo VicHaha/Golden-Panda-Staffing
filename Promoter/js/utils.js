@@ -6,6 +6,17 @@ function esc(str){
   return (str||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Promoters can have an optional nickname, shown everywhere in both apps
+// instead of their full legal name — except the Payout report/export in
+// the Admin app, which always uses full_name directly since it's tied to
+// IC/bank details. Accepts either a promoter row or the small
+// { full_name, nickname } shape returned by a Supabase join.
+function displayName(p){
+  if(!p) return '';
+  const nick = (p.nickname || '').trim();
+  return nick || p.full_name || '';
+}
+
 function formatDateLong(dateStr){
   return new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
 }
@@ -43,6 +54,21 @@ function showToast(msg){
 function setSyncDot(ok){
   const dot = document.getElementById('sync-dot');
   if(dot) dot.classList.toggle('off', !ok);
+}
+
+// Increments/decrements a number input by 1, clamped to its min attribute
+// (defaults to 0), then fires the input's own 'input' event so any existing
+// oninput handler (e.g. the "given out" auto-preview) stays in sync. Powers
+// the large +/- quantity steppers on the stock report form in both apps.
+function stepQty(inputId, delta){
+  const el = document.getElementById(inputId);
+  if(!el) return;
+  const min = el.min !== '' ? Number(el.min) : -Infinity;
+  const current = parseFloat(el.value) || 0;
+  let next = current + delta;
+  if(next < min) next = min;
+  el.value = next;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // Resizes/compresses an image file in the browser before upload — phone

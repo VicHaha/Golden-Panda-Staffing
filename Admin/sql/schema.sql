@@ -45,6 +45,8 @@ create table if not exists promoters (
 
     full_name text not null,
 
+    nickname text,
+
     ic_number text,
 
     age integer,

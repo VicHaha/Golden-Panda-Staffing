@@ -1,136 +1,63 @@
 // ============================================================
-// Analysis → Shift Engagement — a self-contained sub-page of the
-// Analysis tab (see analysis.js for the Sales sub-page and the view
-// switcher). Reads from `shiftReports` (loaded in app.js from the
-// shift_reports table, logged by promoters in the Promoters app).
-//
-// Two sections — Before Break / After Break — each with two pie
-// charts: Engagement (Successful vs Not Successful) and Purchase
-// Conversion (Bought vs Not Bought), both computed from the same
-// rows so nothing extra is fetched. Charts are plain CSS
-// conic-gradient circles, no chart library required.
+// Analysis helpers — shared building blocks used by analysis.js:
+// the age-range breakdown, the CSS pie chart renderer, and the
+// feedback/notes list. Kept in their own file since they're reused
+// across a couple of sections of the unified Analysis tab.
 // ============================================================
 
-let shiftAnalysisPeriod = 'daily'; // 'daily' | 'monthly'
-let shiftAnalysisDate = todayStr();
-let shiftAnalysisMonth = new Date().toISOString().slice(0,7);
+// Mirrors AGE_RANGE_LABELS in the Promoters app's shift.js — keep in sync.
+const AGE_RANGE_LABELS = {
+  under_18: 'Under 18',
+  '18_25': '18–25',
+  '26_35': '26–35',
+  '36_50': '36–50',
+  '50_plus': '50+'
+};
+const AGE_RANGE_ORDER = ['under_18', '18_25', '26_35', '36_50', '50_plus'];
 
-const SHIFT_ANALYSIS_SECTIONS = [
-  { key: 'before_break', title: 'Before Break (10am–2pm)' },
-  { key: 'after_break', title: 'After Break (3pm–6pm)' }
-];
-
-// Short "27 Jul" style date, used in the feedback/notes lists below.
-function shiftAnalysisShortDate(dateStr){
+// Short "27 Jul" style date, used in the feedback/notes list meta line.
+function analysisShortDate(dateStr){
   return new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric', month:'short'});
 }
 
-// ---------- date-range helper (mirrors analysisRange() in analysis.js,
-// kept separate on purpose so this file has no dependency on the sales
-// analysis state and can be dropped/edited independently) ----------
+// Bar breakdown of the predominant customer age range logged per shift
+// entry (one "mostly X" read per report, not a per-customer count).
+// Combined across both shift blocks — one read on who's actually
+// walking the floor for the selected period.
+function renderAgeRangeBreakdown(rows){
+  const counted = rows.filter(r => r.customer_age_range);
 
-function shiftAnalysisRange(){
-  if(shiftAnalysisPeriod === 'daily'){
-    return { start: shiftAnalysisDate, end: shiftAnalysisDate };
+  if(counted.length === 0){
+    return `<div class="feedback-empty">No age range logged for this period</div>`;
   }
-  const [y, m] = shiftAnalysisMonth.split('-').map(Number);
-  const lastDay = new Date(y, m, 0).getDate();
-  const start = `${shiftAnalysisMonth}-01`;
-  const end = `${shiftAnalysisMonth}-${String(lastDay).padStart(2,'0')}`;
-  return { start, end };
-}
 
-// ---------- rendering ----------
+  const counts = {};
+  AGE_RANGE_ORDER.forEach(k=> counts[k] = 0);
+  counted.forEach(r=>{ if(counts[r.customer_age_range] != null) counts[r.customer_age_range]++; });
+  const max = Math.max(...Object.values(counts));
 
-function renderShiftAnalysis(){
-  const { start, end } = shiftAnalysisRange();
-
-  let html = `
-    <div class="period-toggle" id="shift-period-toggle">
-      <button class="period-btn ${shiftAnalysisPeriod==='daily'?'active':''}" data-shift-period="daily">Daily</button>
-      <button class="period-btn ${shiftAnalysisPeriod==='monthly'?'active':''}" data-shift-period="monthly">Monthly</button>
-    </div>
-  `;
-
-  html += `<div class="analysis-nav">`;
-  if(shiftAnalysisPeriod === 'daily'){
-    html += `<input id="shift-analysis-date-input" type="date" value="${shiftAnalysisDate}">`;
-  }else{
-    html += `<input id="shift-analysis-month-input" type="month" value="${shiftAnalysisMonth}">`;
-  }
-  html += `</div>`;
-
-  SHIFT_ANALYSIS_SECTIONS.forEach(section=>{
-    html += renderShiftAnalysisSection(section.title, section.key, start, end);
+  let html = '';
+  AGE_RANGE_ORDER.forEach(key=>{
+    const qty = counts[key];
+    const pct = max ? Math.round((qty/max)*100) : 0;
+    html += `
+      <div class="bar-row">
+        <div class="bar-row-label"><span>${esc(AGE_RANGE_LABELS[key])}</span><b>${qty}</b></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    `;
   });
 
   return html;
 }
 
-function renderShiftAnalysisSection(title, shiftKey, start, end){
-  const rows = shiftReports.filter(r => r.shift === shiftKey && r.work_date >= start && r.work_date <= end);
-
-  let html = `<div class="shift-section">`;
-  html += `<div class="section-title" style="margin-top:2px;">${esc(title)} <span class="count-pill">${rows.length} entr${rows.length===1?'y':'ies'}</span></div>`;
-
-  if(rows.length === 0){
-    html += emptyState('📊', 'No shift reports for this period', "Logged from the Promoter app's Shift Report tab.");
-    html += `</div>`;
-    return html;
-  }
-
-  const engaged = rows.reduce((s,r)=> s + Number(r.engaged||0), 0);
-  const successful = rows.reduce((s,r)=> s + Number(r.successful_engagements||0), 0);
-  const purchases = rows.reduce((s,r)=> s + Number(r.purchases||0), 0);
-  const notSuccessful = Math.max(0, engaged - successful);
-  const notBought = Math.max(0, engaged - purchases);
-
-  const timeRows = rows.filter(r => r.avg_engagement_time!=null && r.avg_engagement_time!=='');
-  const avgTime = timeRows.length
-    ? (timeRows.reduce((s,r)=> s + Number(r.avg_engagement_time||0), 0) / timeRows.length)
-    : null;
-  const avgTimeDisplay = avgTime!=null ? `${avgTime.toFixed(1)} min` : '—';
-
-  html += `
-    <div class="summary-strip shift-summary-strip">
-      <div class="stat-card"><div class="num">${engaged}</div><div class="lbl">Engaged</div></div>
-      <div class="stat-card"><div class="num">${successful}</div><div class="lbl">Successful</div></div>
-      <div class="stat-card"><div class="num">${purchases}</div><div class="lbl">Purchases</div></div>
-      <div class="stat-card"><div class="num">${avgTimeDisplay}</div><div class="lbl">Avg time</div></div>
-    </div>
-  `;
-
-  html += `
-    <div class="pie-row">
-      <div class="pie-col">
-        <div class="pie-col-title">Engagement</div>
-        ${renderPieChart(engaged, [
-          { label: 'Successful', value: successful, colorVar: '--bamboo' },
-          { label: 'Not successful', value: notSuccessful, colorVar: '--brick' }
-        ])}
-      </div>
-      <div class="pie-col">
-        <div class="pie-col-title">Purchase conversion</div>
-        ${renderPieChart(engaged, [
-          { label: 'Bought', value: purchases, colorVar: '--bamboo' },
-          { label: 'Not bought', value: notBought, colorVar: '--brick' }
-        ])}
-      </div>
-    </div>
-  `;
-
-  html += renderFeedbackList('Customer feedback', rows, 'customer_feedback');
-  html += renderFeedbackList('Notes', rows, 'notes');
-
-  html += `</div>`;
-  return html;
-}
-
 // Reusable list of quoted text entries (customer feedback or notes) for a
 // section — newest first, capped so the page stays clean on a busy month.
+// `period` is 'daily' | 'monthly', passed in rather than read from a
+// global so this stays independent of which page is calling it.
 const FEEDBACK_LIST_CAP = 6;
 
-function renderFeedbackList(title, rows, field){
+function renderFeedbackList(title, rows, field, period){
   const entries = rows
     .filter(r => r[field] && r[field].trim())
     .sort((a,b)=> b.work_date.localeCompare(a.work_date));
@@ -146,19 +73,18 @@ function renderFeedbackList(title, rows, field){
 
   // Monthly customer feedback with more than 3 entries: show everything,
   // numbered, instead of the capped list — there's usually more worth
-  // reading over a full month than the daily/weekly cap allows for.
-  const showAllNumbered = field === 'customer_feedback' && shiftAnalysisPeriod === 'monthly' && entries.length > 3;
+  // reading over a full month than the daily cap allows for.
+  const showAllNumbered = field === 'customer_feedback' && period === 'monthly' && entries.length > 3;
+  const shiftShort = k => k === 'before_break' ? 'Before Break' : k === 'after_break' ? 'After Break' : '';
+
+  const renderItem = r => `
+    ${esc(r[field])}
+    <div class="feedback-meta">${analysisShortDate(r.work_date)}${shiftShort(r.shift)?' · '+shiftShort(r.shift):''}${r.promoters ? ' · '+esc(displayName(r.promoters)) : ''}${r.stores ? ' · '+esc(r.stores.name) : ''}</div>
+  `;
 
   if(showAllNumbered){
     html += `<ol class="feedback-list feedback-list-numbered">`;
-    entries.forEach(r=>{
-      html += `
-        <li class="feedback-item">
-          ${esc(r[field])}
-          <div class="feedback-meta">${shiftAnalysisShortDate(r.work_date)}${r.promoters ? ' · '+esc(r.promoters.full_name) : ''}${r.stores ? ' · '+esc(r.stores.name) : ''}</div>
-        </li>
-      `;
-    });
+    entries.forEach(r=>{ html += `<li class="feedback-item">${renderItem(r)}</li>`; });
     html += `</ol>`;
     html += `</div>`;
     return html;
@@ -166,12 +92,7 @@ function renderFeedbackList(title, rows, field){
 
   html += `<div class="feedback-list">`;
   entries.slice(0, FEEDBACK_LIST_CAP).forEach(r=>{
-    html += `
-      <div class="feedback-item">
-        ${esc(r[field])}
-        <div class="feedback-meta">${shiftAnalysisShortDate(r.work_date)}${r.promoters ? ' · '+esc(r.promoters.full_name) : ''}${r.stores ? ' · '+esc(r.stores.name) : ''}</div>
-      </div>
-    `;
+    html += `<div class="feedback-item">${renderItem(r)}</div>`;
   });
   if(entries.length > FEEDBACK_LIST_CAP){
     html += `<div class="feedback-more">+${entries.length - FEEDBACK_LIST_CAP} more</div>`;
@@ -215,17 +136,4 @@ function renderPieChart(total, slices){
   html += `</div></div>`;
 
   return html;
-}
-
-function wireShiftAnalysisControls(){
-  document.querySelectorAll('#shift-period-toggle .period-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      shiftAnalysisPeriod = btn.dataset.shiftPeriod;
-      render();
-    });
-  });
-  const di = document.getElementById('shift-analysis-date-input');
-  if(di) di.addEventListener('change', e=>{ shiftAnalysisDate = e.target.value; render(); });
-  const mi = document.getElementById('shift-analysis-month-input');
-  if(mi) mi.addEventListener('change', e=>{ shiftAnalysisMonth = e.target.value; render(); });
 }

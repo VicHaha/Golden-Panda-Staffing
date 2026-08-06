@@ -180,7 +180,7 @@ function renderSalesItems(items, isToday){
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(i.product_name)}</div>
           <div class="sales-item-stats">${statsHtml}</div>
-          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
+          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         ${isToday ? `
@@ -256,10 +256,26 @@ function openSalesForm(id){
         </label>
         <div class="field-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
       </div>
-      <div class="field-row">
-        <div class="field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
-        <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
-        <div class="field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
+      <div class="field"><label>Opening stock</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
+          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
+        </div>
+      </div>
+      <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-sales',-1)" aria-label="Decrease sales qty">−</button>
+          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-sales',1)" aria-label="Increase sales qty">+</button>
+        </div>
+      </div>
+      <div class="field"><label>Closing stock</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
+          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
+        </div>
       </div>
       <div class="field" id="given-out-field" style="display:none;">
         <label>Given out (auto)</label>

@@ -116,7 +116,7 @@ const DB = {
       .select(`
         id, work_date, start_time, end_time, pay, commission, remarks, position,
         promoter_id, store_id,
-        promoters ( id, full_name ),
+        promoters ( id, full_name, nickname ),
         stores ( id, name )
       `)
       .order('work_date');
@@ -172,7 +172,7 @@ const DB = {
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
         stores ( id, name ),
-        promoters ( id, full_name )
+        promoters ( id, full_name, nickname )
       `)
       .order('work_date', { ascending: false });
     if(error) throw error;
@@ -287,9 +287,9 @@ const DB = {
       .from('shift_reports')
       .select(`
         id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
-        avg_engagement_time, customer_feedback, notes,
+        avg_engagement_time, customer_feedback, notes, customer_age_range,
         stores ( id, name ),
-        promoters ( id, full_name )
+        promoters ( id, full_name, nickname )
       `)
       .order('work_date', { ascending: false });
     if(error) throw error;

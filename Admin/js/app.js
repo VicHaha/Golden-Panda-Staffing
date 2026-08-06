@@ -8,7 +8,7 @@ let stores = [];
 let salesReports = [];
 let dayPhotos = [];
 let shiftReports = [];
-let currentTab = 'promoters';
+let currentTab = 'roster';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
 
@@ -45,11 +45,7 @@ function boot(){
       <div class="content" id="content"></div>
       <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add">+</button></div>
       <div class="tabbar">
-        <button class="tab" data-tab="promoters" onclick="switchTab('promoters')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="5"/></svg>
-          Promoters
-        </button>
-        <button class="tab" data-tab="schedule" onclick="switchTab('schedule')">
+        <button class="tab" data-tab="roster" onclick="switchTab('roster')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
           Schedule
         </button>
@@ -62,8 +58,8 @@ function boot(){
           Analysis
         </button>
         <button class="tab" data-tab="reports" onclick="switchTab('reports')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
-          Reports
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
+          Payout
         </button>
       </div>
     </div>
@@ -87,7 +83,7 @@ async function loadInitialData(){
     setSyncDot(false);
     showToast('Could not connect to Supabase — check your internet connection');
   }
-  switchTab('promoters');
+  switchTab('roster');
 }
 
 // Re-fetches promoters, jobs, stores, sales reports, day photos, and shift reports from Supabase.
@@ -137,22 +133,30 @@ function switchTab(tab){
 }
 
 function openFab(){
-  if(currentTab==='promoters') openPromoterForm();
-  else if(currentTab==='schedule') openJobForm();
+  if(currentTab==='roster'){
+    if(rosterPage==='schedule') openJobForm();
+    else openPromoterForm();
+  }
   else if(currentTab==='sales') openSalesForm();
-  else showToast('Switch to Promoters, Schedule, or Stock to add');
+  else showToast('Switch to Schedule or Stock to add');
 }
 
 function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
-  if(currentTab==='promoters') c.innerHTML = renderPromoters();
-  else if(currentTab==='schedule') c.innerHTML = renderSchedule();
+  if(currentTab==='roster') c.innerHTML = renderRosterSection();
   else if(currentTab==='sales') c.innerHTML = renderSales();
   else if(currentTab==='analysis') c.innerHTML = renderAnalysis();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
+  else if(currentTab==='roster') wireRosterSectionControls();
+  else if(currentTab==='sales') wireStockExportControls();
+  else if(currentTab==='analysis') wireAnalysisControls();
+
+  // No "+" action makes sense on Analysis or Payout — hide the FAB there.
+  const fab = document.getElementById('fab');
+  if(fab) fab.classList.toggle('hidden', currentTab==='analysis' || currentTab==='reports');
 }
 
 // ---------- Service worker (offline shell + installability) ----------

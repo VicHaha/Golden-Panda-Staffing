@@ -14,6 +14,7 @@ const SHELL_FILES = [
   './js/schedule.js',
   './js/sales.js',
   './js/shift-analysis.js',
+  './js/analysis.js',
   './js/report.js',
   './js/app.js',
   './assets/icon-192.png',

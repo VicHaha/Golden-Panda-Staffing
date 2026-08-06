@@ -25,6 +25,8 @@ In Supabase → SQL Editor, run, in order:
    new photo attachment feature.
 5. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
    overall photo per working date, separate from each product's own row.
+6. `sql/migration_shift_report_age_range.sql` — adds the customer age
+   range field to shift reports.
 
 ### 2. Create the office account (required — the office app needs this)
 
@@ -111,9 +113,19 @@ their name at the top and choose to log out.
 - **Shift Report tab** — a second tab alongside Stock. Log one entry per
   shift (Before Break 10am–2pm / After Break 3pm–6pm) with people
   engaged, successful engagements, purchases, average engagement time,
-  and optional customer feedback and notes. Same today-only editing
-  rule as stock reports, and it's stored in its own `shift_reports`
-  table for analytics.
+  customer age range, and optional customer feedback and notes. Same
+  today-only editing rule as stock reports, and it's stored in its own
+  `shift_reports` table for analytics.
+- **Schedule tab** — a third, view-only tab showing the same rolling
+  4-week roadshow calendar as the main office app: date, time, location,
+  and position for every scheduled job, not just this promoter's own —
+  so promoters can see who else is working where. No pay or commission
+  is shown on those shared job cards (office-only), and nothing can be
+  added, edited, or deleted from this app — assigning jobs still only
+  happens in the main office app. At the top of this tab, each promoter
+  sees their **own** current calendar month's total pay (plus commission,
+  if any) and shift count — a private total fetched separately, so it
+  never exposes anyone else's pay.
 - **No promoter management here** — adding/removing promoters still
   happens only in the main office app. If a promoter isn't in the
   dropdown, add them there first.

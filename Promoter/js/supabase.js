@@ -45,7 +45,7 @@ const DB = {
   async getPromoters(){
     const { data, error } = await sb
       .from('promoters')
-      .select('id, full_name, active')
+      .select('id, full_name, nickname, active')
       .order('full_name');
     if(error) throw error;
     return data;
@@ -79,7 +79,9 @@ const DB = {
     return created;
   },
 
-  // Jobs are read-only here too — used only to suggest working dates.
+  // Jobs are read-only here too — used to suggest working dates, and to
+  // check whether this promoter has a shift tomorrow (see the shift
+  // reminder banner in app.js).
   async getScheduledDates(){
     const { data, error } = await sb
       .from('jobs')
@@ -89,13 +91,61 @@ const DB = {
     return [...new Set((data || []).map(j => j.work_date))];
   },
 
+  // This promoter's job on one specific date (if any) — position, time,
+  // and store, for the "you have a shift tomorrow" reminder banner.
+  async getMyJobForDate(promoterId, date){
+    const { data, error } = await sb
+      .from('jobs')
+      .select(`
+        id, work_date, position, start_time, end_time,
+        stores ( id, name )
+      `)
+      .eq('promoter_id', promoterId)
+      .eq('work_date', date)
+      .limit(1)
+      .maybeSingle();
+    if(error) throw error;
+    return data;
+  },
+
+  // Full roster schedule (everyone's jobs, not just this promoter's) for
+  // the read-only Schedule tab. No pay/commission — promoters can see
+  // date, time, location and position for their own and others' shifts,
+  // but never each other's pay.
+  async getAllJobs(){
+    const { data, error } = await sb
+      .from('jobs')
+      .select(`
+        id, work_date, position, start_time, end_time, promoter_id,
+        stores ( id, name ),
+        promoters ( id, full_name, nickname )
+      `)
+      .order('work_date', { ascending: true });
+    if(error) throw error;
+    return data;
+  },
+
+  // This promoter's own pay for a given month — kept as a separate,
+  // narrowly-scoped query (rather than adding pay to getAllJobs) so
+  // other promoters' earnings are never fetched or shown here.
+  async getMyPayForMonth(promoterId, monthStartStr, monthEndStr){
+    const { data, error } = await sb
+      .from('jobs')
+      .select('work_date, pay, commission')
+      .eq('promoter_id', promoterId)
+      .gte('work_date', monthStartStr)
+      .lte('work_date', monthEndStr);
+    if(error) throw error;
+    return data;
+  },
+
   async getSalesReports(){
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
         stores ( id, name ),
-        promoters ( id, full_name )
+        promoters ( id, full_name, nickname )
       `)
       .order('work_date', { ascending: false });
     if(error) throw error;
@@ -176,24 +226,10 @@ const DB = {
     const { data, error } = await sb
       .from('shift_reports')
       .select(`
-        id,
-        work_date,
-        shift,
-        store_id,
-        promoter_id,
-        engaged,
-        successful_engagements,
-        purchases,
-        avg_engagement_time,
-        customer_feedback,
-        notes,
-        before_break_sales,
-        after_break_sales,
-        conversion_rate,
-        average_customer_time,
-        customer_age_range,
+        id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
+        avg_engagement_time, customer_age_range, customer_feedback, notes,
         stores ( id, name ),
-        promoters ( id, full_name )
+        promoters ( id, full_name, nickname )
       `)
       .order('work_date', { ascending: false });
     if(error) throw error;

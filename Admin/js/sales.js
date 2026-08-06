@@ -57,6 +57,14 @@ function todayStr(){
   return new Date().toISOString().slice(0,10);
 }
 
+// Distinct work_dates that actually have a stock report logged, most
+// recent first — used to restrict daily date pickers (here, and in
+// Analysis) to only dates with real data, instead of a free-form
+// calendar. Lives here since salesReports is this file's data.
+function stockLoggedDatesDesc(){
+  return [...new Set(salesReports.map(r => r.work_date))].sort((a,b)=> b.localeCompare(a));
+}
+
 // Auto-creates stock rows for the next working date on the schedule that
 // has actually arrived — not simply every calendar day — carrying opening
 // stock forward from that product's most recent prior closing count.
@@ -131,6 +139,13 @@ async function ensureStockRowsForDate(date){
 }
 
 function renderSales(){
+  const loggedDates = stockLoggedDatesDesc();
+  // If the currently-selected export date has no stock logged, fall back
+  // to the most recent date that actually has data.
+  if(stockExportMode === 'daily' && loggedDates.length && !loggedDates.includes(stockExportDate)){
+    stockExportDate = loggedDates[0];
+  }
+
   const exportControls = `
     <div class="export-mode-row">
       <button class="mode-btn ${stockExportMode==='daily'?'active':''}" id="stock-export-mode-daily">Daily</button>
@@ -138,7 +153,9 @@ function renderSales(){
     </div>
     <div class="month-picker-row">
       ${stockExportMode==='daily'
-        ? `<input id="stock-date-input" type="date" value="${stockExportDate}">`
+        ? (loggedDates.length
+            ? `<select id="stock-date-input">${loggedDates.map(d=>`<option value="${d}" ${d===stockExportDate?'selected':''}>${formatDateShort(d)}</option>`).join('')}</select>`
+            : `<select id="stock-date-input" disabled><option>No dates logged yet</option></select>`)
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}">`}
       <button class="btn btn-gold" id="stock-export-btn">Export .xlsx</button>
     </div>
@@ -202,7 +219,7 @@ function renderSalesItems(items){
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
-          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(i.promoters.full_name)}</div>` : ''}
+          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <div class="job-actions">
@@ -269,7 +286,7 @@ function openSalesForm(id){
         <label>Logged by (optional)</label>
         <select id="s-promoter">
           <option value="">— Not specified —</option>
-          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}${!isActive(p)?' (hidden)':''}</option>`).join('')}
+          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>displayName(a).localeCompare(displayName(b))).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(displayName(p))}${!isActive(p)?' (hidden)':''}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -284,10 +301,26 @@ function openSalesForm(id){
         </label>
         <div class="field-hint" id="s-free-item-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
       </div>
-      <div class="field-row">
-        <div class="field"><label>Opening stock</label><input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
-        <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label><input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0"></div>
-        <div class="field"><label>Closing stock</label><input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()"></div>
+      <div class="field"><label>Opening stock</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
+          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
+        </div>
+      </div>
+      <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-sales',-1)" aria-label="Decrease sales qty">−</button>
+          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-sales',1)" aria-label="Increase sales qty">+</button>
+        </div>
+      </div>
+      <div class="field"><label>Closing stock</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
+          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
+        </div>
       </div>
       <div class="field" id="given-out-field" style="display:none;">
         <label>Given out (auto)</label>
@@ -417,7 +450,7 @@ function wireStockExportControls(){
   const monthlyBtn = document.getElementById('stock-export-mode-monthly');
   if(monthlyBtn) monthlyBtn.addEventListener('click', ()=>{ stockExportMode = 'monthly'; render(); });
   const di = document.getElementById('stock-date-input');
-  if(di) di.addEventListener('change', e=>{ stockExportDate = e.target.value; render(); });
+  if(di && !di.disabled) di.addEventListener('change', e=>{ stockExportDate = e.target.value; render(); });
   const mi = document.getElementById('stock-month-input');
   if(mi) mi.addEventListener('change', e=>{ stockExportMonth = e.target.value; render(); });
   const eb = document.getElementById('stock-export-btn');
@@ -446,7 +479,7 @@ function exportStockExcel(){
         'Opening Stock': opening,
         'Sold / Given Out': sales,
         'Closing Stock': closing,
-        'Logged By': r.promoters ? r.promoters.full_name : '',
+        'Logged By': r.promoters ? displayName(r.promoters) : '',
         'Remarks': r.remarks || ''
       };
     });

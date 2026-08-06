@@ -12,8 +12,8 @@ function renderPromoters(){
   if(promoters.length===0){
     return emptyState('👤','No promoters yet','Tap the + button to add your first promoter.');
   }
-  const active = [...promoters].filter(isActive).sort((a,b)=>a.full_name.localeCompare(b.full_name));
-  const hidden = [...promoters].filter(p=>!isActive(p)).sort((a,b)=>a.full_name.localeCompare(b.full_name));
+  const active = [...promoters].filter(isActive).sort((a,b)=>displayName(a).localeCompare(displayName(b)));
+  const hidden = [...promoters].filter(p=>!isActive(p)).sort((a,b)=>displayName(a).localeCompare(displayName(b)));
 
   let html = `
     <div class="section-title">Your team <span class="count-pill">${active.length}</span></div>
@@ -37,12 +37,14 @@ function renderPromoters(){
 
 function renderPromoterBadge(p){
   const hidden = !isActive(p);
+  const nick = (p.nickname||'').trim();
   return `
     <div class="badge${hidden ? ' badge-hidden' : ''}">
       <div class="badge-hole"></div>
       <div class="badge-top">
         <div>
-          <div class="badge-name">${esc(p.full_name)} ${hidden ? '<span class="count-pill">Hidden</span>' : ''}</div>
+          <div class="badge-name">${esc(displayName(p))} ${hidden ? '<span class="count-pill">Hidden</span>' : ''}</div>
+          ${nick ? `<div class="badge-realname">${esc(p.full_name)}</div>` : ''}
           <span class="badge-ic">${esc(p.ic_number||'—')}</span>
         </div>
       </div>
@@ -87,6 +89,11 @@ function openPromoterForm(id){
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit promoter' : 'Add promoter'}</div>
       <div class="field"><label>Full name</label><input id="f-name" value="${editing?esc(editing.full_name):''}" placeholder="e.g. Nur Aisyah binti Ahmad"></div>
+      <div class="field">
+        <label>Nickname (optional)</label>
+        <input id="f-nickname" value="${editing?esc(editing.nickname||''):''}" placeholder="e.g. Aisyah">
+        <div class="field-hint">Shown everywhere instead of the full name — except the Payout report, which always uses the full name.</div>
+      </div>
       <div class="field"><label>IC number</label><input id="f-ic" value="${editing?esc(editing.ic_number||''):''}" placeholder="e.g. 950101-01-1234"></div>
       <div class="field-row">
         <div class="field"><label>Age</label><input id="f-age" type="number" min="16" max="80" value="${editing?editing.age||'':''}" placeholder="e.g. 24"></div>
@@ -109,6 +116,7 @@ function openPromoterForm(id){
 
 async function savePromoterForm(id){
   const full_name = document.getElementById('f-name').value.trim();
+  const nickname = document.getElementById('f-nickname').value.trim();
   const ic_number = document.getElementById('f-ic').value.trim();
   const age = parseInt(document.getElementById('f-age').value, 10) || null;
   const phone = document.getElementById('f-phone').value.trim();
@@ -118,7 +126,7 @@ async function savePromoterForm(id){
 
   if(!full_name){ showToast('Name is required'); return; }
 
-  const payload = { full_name, ic_number, age, phone, address, bank_name, bank_account };
+  const payload = { full_name, nickname: nickname || null, ic_number, age, phone, address, bank_name, bank_account };
 
   try{
     if(id){

@@ -81,7 +81,7 @@ function renderJobList(list, sortDir){
       html += `<div class="day-group-label">${formatDateLong(j.work_date)}</div>`;
       lastDate = j.work_date;
     }
-    const promoterName = j.promoters ? j.promoters.full_name : '(promoter removed)';
+    const promoterName = j.promoters ? displayName(j.promoters) : '(promoter removed)';
     const storeName = j.stores ? j.stores.name : '(store removed)';
     const start = shortTime(j.start_time), end = shortTime(j.end_time);
     const d = new Date(j.work_date+'T00:00:00');
@@ -128,7 +128,7 @@ function openJobForm(id){
       <div class="field">
         <label>Promoter</label>
         <select id="f-promoter">
-          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(p.full_name)}${!isActive(p)?' (hidden)':''}</option>`).join('')}
+          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>displayName(a).localeCompare(displayName(b))).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(displayName(p))}${!isActive(p)?' (hidden)':''}</option>`).join('')}
         </select>
       </div>
       <div class="field">
