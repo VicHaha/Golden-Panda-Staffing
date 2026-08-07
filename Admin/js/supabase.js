@@ -14,12 +14,28 @@ if(typeof window.supabase === 'undefined'){
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
-// Admin login is now required (see js/auth.js) — every admin signs in
-// with their own email + password, same as promoters do in their app.
-// There's no more shared "office" account signing in silently in the
-// background; every write below is made under that admin's own
-// session, and tagged with the name they typed in (currentAdminName,
-// set once app.js confirms who's signed in).
+// Invisible office sign-in.
+//
+// sales_reports now requires a signed-in session to write to (see
+// sql/migration_auth_lockdown.sql) so that the promoter-facing app can
+// enforce a real password. This app has no login screen and isn't meant
+// to — instead it signs in automatically, in the background, using one
+// shared "office" account. Office staff never see this happen.
+//
+// SETUP REQUIRED: create this account once in Supabase Dashboard →
+// Authentication → Users → Add user, then put the same email/password
+// here. See the README for the exact steps.
+// ============================================================
+const OFFICE_AUTH_EMAIL = "victoriatsn10@gmail.com";
+const OFFICE_AUTH_PASSWORD = "GP123456";
+
+let officeSignInPromise = sb.auth.signInWithPassword({
+  email: OFFICE_AUTH_EMAIL,
+  password: OFFICE_AUTH_PASSWORD
+}).then(({ error }) => {
+  if(error) console.error('Office auto sign-in failed — sales report saving will not work until this is fixed:', error.message);
+});
+
 // ============================================================
 // DB — thin wrapper around every table this app touches.
 // Field names match sql/schema.sql exactly.
@@ -39,7 +55,7 @@ const DB = {
   async addPromoter(promoter){
     const { data, error } = await sb
       .from('promoters')
-      .insert({ ...promoter, created_by: currentAdminName, updated_by: currentAdminName })
+      .insert(promoter)
       .select()
       .single();
     if(error) throw error;
@@ -49,7 +65,7 @@ const DB = {
   async updatePromoter(id, promoter){
     const { error } = await sb
       .from('promoters')
-      .update({ ...promoter, updated_by: currentAdminName })
+      .update(promoter)
       .eq('id', id);
     if(error) throw error;
   },
@@ -111,7 +127,7 @@ const DB = {
   async addJob(job){
     const { data, error } = await sb
       .from('jobs')
-      .insert({ ...job, created_by: currentAdminName, updated_by: currentAdminName })
+      .insert(job)
       .select()
       .single();
     if(error) throw error;
@@ -121,7 +137,7 @@ const DB = {
   async updateJob(id, job){
     const { error } = await sb
       .from('jobs')
-      .update({ ...job, updated_by: currentAdminName })
+      .update(job)
       .eq('id', id);
     if(error) throw error;
   },
@@ -166,7 +182,7 @@ const DB = {
   async addSalesReport(entry){
     const { data, error } = await sb
       .from('sales_reports')
-      .insert({ ...entry, created_by: currentAdminName, updated_by: currentAdminName })
+      .insert(entry)
       .select()
       .single();
     if(error) throw error;
@@ -176,7 +192,7 @@ const DB = {
   async updateSalesReport(id, entry){
     const { error } = await sb
       .from('sales_reports')
-      .update({ ...entry, updated_by: currentAdminName, updated_at: new Date().toISOString() })
+      .update({ ...entry, updated_at: new Date().toISOString() })
       .eq('id', id);
     if(error) throw error;
   },
@@ -221,7 +237,7 @@ const DB = {
   async addDayPhoto(work_date, entry){
     const { data, error } = await sb
       .from('day_photos')
-      .insert({ work_date, ...entry, created_by: currentAdminName, updated_by: currentAdminName })
+      .insert({ work_date, ...entry })
       .select()
       .single();
     if(error) throw error;
@@ -233,7 +249,7 @@ const DB = {
   async updateDayPhoto(id, entry){
     const { data, error } = await sb
       .from('day_photos')
-      .update({ ...entry, updated_by: currentAdminName, updated_at: new Date().toISOString() })
+      .update({ ...entry, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
@@ -278,19 +294,5 @@ const DB = {
       .order('work_date', { ascending: false });
     if(error) throw error;
     return data;
-  },
-
-  // Removes shift reports older than 3 months — same rolling cutoff as
-  // purgeOldJobs / purgeOldSalesReports / purgeOldDayPhotos, so
-  // everything except promoter details ages out together.
-  async purgeOldShiftReports(){
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - 3);
-    const cutoffStr = cutoff.toISOString().slice(0,10);
-    const { error } = await sb
-      .from('shift_reports')
-      .delete()
-      .lt('work_date', cutoffStr);
-    if(error) throw error;
   }
 };

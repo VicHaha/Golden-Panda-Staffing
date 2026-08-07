@@ -33,38 +33,8 @@ files **in this order**:
     per date instead of just one
 11. `sql/migration_promoter_active.sql` — normalizes the `active` column
     used by the new promoter hide/show feature
-12. `sql/migration_admin_login.sql` — **new** — wires up real admin
-    login (see "Admin login is now required" below): adds
-    `created_by`/`updated_by` columns to promoters, jobs, sales_reports
-    and day_photos, and tightens who can write to promoters/stores/
-    jobs/settings to signed-in admins only (reading stays open so the
-    promoter app keeps working as before).
 
 All are safe to run again if you're not sure which you've already run.
-
-### Admin login is now required
-
-This app no longer has an invisible shared "office" account signing in
-silently in the background. Every admin now needs their own login,
-exactly like promoters log into their app:
-
-1. Open the deployed office app URL. You'll see a login screen.
-2. First time, tap **"Create one"**, enter any email + a password of
-   your choosing, and submit.
-3. You'll then be asked **"What's your name?"** — type your real name
-   (e.g. "Victoria Tan"). This is saved once, in a new `users` table
-   row, and from then on everything you add or edit in the app — new
-   jobs, promoter records, stock reports, day photos — is tagged with
-   that name in the database (`created_by` / `updated_by` columns).
-4. After that, you just log in with your email/password. The app stays
-   logged in on that device until you tap your name at the top-right
-   and choose to log out.
-
-Repeat step 2–3 for each admin/boss who needs their own account — each
-person's name is captured separately, so you can always tell who
-entered or changed a given record.
-
-
 
 ### One-time cleanup: remove "PG Mall" from the store list
 
@@ -78,7 +48,24 @@ delete from stores where name ilike 'PG Mall';
 Any past jobs/reports that referenced it will just show as
 "(store removed)" instead of breaking.
 
-### 2. Set up Cloudinary for stock photos (required for the photo feature)
+### 2. Set up the office account (required after step 1.7 above)
+
+Once `migration_auth_lockdown.sql` is run, saving a stock report needs
+an authenticated session — including from this office app. This app has
+no visible login screen; instead it signs in automatically in the
+background using one shared account, so nothing changes for you day to
+day. You just need to create that account once:
+
+1. In Supabase → **Authentication → Users → Add user**. Email:
+   `office@goldenpanda.internal` (or anything you like). Set a password.
+2. Open `js/supabase.js` in this app, find `OFFICE_AUTH_EMAIL` and
+   `OFFICE_AUTH_PASSWORD` near the top, and put in the same email and
+   password. Redeploy.
+
+If you skip this, everything else in the app keeps working — only
+saving/editing/deleting Stock tab entries will fail until it's set up.
+
+### 3. Set up Cloudinary for stock photos (required for the photo feature)
 
 Stock report photos are hosted on **Cloudinary**, not Supabase — its
 free tier gives ~25GB versus Supabase Storage's 500MB, and this keeps
@@ -97,18 +84,6 @@ upload button will show an error if tapped.
 
 ### What's new in this version
 
-- **Real admin login, no more shared invisible account** — see "Admin
-  login is now required" above. Every admin now signs in with their own
-  email/password and types their name once, and everything they save
-  is tagged with that name (`created_by`/`updated_by` on promoters,
-  jobs, stock reports, and day photos).
-- **Shift reports stay editable past their working date** — promoters
-  can now fix numbers on an old shift report from their app (previously
-  locked to "today only", same as stock reports still are).
-- **3-month auto-cleanup now also covers shift reports** — previously
-  only jobs, stock reports, and day photos aged out after 3 months;
-  shift reports now follow the same rolling cutoff. Promoter details
-  (the promoters table itself) are never deleted by this cleanup.
 - **Hide/show promoters** — no longer just delete-or-keep. "Hide" a
   promoter who's left or is on leave and they disappear from new job/
   stock-log pickers immediately, but their name, past schedule, and pay
@@ -229,13 +204,12 @@ links to a promoter and a store by ID, not just by name).
 
 ## Security note
 
-Admins now need a real login (email + password via Supabase Auth) to
-open this app at all, and only signed-in admins can write to
-promoters/stores/jobs/settings/sales_reports/day_photos (see
-`sql/migration_admin_login.sql`). Reading is still open to anyone with
-the anon key — that's what lets the promoter app show the schedule and
-reports without needing admin-level access. If you want reads locked
-down too, that's a further tightening we can do on request.
+There's still no login screen — anyone with your deployed URL can use
+the app, and the RLS policies are currently wide open (see the comment
+block at the bottom of `sql/rls.sql`). That's an acceptable tradeoff for
+a small internal tool with an unpublished URL, but if you want real
+access control (e.g., only you and your boss can open it), the next step
+is adding Supabase Auth — happy to build that next if you'd like it.
 
 ## Updating the app later
 

@@ -88,7 +88,6 @@ function openPromoterForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit promoter' : 'Add promoter'}</div>
-      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName||'')}</b></div>
       <div class="field"><label>Full name</label><input id="f-name" value="${editing?esc(editing.full_name):''}" placeholder="e.g. Nur Aisyah binti Ahmad"></div>
       <div class="field">
         <label>Nickname (optional)</label>

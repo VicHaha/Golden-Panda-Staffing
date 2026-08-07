@@ -225,6 +225,8 @@ function renderSalesItems(items){
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const expectedClosing = opening - sales;
     const variance = closing - expectedClosing;
+    const storeRoom = Number(i.store_room_qty||0), homeShelf = Number(i.home_shelf_qty||0), standee = Number(i.standee_qty||0);
+    const hasLocationBreakdown = storeRoom || homeShelf || standee;
     return `
       <div class="sales-item">
         <div class="sales-item-main">
@@ -234,6 +236,7 @@ function renderSalesItems(items){
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
+          ${hasLocationBreakdown ? `<div class="sales-item-remarks">Store Room <b>${storeRoom}</b> · Home Shelf <b>${homeShelf}</b> · Standee <b>${standee}</b></div>` : ''}
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
@@ -277,32 +280,22 @@ function toggleSalesDate(date){
 
 function openSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  // Suggest dates that are actually on the schedule, most recent first.
-  const scheduledDates = [...new Set(jobs.map(j=>j.work_date))].sort((a,b)=>b.localeCompare(a));
+  // Matches the promoter app's form exactly: no Date or Logged-by fields.
+  // New entries always land on today (auto-seeded rows already cover past
+  // dates); editing an existing entry keeps its original work_date and
+  // promoter_id untouched — there's simply no field to change either.
+  const formDate = editing ? editing.work_date : todayStr();
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
-      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName||'')}</b></div>
-      <div class="field">
-        <label>Date</label>
-        <input id="s-date" list="scheduled-dates" type="date" value="${editing?editing.work_date:(scheduledDates[0]||todayStr())}">
-        <datalist id="scheduled-dates">${scheduledDates.map(d=>`<option value="${d}">`).join('')}</datalist>
-        <div class="field-hint">Pulled from your schedule — pick a working date, or type any date.</div>
-      </div>
+      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName || 'Admin')}</b> · ${formatDateLong(formDate)}</div>
       <div class="field">
         <label>Store (optional)</label>
         <select id="s-store">
           <option value="">— Not specified —</option>
           ${stores.map(s=>`<option value="${s.id}" ${editing&&editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label>Logged by (optional)</label>
-        <select id="s-promoter">
-          <option value="">— Not specified —</option>
-          ${[...promoters].filter(p=>isActive(p) || (editing && editing.promoter_id===p.id)).sort((a,b)=>displayName(a).localeCompare(displayName(b))).map(p=>`<option value="${p.id}" ${editing&&editing.promoter_id===p.id?'selected':''}>${esc(displayName(p))}${!isActive(p)?' (hidden)':''}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -343,6 +336,14 @@ function openSalesForm(id){
         <input id="s-given-out-display" type="text" value="0" readonly disabled>
         <div class="field-hint">Calculated automatically: opening stock − closing stock.</div>
       </div>
+      <div class="field" id="stock-location-field">
+        <label>Stock by location (optional)</label>
+        <div class="field-row">
+          <div class="field"><label>Store Room</label><input id="s-store-room" type="number" min="0" step="1" value="${editing?editing.store_room_qty:''}" placeholder="0"></div>
+          <div class="field"><label>Home Shelf</label><input id="s-home-shelf" type="number" min="0" step="1" value="${editing?editing.home_shelf_qty:''}" placeholder="0"></div>
+          <div class="field"><label>Standee</label><input id="s-standee" type="number" min="0" step="1" value="${editing?editing.standee_qty:''}" placeholder="0"></div>
+        </div>
+      </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -380,10 +381,13 @@ function onFreeItemToggle(){
 // For free items, opening/closing stock is still recorded, but the "Sales
 // qty" field is hidden and replaced with a read-only "Given out" figure
 // computed automatically as opening − closing — no manual entry needed.
+// The Store Room / Home Shelf / Standee breakdown is skipped entirely for
+// free items too, since it's only meant to track sellable stock.
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
   document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
+  document.getElementById('stock-location-field').style.display = giveaway ? 'none' : '';
   if(giveaway) updateGivenOutPreview();
 }
 
@@ -402,9 +406,12 @@ function onStockFieldInput(){
 
 async function saveSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  const work_date = document.getElementById('s-date').value;
+  // No Date or Logged-by fields in this form (matches the promoter app) —
+  // new entries always save into today; editing keeps the original
+  // work_date and promoter_id exactly as they were.
+  const work_date = editing ? editing.work_date : todayStr();
+  const promoter_id = editing ? (editing.promoter_id || null) : null;
   const store_id = document.getElementById('s-store').value || null;
-  const promoter_id = document.getElementById('s-promoter').value || null;
   const product_name = document.getElementById('s-product').value.trim();
   const is_free_item = document.getElementById('s-free-item').checked;
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
@@ -413,20 +420,25 @@ async function saveSalesForm(id){
   // closing. Regular products: sales qty is entered by hand as before.
   const sales_qty = is_free_item ? Math.max(0, opening_qty - closing_qty) : (parseFloat(document.getElementById('s-sales').value) || 0);
   const remarks = document.getElementById('s-remarks').value.trim();
+  // Stock-by-location breakdown — admin-only, separate from the opening/
+  // sales/closing workflow numbers above.
+  const store_room_qty = parseFloat(document.getElementById('s-store-room').value) || 0;
+  const home_shelf_qty = parseFloat(document.getElementById('s-home-shelf').value) || 0;
+  const standee_qty = parseFloat(document.getElementById('s-standee').value) || 0;
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
   const photo_url = editing ? (editing.photo_url || null) : null;
 
-  if(!work_date || !product_name){
-    showToast('Date and product name are required'); return;
+  if(!product_name){
+    showToast('Product name is required'); return;
   }
 
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item };
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, store_room_qty, home_shelf_qty, standee_qty };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{
@@ -509,13 +521,39 @@ function exportStockExcel(){
         'Opening Stock': Number(r.opening_qty||0),
         'Sold / Given Out': Number(r.sales_qty||0),
         'Closing Stock': Number(r.closing_qty||0),
+        'Store Room': Number(r.store_room_qty||0),
+        'Home Shelf': Number(r.home_shelf_qty||0),
+        'Standee': Number(r.standee_qty||0),
         'Logged By': r.promoters ? displayName(r.promoters) : '',
         'Remarks': r.remarks || ''
       };
     });
   const wsStockRaw = XLSX.utils.json_to_sheet(stockRawRows);
-  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
+  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:11},{wch:11},{wch:9},{wch:20},{wch:24}];
   XLSX.utils.book_append_sheet(wb, wsStockRaw, 'Stock Reports (Raw)');
+
+  // ---- Stock Details: one row per product per location (Store Room /
+  // Home Shelf / Standee), so each shelf's count is easy to scan or
+  // pivot on its own — rather than spread across columns like the raw
+  // sheet above. ----
+  const STOCK_LOCATIONS = [
+    { key: 'store_room_qty', label: 'Store Room' },
+    { key: 'home_shelf_qty', label: 'Home Shelf' },
+    { key: 'standee_qty', label: 'Standee' }
+  ];
+  const stockDetailRows = [...salesRows]
+    .filter(r => !isFreeItem(r))
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || (a.product_name||'').localeCompare(b.product_name||''))
+    .flatMap(r => STOCK_LOCATIONS.map(loc => ({
+      'Date': r.work_date,
+      'Product': r.product_name,
+      'Store': r.stores ? r.stores.name : '',
+      'Location': loc.label,
+      'Quantity': Number(r[loc.key]||0)
+    })));
+  const wsStockDetails = XLSX.utils.json_to_sheet(stockDetailRows);
+  wsStockDetails['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsStockDetails, 'Stock Details');
 
   // ---- Raw: Shift Reports — every logged row, unaggregated ----
   const shiftRawRows = [...shiftRows]
