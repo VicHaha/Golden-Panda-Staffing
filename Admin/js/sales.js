@@ -70,6 +70,15 @@ function stockLoggedDatesDesc(){
   return [...new Set(salesReports.map(r => r.work_date))].sort((a,b)=> b.localeCompare(a));
 }
 
+// Who logged a sales report row — the promoter if it came from the
+// Promoters app, otherwise the admin's typed-in name if we captured it
+// (see logged_by_admin_name / currentAdminName), falling back to a
+// generic "Admin" for rows saved before that was tracked.
+function loggedByLabel(r){
+  if(r.promoters) return displayName(r.promoters);
+  return r.logged_by_admin_name || 'Admin';
+}
+
 // Union of every date that has *either* a stock report or a shift report
 // logged, most recent first. Used by the Stock tab's daily export picker
 // (which now bundles both) and by the Analysis tab's viewing picker —
@@ -226,7 +235,8 @@ function renderSalesItems(items){
     const expectedClosing = opening - sales;
     const variance = closing - expectedClosing;
     const storeRoom = Number(i.store_room_qty||0), homeShelf = Number(i.home_shelf_qty||0), standee = Number(i.standee_qty||0);
-    const hasLocationBreakdown = storeRoom || homeShelf || standee;
+    const locationVariance = closing - (storeRoom + homeShelf + standee);
+    const showLocationLine = !giveaway && (storeRoom || homeShelf || standee || locationVariance !== 0);
     return `
       <div class="sales-item">
         <div class="sales-item-main">
@@ -236,8 +246,8 @@ function renderSalesItems(items){
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
-          ${hasLocationBreakdown ? `<div class="sales-item-remarks">Store Room <b>${storeRoom}</b> · Home Shelf <b>${homeShelf}</b> · Standee <b>${standee}</b></div>` : ''}
-          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
+          ${showLocationLine ? `<div class="sales-item-remarks">Store Room <b>${storeRoom}</b> · Home Shelf <b>${homeShelf}</b> · Standee <b>${standee}</b>${locationVariance !== 0 ? ` <span class="sales-variance short">${locationVariance>0?'+':''}${locationVariance} vs shelves</span>` : ''}</div>` : ''}
+          <div class="sales-item-remarks">Logged by ${esc(loggedByLabel(i))}</div>
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <div class="job-actions">
@@ -339,10 +349,11 @@ function openSalesForm(id){
       <div class="field" id="stock-location-field">
         <label>Stock by location (optional)</label>
         <div class="field-row">
-          <div class="field"><label>Store Room</label><input id="s-store-room" type="number" min="0" step="1" value="${editing?editing.store_room_qty:''}" placeholder="0"></div>
-          <div class="field"><label>Home Shelf</label><input id="s-home-shelf" type="number" min="0" step="1" value="${editing?editing.home_shelf_qty:''}" placeholder="0"></div>
-          <div class="field"><label>Standee</label><input id="s-standee" type="number" min="0" step="1" value="${editing?editing.standee_qty:''}" placeholder="0"></div>
+          <div class="field"><label>Store Room</label><input id="s-store-room" type="number" min="0" step="1" value="${editing?editing.store_room_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
+          <div class="field"><label>Home Shelf</label><input id="s-home-shelf" type="number" min="0" step="1" value="${editing?editing.home_shelf_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
+          <div class="field"><label>Standee</label><input id="s-standee" type="number" min="0" step="1" value="${editing?editing.standee_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
         </div>
+        <div class="field-hint" id="s-location-hint">Should add up to the closing stock above.</div>
       </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
@@ -357,6 +368,7 @@ function openSalesForm(id){
   // product name field stops overriding their choice.
   salesFormFreeItemTouched = false;
   applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
+  updateLocationHint();
 }
 
 // Tracks whether the person has manually ticked/unticked the "Free item"
@@ -402,6 +414,33 @@ function updateGivenOutPreview(){
 
 function onStockFieldInput(){
   if(document.getElementById('s-free-item').checked) updateGivenOutPreview();
+  updateLocationHint();
+}
+
+// Keeps the "Stock by location" hint in sync as any of the three location
+// fields (or closing stock, which they must always add up to exactly) are
+// typed — Store Room + Home Shelf + Standee must equal closing stock for
+// every non-free item, no exceptions.
+function updateLocationHint(){
+  const hint = document.getElementById('s-location-hint');
+  if(!hint) return; // not rendered for free items
+  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
+  const storeRoom = parseFloat(document.getElementById('s-store-room').value) || 0;
+  const homeShelf = parseFloat(document.getElementById('s-home-shelf').value) || 0;
+  const standee = parseFloat(document.getElementById('s-standee').value) || 0;
+  const sum = storeRoom + homeShelf + standee;
+
+  if(sum === closing){
+    hint.textContent = `✓ Matches closing stock (${closing}).`;
+    hint.classList.remove('field-hint-error');
+  }else{
+    hint.textContent = `${sum} entered so far — closing stock is ${closing}.`;
+    hint.classList.add('field-hint-error');
+  }
+}
+
+function onLocationFieldInput(){
+  updateLocationHint();
 }
 
 async function saveSalesForm(id){
@@ -429,6 +468,11 @@ async function saveSalesForm(id){
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
   const photo_url = editing ? (editing.photo_url || null) : null;
+  // Who typed this in — only set for brand-new admin-entered rows (never
+  // overwritten on edit, so it always reflects who originally logged it,
+  // and never touched for promoter-entered rows, which use promoter_id
+  // instead — see currentAdminName in js/app.js).
+  const logged_by_admin_name = editing ? (editing.logged_by_admin_name || null) : (promoter_id ? null : currentAdminName);
 
   if(!product_name){
     showToast('Product name is required'); return;
@@ -438,7 +482,7 @@ async function saveSalesForm(id){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, store_room_qty, home_shelf_qty, standee_qty };
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, store_room_qty, home_shelf_qty, standee_qty, logged_by_admin_name };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{
@@ -521,38 +565,30 @@ function exportStockExcel(){
         'Opening Stock': Number(r.opening_qty||0),
         'Sold / Given Out': Number(r.sales_qty||0),
         'Closing Stock': Number(r.closing_qty||0),
-        'Store Room': Number(r.store_room_qty||0),
-        'Home Shelf': Number(r.home_shelf_qty||0),
-        'Standee': Number(r.standee_qty||0),
-        'Logged By': r.promoters ? displayName(r.promoters) : '',
+        'Logged By': loggedByLabel(r),
         'Remarks': r.remarks || ''
       };
     });
   const wsStockRaw = XLSX.utils.json_to_sheet(stockRawRows);
-  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:11},{wch:11},{wch:9},{wch:20},{wch:24}];
+  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
   XLSX.utils.book_append_sheet(wb, wsStockRaw, 'Stock Reports (Raw)');
 
-  // ---- Stock Details: one row per product per location (Store Room /
-  // Home Shelf / Standee), so each shelf's count is easy to scan or
-  // pivot on its own — rather than spread across columns like the raw
-  // sheet above. ----
-  const STOCK_LOCATIONS = [
-    { key: 'store_room_qty', label: 'Store Room' },
-    { key: 'home_shelf_qty', label: 'Home Shelf' },
-    { key: 'standee_qty', label: 'Standee' }
-  ];
+  // ---- Stock Details: one row per product, with Store Room / Home
+  // Shelf / Standee as their own columns — easy to scan at a glance,
+  // one line per product rather than three. ----
   const stockDetailRows = [...salesRows]
     .filter(r => !isFreeItem(r))
     .sort((a,b)=> a.work_date.localeCompare(b.work_date) || (a.product_name||'').localeCompare(b.product_name||''))
-    .flatMap(r => STOCK_LOCATIONS.map(loc => ({
+    .map(r => ({
       'Date': r.work_date,
       'Product': r.product_name,
       'Store': r.stores ? r.stores.name : '',
-      'Location': loc.label,
-      'Quantity': Number(r[loc.key]||0)
-    })));
+      'Store Room': Number(r.store_room_qty||0),
+      'Home Shelf': Number(r.home_shelf_qty||0),
+      'Standee': Number(r.standee_qty||0)
+    }));
   const wsStockDetails = XLSX.utils.json_to_sheet(stockDetailRows);
-  wsStockDetails['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:14},{wch:10}];
+  wsStockDetails['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:12},{wch:12},{wch:10}];
   XLSX.utils.book_append_sheet(wb, wsStockDetails, 'Stock Details');
 
   // ---- Raw: Shift Reports — every logged row, unaggregated ----
