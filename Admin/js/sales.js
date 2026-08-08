@@ -33,19 +33,24 @@ const PRODUCT_SUGGESTIONS = [
 // form (see openSalesForm) but stored together as one string, e.g.
 // "Bio Dishwash 1L (Bidara)" — same format as before, so tab
 // categorization, carry-forward matching, and legacy rows all keep
-// working unchanged. VARIATIONS lists the recognised flavors; anything
-// else typed into the base name field is stored as-is with no variation.
+// working unchanged. VARIATIONS is just the suggested/starter list for
+// the Variation field's autocomplete (see getVariationSuggestions) —
+// like the product name field, it stays free text so anyone can type a
+// new flavor/variation on the fly and it's stored and parsed the same
+// way as the preset ones.
 const VARIATIONS = ['Bidara', 'Ginger', 'Melon'];
 const VARIANT_BASE_PRODUCTS = ['Bio Dishwash 1L', 'Refill Bio Dishwash 480ml'];
 
 // Splits a stored product_name like "Bio Dishwash 1L (Bidara)" back into
 // its base name and variation, so the form can show them as two fields
-// and the list can show just the variation. Names without a recognised
-// variation (giveaways, custom products) come back with variation: ''.
+// and the list can show just the variation. Any trailing "(...)" is
+// treated as the variation — not just the preset list — since the field
+// is free text now. Names without a parenthesised suffix (giveaways,
+// custom products with no variation) come back with variation: ''.
 function parseProductName(name){
   const raw = (name || '').trim();
   const m = /^(.*)\s\(([^)]+)\)\s*$/.exec(raw);
-  if(m && VARIATIONS.includes(m[2])) return { base: m[1].trim(), variation: m[2] };
+  if(m) return { base: m[1].trim(), variation: m[2].trim() };
   return { base: raw, variation: '' };
 }
 function composeProductName(base, variation){
@@ -132,6 +137,19 @@ function getProductSuggestions(){
   const bases = new Set([...GIVEAWAY_ITEMS, ...VARIANT_BASE_PRODUCTS]);
   salesReports.forEach(r => { if(r.product_name) bases.add(parseProductName(r.product_name).base); });
   return [...bases].sort();
+}
+
+// Same idea for the Variation field: starts with the preset flavor list
+// but also picks up any custom variation someone has typed in before, so
+// it grows the same way the product name suggestions do.
+function getVariationSuggestions(){
+  const variations = new Set(VARIATIONS);
+  salesReports.forEach(r => {
+    if(!r.product_name) return;
+    const v = parseProductName(r.product_name).variation;
+    if(v) variations.add(v);
+  });
+  return [...variations].sort();
 }
 
 function todayStr(){
@@ -332,7 +350,7 @@ function renderSalesItems(items, compact){
         <div class="sales-item">
           <div class="sales-item-main">
             <div class="sales-item-name">${esc(displayProductName(i))}</div>
-            <div class="sales-item-stats">Given out <b>${sales}</b></div>
+            <div class="sales-item-stats">Given out <b>${sales}</b> · Logged by <b>${esc(loggedByLabel(i))}</b></div>
             ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
           </div>
           <div class="job-actions">
@@ -350,7 +368,7 @@ function renderSalesItems(items, compact){
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(displayProductName(i))}</div>
           <div class="sales-item-stats">
-            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b>
+            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b> · Logged by <b>${esc(loggedByLabel(i))}</b>
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
@@ -421,11 +439,9 @@ function openSalesForm(id){
           <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
         <div class="field">
-          <label>Variation</label>
-          <select id="s-variation" onchange="onProductNameChange()">
-            <option value="">— None —</option>
-            ${VARIATIONS.map(v=>`<option value="${v}" ${editing&&parseProductName(editing.product_name).variation===v?'selected':''}>${v}</option>`).join('')}
-          </select>
+          <label>Variation (optional)</label>
+          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()">
+          <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
       <div class="field-hint" style="margin:-8px 0 14px;"></div>

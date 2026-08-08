@@ -14,27 +14,37 @@ if(typeof window.supabase === 'undefined'){
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
-// Invisible office sign-in.
+// Auth — office staff sign in with their own email + password,
+// same as promoters do in the stock report app. Supabase persists the
+// session in the browser automatically, so once logged in on a device,
+// staff stay logged in until they log out (see logOutAdmin in app.js).
 //
-// sales_reports now requires a signed-in session to write to (see
-// sql/migration_auth_lockdown.sql) so that the promoter-facing app can
-// enforce a real password. This app has no login screen and isn't meant
-// to — instead it signs in automatically, in the background, using one
-// shared "office" account. Office staff never see this happen.
-//
-// SETUP REQUIRED: create this account once in Supabase Dashboard →
-// Authentication → Users → Add user, then put the same email/password
-// here. See the README for the exact steps.
+// This replaces the old invisible single shared "office account"
+// auto-login — sales_reports still requires an authenticated session to
+// write (see sql/migration_auth_lockdown.sql), and now that requirement
+// is met by whoever is actually signed in, not a hardcoded account.
 // ============================================================
-const OFFICE_AUTH_EMAIL = "victoriatsn10@gmail.com";
-const OFFICE_AUTH_PASSWORD = "GP123456";
-
-let officeSignInPromise = sb.auth.signInWithPassword({
-  email: OFFICE_AUTH_EMAIL,
-  password: OFFICE_AUTH_PASSWORD
-}).then(({ error }) => {
-  if(error) console.error('Office auto sign-in failed — sales report saving will not work until this is fixed:', error.message);
-});
+const Auth = {
+  async getSession(){
+    const { data, error } = await sb.auth.getSession();
+    if(error) throw error;
+    return data.session;
+  },
+  async signUp(email, password){
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if(error) throw error;
+    return data;
+  },
+  async signIn(email, password){
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    return data;
+  },
+  async signOut(){
+    const { error } = await sb.auth.signOut();
+    if(error) throw error;
+  }
+};
 
 // ============================================================
 // DB — thin wrapper around every table this app touches.

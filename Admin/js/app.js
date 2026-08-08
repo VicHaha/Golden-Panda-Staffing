@@ -12,10 +12,10 @@ let currentTab = 'roster';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
 
-// Local-only identity — unlike the promoter app, admin doesn't sign in
-// with a Supabase account (the office account signs in invisibly behind
-// the scenes, see js/supabase.js); this is just a typed name, remembered
-// on this device, so the header/stock form can show who's using it.
+// Local-only identity, on top of the real Supabase account login below —
+// a per-device display name (like the promoter app's "which promoter are
+// you?" step) so the header/stock form can show who's using it, without
+// needing that to double as the account email.
 let currentAdminName = localStorage.getItem('gp_admin_name') || null;
 
 function boot(){
@@ -36,16 +36,99 @@ function boot(){
     return;
   }
 
-  if(!currentAdminName){
-    renderNameGate();
+  checkAuthThenProceed();
+}
+
+async function checkAuthThenProceed(){
+  let session;
+  try{
+    session = await Auth.getSession();
+  }catch(e){
+    console.error(e);
+    session = null;
+  }
+  if(session){
+    if(!currentAdminName){
+      renderNameGate();
+    }else{
+      renderApp();
+    }
   }else{
-    renderApp();
+    renderAuthGate('login');
+  }
+}
+
+// mode is 'login' or 'signup'
+function renderAuthGate(mode, prefillEmail){
+  const root = document.getElementById('root');
+  const isSignup = mode === 'signup';
+  root.innerHTML = `
+    <div class="gate">
+      <div class="brand-mark">GP</div>
+      <h2>${isSignup ? 'Create your account' : 'Log in'}</h2>
+      <p>${isSignup
+        ? 'First time here? Set a password to log in with next time.'
+        : 'Enter your email and password to open the office app.'}</p>
+      <input id="auth-email" type="email" placeholder="Email" value="${prefillEmail ? esc(prefillEmail) : ''}" autocapitalize="off" autocomplete="email">
+      <input id="auth-password" type="password" placeholder="Password" autocomplete="${isSignup?'new-password':'current-password'}">
+      <button class="btn btn-primary btn-block" id="auth-submit-btn" onclick="${isSignup?'submitSignup()':'submitLogin()'}">${isSignup ? 'Create account' : 'Log in'}</button>
+      <p class="fineprint">
+        ${isSignup
+          ? `Already have an account? <a href="#" onclick="event.preventDefault(); renderAuthGate('login')">Log in</a>`
+          : `No account yet? <a href="#" onclick="event.preventDefault(); renderAuthGate('signup')">Create one</a>`}
+      </p>
+    </div>
+  `;
+  document.getElementById('auth-email').focus();
+}
+
+async function submitSignup(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter an email and password'); return; }
+  if(password.length < 6){ showToast('Password must be at least 6 characters'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try{
+    const result = await Auth.signUp(email, password);
+    if(result.session){
+      // Signed in immediately (email confirmation is off in this project).
+      checkAuthThenProceed();
+    }else{
+      // Email confirmation is on — they need to click a link before logging in.
+      showToast('Account created — check your email to confirm, then log in');
+      renderAuthGate('login', email);
+    }
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not create account');
+    btn.disabled = false; btn.textContent = 'Create account';
+  }
+}
+
+async function submitLogin(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showToast('Enter your email and password'); return; }
+
+  const btn = document.getElementById('auth-submit-btn');
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  try{
+    await Auth.signIn(email, password);
+    checkAuthThenProceed();
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Could not log in');
+    btn.disabled = false; btn.textContent = 'Log in';
   }
 }
 
 // Simple name gate — free text, no picking from a list (there's no fixed
-// roster of "admins" the way there is a roster of promoters). Saved to
-// this device so it's only asked once.
+// roster of "admins" the way there is a roster of promoters). Shown once
+// per device after a successful account login (see checkAuthThenProceed),
+// same as the promoter app asks "which promoter are you?" after its own
+// login. Saved to this device so it's only asked once.
 function renderNameGate(){
   const root = document.getElementById('root');
   root.innerHTML = `
@@ -76,7 +159,8 @@ function logOutAdmin(){
   localStorage.removeItem('gp_admin_name');
   currentAdminName = null;
   if(realtimeChannel) sb.removeChannel(realtimeChannel);
-  renderNameGate();
+  Auth.signOut().catch(e=>console.error(e));
+  renderAuthGate('login');
 }
 
 function renderApp(){
@@ -121,7 +205,6 @@ function renderApp(){
 
 async function loadInitialData(){
   try{
-    await officeSignInPromise; // ensure the app is authenticated before any writes can happen
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await DB.purgeOldSalesReports().catch(e=>console.warn('Purge old sales reports failed (non-fatal):', e));
     await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));

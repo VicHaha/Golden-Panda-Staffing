@@ -9,38 +9,39 @@ let salesShowPast = false;
 
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
-// These are the full stored names (base product + variation baked in)
-// used to auto-seed each working date's rows — see ensureStockRowsForDate.
+// These are base names only (no variation suffix) and are what
+// auto-seeds each working date's rows — see ensureStockRowsForDate.
 const PRODUCT_SUGGESTIONS = [
   'Gift Set',
   'Flyer',
   'Small Samples',
   'Coupons',
-  'Bio Dishwash 1L (Bidara)',
-  'Bio Dishwash 1L (Ginger)',
-  'Bio Dishwash 1L (Melon)',
-  'Refill Bio Dishwash 480ml (Bidara)',
-  'Refill Bio Dishwash 480ml (Ginger)',
-  'Refill Bio Dishwash 480ml (Melon)'
+  'Bio Dishwash 1L',
+  'Refill Bio Dishwash 480ml'
 ];
 
 // Product name and variation are entered as two separate fields in the
 // form (see openSalesForm) but stored together as one string, e.g.
 // "Bio Dishwash 1L (Bidara)" — same format as before, so tab
 // categorization, carry-forward matching, and legacy rows all keep
-// working unchanged. VARIATIONS lists the recognised flavors; anything
-// else typed into the base name field is stored as-is with no variation.
+// working unchanged. VARIATIONS is just the suggested/starter list for
+// the Variation field's autocomplete (see getVariationSuggestions) —
+// like the product name field, it stays free text so anyone can type a
+// new flavor/variation on the fly and it's stored and parsed the same
+// way as the preset ones.
 const VARIATIONS = ['Bidara', 'Ginger', 'Melon'];
 const VARIANT_BASE_PRODUCTS = ['Bio Dishwash 1L', 'Refill Bio Dishwash 480ml'];
 
 // Splits a stored product_name like "Bio Dishwash 1L (Bidara)" back into
 // its base name and variation, so the form can show them as two fields
-// and the list can show just the variation. Names without a recognised
-// variation (giveaways, custom products) come back with variation: ''.
+// and the list can show just the variation. Any trailing "(...)" is
+// treated as the variation — not just the preset list — since the field
+// is free text now. Names without a parenthesised suffix (giveaways,
+// custom products with no variation) come back with variation: ''.
 function parseProductName(name){
   const raw = (name || '').trim();
   const m = /^(.*)\s\(([^)]+)\)\s*$/.exec(raw);
-  if(m && VARIATIONS.includes(m[2])) return { base: m[1].trim(), variation: m[2] };
+  if(m) return { base: m[1].trim(), variation: m[2].trim() };
   return { base: raw, variation: '' };
 }
 function composeProductName(base, variation){
@@ -123,8 +124,30 @@ function getProductSuggestions(){
   return [...bases].sort();
 }
 
+// Same idea for the Variation field: starts with the preset flavor list
+// but also picks up any custom variation someone has typed in before, so
+// it grows the same way the product name suggestions do.
+function getVariationSuggestions(){
+  const variations = new Set(VARIATIONS);
+  salesReports.forEach(r => {
+    if(!r.product_name) return;
+    const v = parseProductName(r.product_name).variation;
+    if(v) variations.add(v);
+  });
+  return [...variations].sort();
+}
+
 function todayStr(){
   return new Date().toISOString().slice(0,10);
+}
+
+// Who logged a sales report row — the promoter if it came from the
+// Promoters app, otherwise the admin's typed-in name if it was saved
+// from the office app (see logged_by_admin_name), falling back to a
+// generic "Admin" for rows saved before that was tracked.
+function loggedByLabel(r){
+  if(r.promoters) return displayName(r.promoters);
+  return r.logged_by_admin_name || 'Admin';
 }
 
 // Auto-creates stock rows for the next working date on the schedule that
@@ -293,12 +316,12 @@ function renderSalesItems(items, isToday, compact){
     const giveaway = isFreeItem(i);
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const statsHtml = compact
-      ? `Given out <b>${sales}</b>`
+      ? `Given out <b>${sales}</b> · Logged by <b>${esc(loggedByLabel(i))}</b>`
       : (()=>{
           const expectedClosing = opening - sales;
           const variance = closing - expectedClosing;
           return `
-            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b>
+            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b> · Logged by <b>${esc(loggedByLabel(i))}</b>
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           `;
@@ -378,14 +401,12 @@ function openSalesForm(id){
           <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
         <div class="field">
-          <label>Variation</label>
-          <select id="s-variation" onchange="onProductNameChange()">
-            <option value="">— None —</option>
-            ${VARIATIONS.map(v=>`<option value="${v}" ${editing&&parseProductName(editing.product_name).variation===v?'selected':''}>${v}</option>`).join('')}
-          </select>
+          <label>Variation (optional)</label>
+          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()">
+          <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
-      <div class="field-hint" style="margin:-8px 0 14px;">Saved together as one product, e.g. "Bio Dishwash 1L (Bidara)" — pick "— None —" for items with no flavor.</div>
+      <div class="field-hint" style="margin:-8px 0 14px;">Saved together as one product, e.g. "Bio Dishwash 1L (Bidara)" — leave blank for items with no flavor.</div>
       <div class="field">
         <label class="checkbox-row">
           <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">

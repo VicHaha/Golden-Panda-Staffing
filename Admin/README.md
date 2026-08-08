@@ -33,6 +33,10 @@ files **in this order**:
     per date instead of just one
 11. `sql/migration_promoter_active.sql` — normalizes the `active` column
     used by the new promoter hide/show feature
+12. `sql/migration_admin_auth_rls.sql` — **optional**, run only after
+    step 2 below (real login) is set up. Locks down promoters/stores/
+    jobs/settings to signed-in users only, same as sales_reports
+    already is.
 
 All are safe to run again if you're not sure which you've already run.
 
@@ -48,22 +52,23 @@ delete from stores where name ilike 'PG Mall';
 Any past jobs/reports that referenced it will just show as
 "(store removed)" instead of breaking.
 
-### 2. Set up the office account (required after step 1.7 above)
+### 2. Log in (required after step 1.7 above)
 
 Once `migration_auth_lockdown.sql` is run, saving a stock report needs
-an authenticated session — including from this office app. This app has
-no visible login screen; instead it signs in automatically in the
-background using one shared account, so nothing changes for you day to
-day. You just need to create that account once:
+an authenticated session — including from this office app. The app now
+has a real login screen, same as the promoter-facing stock app: the
+first person to open it taps **"No account yet? Create one"**, enters
+an email and password, and that's the office account from then on.
+Anyone else who needs access can either use the same login or create
+their own — every signed-in account can read and write everything in
+this app, there's no per-person permission split.
 
-1. In Supabase → **Authentication → Users → Add user**. Email:
-   `office@goldenpanda.internal` (or anything you like). Set a password.
-2. Open `js/supabase.js` in this app, find `OFFICE_AUTH_EMAIL` and
-   `OFFICE_AUTH_PASSWORD` near the top, and put in the same email and
-   password. Redeploy.
+If you'd rather set an account up ahead of time instead of letting
+whoever opens the app first create it, you can also add one directly in
+Supabase → **Authentication → Users → Add user**.
 
-If you skip this, everything else in the app keeps working — only
-saving/editing/deleting Stock tab entries will fail until it's set up.
+If nobody's logged in yet, everything else in the app keeps working —
+only saving/editing/deleting Stock tab entries will fail until someone does.
 
 ### 3. Set up Cloudinary for stock photos (required for the photo feature)
 
@@ -84,6 +89,9 @@ upload button will show an error if tapped.
 
 ### What's new in this version
 
+- **Real login** — replaces the old invisible shared "office account"
+  with an actual login/create-account screen (email + password), the
+  same as the promoter-facing stock app already had. See step 2 above.
 - **Hide/show promoters** — no longer just delete-or-keep. "Hide" a
   promoter who's left or is on leave and they disappear from new job/
   stock-log pickers immediately, but their name, past schedule, and pay
@@ -204,12 +212,19 @@ links to a promoter and a store by ID, not just by name).
 
 ## Security note
 
-There's still no login screen — anyone with your deployed URL can use
-the app, and the RLS policies are currently wide open (see the comment
-block at the bottom of `sql/rls.sql`). That's an acceptable tradeoff for
-a small internal tool with an unpublished URL, but if you want real
-access control (e.g., only you and your boss can open it), the next step
-is adding Supabase Auth — happy to build that next if you'd like it.
+The app now has a real login screen (email + password, same as the
+promoter-facing stock app) instead of the old invisible shared account,
+so only people who know an account's credentials can open it. The
+`sales_reports` table already required a signed-in session to write to;
+promoters/stores/jobs/settings are still on the original open-anon-key
+policy from `sql/rls.sql` unless you've also run the optional
+`sql/migration_admin_auth_rls.sql` (see step 1.12 above), which locks
+those down to signed-in users too, matching sales_reports.
+
+Every account that logs in has full access — there's no per-person role
+or permission split (e.g. no "read-only" account). If that's ever
+needed, it'd mean adding a roles table and checking it in the RLS
+policies, rather than anything client-side.
 
 ## Updating the app later
 
