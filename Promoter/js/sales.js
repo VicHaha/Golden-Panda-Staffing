@@ -308,7 +308,6 @@ function renderSalesItems(items, isToday, compact){
         <div class="sales-item-main">
           <div class="sales-item-name">${esc(displayProductName(i))}</div>
           <div class="sales-item-stats">${statsHtml}</div>
-          ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         ${isToday ? `

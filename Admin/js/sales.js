@@ -337,7 +337,6 @@ function renderSalesItems(items, compact){
           <div class="sales-item-main">
             <div class="sales-item-name">${esc(displayProductName(i))}</div>
             <div class="sales-item-stats">Given out <b>${sales}</b></div>
-            <div class="sales-item-remarks">Logged by ${esc(loggedByLabel(i))}</div>
             ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
           </div>
           <div class="job-actions">
@@ -350,9 +349,6 @@ function renderSalesItems(items, compact){
 
     const expectedClosing = opening - sales;
     const variance = closing - expectedClosing;
-    const storeRoom = Number(i.store_room_qty||0), homeShelf = Number(i.home_shelf_qty||0), standee = Number(i.standee_qty||0);
-    const locationVariance = closing - (storeRoom + homeShelf + standee);
-    const showLocationLine = !giveaway && (storeRoom || homeShelf || standee || locationVariance !== 0);
     return `
       <div class="sales-item">
         <div class="sales-item-main">
@@ -362,8 +358,6 @@ function renderSalesItems(items, compact){
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
-          ${showLocationLine ? `<div class="sales-item-remarks">Store Room <b>${storeRoom}</b> · Home Shelf <b>${homeShelf}</b> · Standee <b>${standee}</b>${locationVariance !== 0 ? ` <span class="sales-variance short">${locationVariance>0?'+':''}${locationVariance} vs shelves</span>` : ''}</div>` : ''}
-          <div class="sales-item-remarks">Logged by ${esc(loggedByLabel(i))}</div>
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <div class="job-actions">
