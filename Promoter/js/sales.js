@@ -9,6 +9,8 @@ let salesShowPast = false;
 
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
+// These are the full stored names (base product + variation baked in)
+// used to auto-seed each working date's rows — see ensureStockRowsForDate.
 const PRODUCT_SUGGESTIONS = [
   'Gift Set',
   'Flyer',
@@ -21,6 +23,38 @@ const PRODUCT_SUGGESTIONS = [
   'Refill Bio Dishwash 480ml (Ginger)',
   'Refill Bio Dishwash 480ml (Melon)'
 ];
+
+// Product name and variation are entered as two separate fields in the
+// form (see openSalesForm) but stored together as one string, e.g.
+// "Bio Dishwash 1L (Bidara)" — same format as before, so tab
+// categorization, carry-forward matching, and legacy rows all keep
+// working unchanged. VARIATIONS lists the recognised flavors; anything
+// else typed into the base name field is stored as-is with no variation.
+const VARIATIONS = ['Bidara', 'Ginger', 'Melon'];
+const VARIANT_BASE_PRODUCTS = ['Bio Dishwash 1L', 'Refill Bio Dishwash 480ml'];
+
+// Splits a stored product_name like "Bio Dishwash 1L (Bidara)" back into
+// its base name and variation, so the form can show them as two fields
+// and the list can show just the variation. Names without a recognised
+// variation (giveaways, custom products) come back with variation: ''.
+function parseProductName(name){
+  const raw = (name || '').trim();
+  const m = /^(.*)\s\(([^)]+)\)\s*$/.exec(raw);
+  if(m && VARIATIONS.includes(m[2])) return { base: m[1].trim(), variation: m[2] };
+  return { base: raw, variation: '' };
+}
+function composeProductName(base, variation){
+  base = (base || '').trim();
+  variation = (variation || '').trim();
+  return variation ? `${base} (${variation})` : base;
+}
+// The name shown in the stock list — just the variation when there is
+// one (the tab already says "1L Bio Dishwash" or "Refill", so repeating
+// the full name is redundant), else the full product name.
+function displayProductName(report){
+  const { base, variation } = parseProductName(report.product_name);
+  return variation || base;
+}
 
 // Auto-seeded giveaway items — used only as the DEFAULT "free item" guess
 // for a product name (when auto-creating a date's rows, or prefilling the
@@ -40,9 +74,53 @@ function isFreeItem(report){
   return isGiveaway(report && report.product_name);
 }
 
+// ---------------- Stock category tabs ----------------
+// A date's products are split into three tabs — 1L Bio Dishwash, Refill,
+// and Free — instead of one long mixed list, so keying in or scanning
+// data for one product line at a time is faster and clearer. Free items
+// are grouped purely off each row's own is_free_item flag; the two
+// sellable groups are told apart by whether "refill" appears in the name,
+// so any custom product typed in still lands somewhere sensible.
+const STOCK_CATEGORIES = [
+  { key:'bottle', label:'1L Bio Dishwash' },
+  { key:'refill', label:'Refill' },
+  { key:'free', label:'Free' }
+];
+function stockCategoryKey(report){
+  if(isFreeItem(report)) return 'free';
+  if(/refill/i.test(report.product_name||'')) return 'refill';
+  return 'bottle';
+}
+function groupByStockCategory(items){
+  const grouped = { bottle:[], refill:[], free:[] };
+  items.forEach(i => grouped[stockCategoryKey(i)].push(i));
+  return grouped;
+}
+
+// Which tab is showing per date — defaults to the first category that
+// actually has products for that date, falling back to 'bottle'.
+let salesActiveTab = {};
+function activeStockTab(date, grouped){
+  const current = salesActiveTab[date];
+  if(current && grouped[current] && grouped[current].length) return current;
+  const firstNonEmpty = STOCK_CATEGORIES.find(c => grouped[c.key].length);
+  return firstNonEmpty ? firstNonEmpty.key : 'bottle';
+}
+function setStockTab(date, key){
+  salesActiveTab[date] = key;
+  render();
+}
+function renderStockTabs(date, grouped, active){
+  return `<div class="stock-tabs">${STOCK_CATEGORIES.map(c=>{
+    const count = grouped[c.key].length;
+    return `<button class="stock-tab ${active===c.key?'active':''}" onclick="setStockTab('${date}','${c.key}')">${c.label}${count?` <span class="stock-tab-count">${count}</span>`:''}</button>`;
+  }).join('')}</div>`;
+}
+
 function getProductSuggestions(){
-  const used = salesReports.map(r => r.product_name).filter(Boolean);
-  return [...new Set([...PRODUCT_SUGGESTIONS, ...used])].sort();
+  const bases = new Set([...GIVEAWAY_ITEMS, ...VARIANT_BASE_PRODUCTS]);
+  salesReports.forEach(r => { if(r.product_name) bases.add(parseProductName(r.product_name).base); });
+  return [...bases].sort();
 }
 
 function todayStr(){
@@ -99,6 +177,11 @@ async function ensureStockRowsForDate(date){
       .filter(r => r.product_name === product && r.work_date < date)
       .sort((a,b) => b.work_date.localeCompare(a.work_date));
     const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
+    // Warehouse stock (admin-only field, not shown in this app's form) is
+    // a running total, not a daily transaction — carry the last known
+    // figure forward untouched so it stays correct no matter which app
+    // ends up creating the next date's row.
+    const warehouseCarryOver = priorEntries.length ? Number(priorEntries[0].warehouse_qty||0) : 0;
 
     try{
       const created = await DB.addSalesReport({
@@ -111,7 +194,8 @@ async function ensureStockRowsForDate(date){
         closing_qty: carryOver,
         remarks: null,
         photo_url: null,
-        is_free_item: giveaway
+        is_free_item: giveaway,
+        warehouse_qty: warehouseCarryOver
       });
       // Keep the local cache current so a later target date processed in
       // this same run carries over from the row we just created.
@@ -158,6 +242,18 @@ function renderSales(){
       const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
       const isToday = date === today;
 
+      let body = '';
+      if(expanded){
+        const grouped = groupByStockCategory(items);
+        const active = activeStockTab(date, grouped);
+        const activeItems = grouped[active];
+        body = `<div class="sales-group-body">
+          ${renderDayPhotoRow(date, isToday)}
+          ${renderStockTabs(date, grouped, active)}
+          ${activeItems.length ? renderSalesItems(activeItems, isToday, active==='free') : `<div class="stock-tab-empty">No products in this group yet.</div>`}
+        </div>`;
+      }
+
       html += `
         <div class="sales-group">
           <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
@@ -167,7 +263,7 @@ function renderSales(){
             </div>
             <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
           </button>
-          ${expanded ? `<div class="sales-group-body">${renderDayPhotoRow(date, isToday)}${renderSalesItems(items, isToday)}</div>` : ''}
+          ${body}
         </div>
       `;
     });
@@ -189,21 +285,28 @@ function toggleSalesShowPast(){
   render();
 }
 
-function renderSalesItems(items, isToday){
+// `compact` is used for the Free tab — giveaways don't need the full
+// open/sold/close breakdown, just how many went out, so the list stays
+// quick to scan while keying in samples/coupons/etc.
+function renderSalesItems(items, isToday, compact){
   return items.map(i=>{
     const giveaway = isFreeItem(i);
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
-    const expectedClosing = opening - sales;
-    const variance = closing - expectedClosing;
-    const statsHtml = `
-      Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b>
-      ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
-      ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
-    `;
+    const statsHtml = compact
+      ? `Given out <b>${sales}</b>`
+      : (()=>{
+          const expectedClosing = opening - sales;
+          const variance = closing - expectedClosing;
+          return `
+            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b>
+            ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
+            ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
+          `;
+        })();
     return `
       <div class="sales-item">
         <div class="sales-item-main">
-          <div class="sales-item-name">${esc(i.product_name)}</div>
+          <div class="sales-item-name">${esc(displayProductName(i))}</div>
           <div class="sales-item-stats">${statsHtml}</div>
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
@@ -269,11 +372,21 @@ function openSalesForm(id){
           ${stores.map(s=>`<option value="${s.id}" ${editing&&editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field">
-        <label>Product name</label>
-        <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. Bio Dishwash 1L (Bidara)" oninput="onProductNameChange()">
-        <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+      <div class="field-row">
+        <div class="field" style="flex:1.6;">
+          <label>Product name</label>
+          <input id="s-product" list="product-list" value="${editing?esc(parseProductName(editing.product_name).base):''}" placeholder="e.g. Bio Dishwash 1L" oninput="onProductNameChange()">
+          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+        </div>
+        <div class="field">
+          <label>Variation</label>
+          <select id="s-variation" onchange="onProductNameChange()">
+            <option value="">— None —</option>
+            ${VARIATIONS.map(v=>`<option value="${v}" ${editing&&parseProductName(editing.product_name).variation===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
       </div>
+      <div class="field-hint" style="margin:-8px 0 14px;">Saved together as one product, e.g. "Bio Dishwash 1L (Bidara)" — pick "— None —" for items with no flavor.</div>
       <div class="field">
         <label class="checkbox-row">
           <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">
@@ -365,7 +478,9 @@ function onStockFieldInput(){
 async function saveSalesForm(id){
   const work_date = todayStr(); // promoters can only ever save into today
   const store_id = document.getElementById('s-store').value || null;
-  const product_name = document.getElementById('s-product').value.trim();
+  const productBase = document.getElementById('s-product').value.trim();
+  const variation = document.getElementById('s-variation').value;
+  const product_name = composeProductName(productBase, variation);
   const is_free_item = document.getElementById('s-free-item').checked;
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
   const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
@@ -379,7 +494,7 @@ async function saveSalesForm(id){
   // still has a legacy photo_url leaves it untouched.
   const photo_url = editing ? (editing.photo_url || null) : null;
 
-  if(!product_name){
+  if(!productBase){
     showToast('Product name is required'); return;
   }
 

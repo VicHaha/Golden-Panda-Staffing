@@ -288,6 +288,29 @@ body{
 }
 .sales-group-chevron.open{transform:rotate(180deg);}
 .sales-group-body{border-top:1px solid var(--line); padding:4px 14px 8px;}
+
+/* Stock category tabs — split a date's products into 1L Bio Dishwash /
+   Refill / Free groups instead of one long mixed list, so keying in or
+   scanning data for one product line at a time is faster and clearer. */
+.stock-tabs{
+  display:flex; gap:6px; margin:8px 0 6px; overflow-x:auto; scrollbar-width:none;
+}
+.stock-tabs::-webkit-scrollbar{display:none;}
+.stock-tab{
+  flex:1; white-space:nowrap; padding:7px 10px; border-radius:9px; border:1px solid var(--line);
+  background:var(--bg); font-family:'Inter'; font-weight:600; font-size:11.5px; color:var(--ink-soft);
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.stock-tab.active{background:var(--gold); color:#fff; border-color:var(--gold);}
+.stock-tab-count{
+  display:inline-block; margin-left:4px; padding:0 5px; border-radius:99px; font-size:10px; font-weight:700;
+  background:rgba(0,0,0,0.08); color:inherit;
+}
+.stock-tab.active .stock-tab-count{background:rgba(255,255,255,0.28);}
+.stock-tab-empty{
+  padding:18px 4px; text-align:center; font-size:12px; color:var(--ink-faint);
+}
+
 .sales-item{
   display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
   padding:10px 0; border-bottom:1px solid var(--line);
