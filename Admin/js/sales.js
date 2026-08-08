@@ -25,12 +25,8 @@ const PRODUCT_SUGGESTIONS = [
   'Flyer',
   'Small Samples',
   'Coupons',
-  'Bio Dishwash 1L (Bidara)',
-  'Bio Dishwash 1L (Ginger)',
-  'Bio Dishwash 1L (Melon)',
-  'Refill Bio Dishwash 480ml (Bidara)',
-  'Refill Bio Dishwash 480ml (Ginger)',
-  'Refill Bio Dishwash 480ml (Melon)'
+  'Bio Dishwash 1L',
+  'Refill Bio Dishwash 480ml'
 ];
 
 // Product name and variation are entered as two separate fields in the
@@ -432,13 +428,13 @@ function openSalesForm(id){
           </select>
         </div>
       </div>
-      <div class="field-hint" style="margin:-8px 0 14px;">Saved together as one product, e.g. "Bio Dishwash 1L (Bidara)" — pick "— None —" for items with no flavor.</div>
+      <div class="field-hint" style="margin:-8px 0 14px;"></div>
       <div class="field">
         <label class="checkbox-row">
           <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">
           Free item (given away, not sold)
         </label>
-        <div class="field-hint" id="s-free-item-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
+        <div class="field-hint" id="s-free-item-hint"></div>
       </div>
       <div class="field"><label>Opening stock</label>
         <div class="qty-stepper">
@@ -464,7 +460,7 @@ function openSalesForm(id){
       <div class="field" id="given-out-field" style="display:none;">
         <label>Given out (auto)</label>
         <input id="s-given-out-display" type="text" value="0" readonly disabled>
-        <div class="field-hint">Calculated automatically: opening stock − closing stock.</div>
+        <div class="field-hint"></div>
       </div>
       <div class="field" id="stock-location-field">
         <label>Stock by location (optional)</label>
@@ -479,7 +475,7 @@ function openSalesForm(id){
         <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
         <div class="field"><label>Warehouse stock</label><input id="s-warehouse" type="number" min="0" step="1" value="${editing?editing.warehouse_qty:'0'}" placeholder="0"></div>
       </div>
-      <div class="field-hint" style="margin:-8px 0 14px;">Warehouse stock carries forward automatically to the next working date.</div>
+      <div class="field-hint" style="margin:-8px 0 14px;"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
