@@ -123,14 +123,16 @@ function renderStockOverview(){
     html += `<div class="section-title" style="margin-top:2px;">By outlet</div>`;
     storeEntries.forEach((s,i)=>{
       html += `
-        <div class="analysis-table-row">
-          <div style="display:flex; align-items:center; min-width:0;">
+        <div class="analysis-table-row" style="align-items:center;">
+          <div style="display:flex; align-items:center; min-width:0; flex:1;">
             <span class="analysis-rank">${i+1}</span>
-            <span>${esc(s.name)}</span>
+            <span style="font-size:16px;">${esc(s.name)}</span>
           </div>
-          <div style="text-align:right; flex-shrink:0;">
-            <div><b>${s.total}</b> units</div>
-            <div style="font-size:11px; color:var(--ink-soft); margin-top:1px;">Store Room ${s.storeRoom} · Home Shelf ${s.homeShelf} · Standee ${s.standee}</div>
+          <div style="text-align:right; flex-shrink:0; min-width:210px;">
+            <div style="font-size:16px;"><b>${s.total}</b> units</div>
+            <div style="font-size:11px; color:var(--ink-soft); margin-top:3px; white-space:nowrap;">
+              Store Room ${s.storeRoom} · Home Shelf ${s.homeShelf} · Standee ${s.standee}
+            </div>
           </div>
         </div>
       `;
@@ -143,6 +145,7 @@ function renderStockOverview(){
 // ---------------- Main render ----------------
 function renderStockManagement(){
   let html = `<div class="section-title">Stock Management</div>`;
+  html += `<div class="field-hint" style="margin:-8px 0 16px;">Where each product's stock currently sits — Store Room, Home Shelf, Standee, and the central warehouse. Opening/sold/closing counts live on the Sales tab.</div>`;
   html += renderStockOverview();
 
   const sellable = salesReports.filter(r => !isFreeItem(r));

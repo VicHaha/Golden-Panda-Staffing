@@ -343,6 +343,7 @@ function renderSales(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}">`}
       <button class="btn btn-gold" id="stock-export-btn">Export .xlsx</button>
     </div>
+    <div class="field-hint" style="margin:-6px 0 14px;">One Excel file for this period — raw stock &amp; shift reports plus summary rollups, all in one place.</div>
   `;
 
   if(salesReports.length===0 && dayPhotos.length===0){
