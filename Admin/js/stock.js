@@ -50,6 +50,24 @@ function renderStockMgmtTabs(date, grouped, active){
   }).join('')}</div>`;
 }
 
+// ---------------- Outlet tabs ----------------
+// Same idea as the Sales tab's outlet tabs (see groupByOutlet /
+// renderOutletTabs in js/sales.js, which this reuses) — split a date's
+// records by outlet when more than one was logged that day, so stock
+// location for each outlet is viewed one at a time. Kept as its own
+// active-tab state (stockMgmtActiveOutletTab) rather than sharing the
+// Sales tab's, so switching outlets in one tab doesn't jump the other.
+let stockMgmtActiveOutletTab = {};
+function activeStockMgmtOutletTab(date, groups){
+  const current = stockMgmtActiveOutletTab[date];
+  if(current && groups.some(g => g.key === current)) return current;
+  return groups.length ? groups[0].key : null;
+}
+function setStockMgmtOutletTab(date, key){
+  stockMgmtActiveOutletTab[date] = key;
+  render();
+}
+
 function toggleStockMgmtDate(date){
   if(stockMgmtExpandedDates.has(date)) stockMgmtExpandedDates.delete(date);
   else stockMgmtExpandedDates.add(date);
@@ -152,10 +170,20 @@ function renderStockManagement(){
 
     let body = '';
     if(expanded){
-      const grouped = groupByStockCategory(items);
+      // Split by outlet first (only rendered as tabs when a date actually
+      // has more than one outlet) — the product-category tabs below then
+      // work on just that outlet's records. Reuses groupByOutlet from
+      // js/sales.js.
+      const outletGroups = groupByOutlet(items);
+      const showOutletTabs = outletGroups.length > 1;
+      const activeOutletKey = showOutletTabs ? activeStockMgmtOutletTab(date, outletGroups) : null;
+      const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
+
+      const grouped = groupByStockCategory(scopedItems);
       const active = activeStockMgmtTab(date, grouped);
       const activeItems = grouped[active];
       body = `<div class="sales-group-body">
+        ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey, 'setStockMgmtOutletTab') : ''}
         ${renderStockMgmtTabs(date, grouped, active)}
         ${activeItems.length ? renderStockMgmtItems(activeItems) : `<div class="stock-tab-empty">No products in this group yet.</div>`}
       </div>`;

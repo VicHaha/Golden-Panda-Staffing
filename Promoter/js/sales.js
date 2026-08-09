@@ -457,13 +457,11 @@ function openSalesForm(id){
           <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
-      <div class="field-hint" style="margin:-8px 0 14px;">Saved together as one product, e.g. "Bio Dishwash 1L (Bidara)" — leave blank for items with no flavor.</div>
       <div class="field">
         <label class="checkbox-row">
           <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">
           Free item (given away, not sold)
         </label>
-        <div class="field-hint">Gift Set, Flyer, Small Samples, and Coupons are ticked automatically — untick or tick any product as needed.</div>
       </div>
       <div class="field"><label>Opening stock</label>
         <div class="qty-stepper">

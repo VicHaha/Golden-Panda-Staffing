@@ -95,6 +95,21 @@ upload button will show an error if tapped.
 
 ### What's new in this version
 
+- **Excel export rebuilt — now 6 focused sheets** — the Export .xlsx
+  button (Sales tab) no longer produces the old raw-plus-summary sheet
+  set described just below. It now produces exactly: **Raw Sales Data**,
+  **Estimated Sales during Non-event Day** (per-outlet, per-SKU estimate
+  of stock sold between two consecutive event dates with nobody on
+  site), **Sales Summary by Outlet**, **Raw Stock Data**, **Outlet
+  Performance** (from Promoter shift reports), and **Customer Analysis**
+  (age range + feedback from shift reports). Column widths, an
+  autofilter, and real date/number/percent formatting are applied to
+  every sheet. Note: the bundled SheetJS build (Community Edition) can't
+  set bold headers, wrapped text, or frozen panes — see the comment
+  above `exportStockExcel` in `js/sales.js` for what was actually tested
+  and why. The old day-level general feedback note (from the Sales tab's
+  "General feedback" field) is no longer included in the export — it
+  still lives on-screen on the Sales tab, just not in this workbook.
 - **Analysis tab removed, replaced by a new "Stock" tab** — the old
   view-only Analysis tab (store performance, product performance, shift
   engagement, age range, feedback) is gone. In its place, a new **Stock

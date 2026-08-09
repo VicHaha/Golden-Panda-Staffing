@@ -324,7 +324,8 @@ const DB = {
   },
 
   // ---------------- Shift reports (read-only here — logged from the Promoters app) ----------------
-  // Powers the Excel export's "Shift Engagement" sheet. No add/update/
+  // Powers the Excel export's "Outlet Performance" and "Customer
+  // Analysis" sheets (see exportStockExcel in js/sales.js). No add/update/
   // delete here on purpose: promoters log these from their own app; the
   // office app only reads them.
   async getShiftReports(){
