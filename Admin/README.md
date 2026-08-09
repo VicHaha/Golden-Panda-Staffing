@@ -37,6 +37,12 @@ files **in this order**:
     step 2 below (real login) is set up. Locks down promoters/stores/
     jobs/settings to signed-in users only, same as sales_reports
     already is.
+13. `sql/migration_sales_customer_feedback.sql` — **superseded, skip on
+    a fresh database** — see step 14.
+14. `sql/migration_day_feedback.sql` — creates a `day_feedback` table
+    for one general feedback field per working date, shown at the
+    bottom of each date's record on the Sales tab (see "What's new in
+    this version" below).
 
 All are safe to run again if you're not sure which you've already run.
 
@@ -88,6 +94,36 @@ Until this is set up, everything else works fine — only the photo
 upload button will show an error if tapped.
 
 ### What's new in this version
+
+- **Analysis tab removed, replaced by a new "Stock" tab** — the old
+  view-only Analysis tab (store performance, product performance, shift
+  engagement, age range, feedback) is gone. In its place, a new **Stock
+  Management** tab sits between Sales and Payout, focused specifically on
+  physical stock: an overview of total stock currently on hand at each
+  outlet plus total warehouse stock, and — per product per working date —
+  the Store Room / Home Shelf / Standee breakdown and the running
+  warehouse figure. It's the same expand-by-date, tap-to-edit design as
+  the Sales tab, just scoped to location/warehouse fields instead of
+  opening/sold/closing. **The Excel export is unchanged** — it still
+  produces the exact same sheets (including the former Analysis
+  summaries: Products, Store Performance, Shift Engagement, Age Range,
+  Feedback) from the Sales tab's Export .xlsx button.
+- **Sales tab simplified** — the Sales form and each product's record now
+  only cover opening stock, sold/given out, and closing stock, plus the
+  existing internal `Remarks` note. Stock-by-location and warehouse
+  figures moved to the new Stock tab (see above); editing a Sales record
+  no longer touches them.
+- **One general feedback field per date, not per product** — each
+  date's record on the Sales tab now has a single "General feedback"
+  field at the bottom (below the product list), instead of a separate
+  customer feedback field on every product row. Saved with its own Save
+  button. Backed by the new `day_feedback` table.
+- **New migration: `sql/migration_day_feedback.sql`** — adds the
+  `day_feedback` table used by the change above. Run it once like the
+  others; it must run before the Sales tab's general feedback field will
+  save. `sql/migration_sales_customer_feedback.sql` is superseded and
+  can be skipped on a fresh database.
+
 
 - **Real login** — replaces the old invisible shared "office account"
   with an actual login/create-account screen (email + password), the

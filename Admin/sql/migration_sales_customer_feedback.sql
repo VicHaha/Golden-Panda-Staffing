@@ -4,6 +4,13 @@
 -- Run this once in Supabase SQL Editor.
 -- =========================================================
 --
+-- SUPERSEDED by migration_day_feedback.sql — the per-product feedback
+-- field this added has been replaced by a single general feedback
+-- field per working date. The app no longer reads or writes this
+-- column; this migration is kept only so this file still matches any
+-- database it was already run against. No need to run this on a fresh
+-- database — skip straight to migration_day_feedback.sql instead.
+--
 -- Adds a free-text "customer feedback" field to each sales record,
 -- entered from the Admin app's Sales form (bottom of each product's
 -- opening/closing/sold entry) — separate from the existing `remarks`

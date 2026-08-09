@@ -1,20 +1,42 @@
 // ============================================================
-// Sales & Stock — per-product opening/sales/closing counts,
-// grouped by working date, expand/collapse per date.
-// This is the office/admin app — admin can edit or delete any date's
-// sales records, past included. (The promoter-facing app still locks
-// past dates for promoters; see its own js/sales.js.)
+// Sales — per-product opening/sold/closing counts, grouped by working
+// date, expand/collapse per date, plus a general feedback note per
+// date. This is the office/admin app — admin can edit or delete any
+// date's sales records, past included. (The promoter-facing app still
+// locks past dates for promoters; see its own js/sales.js.)
+//
+// Stock-by-location and warehouse figures are edited from the separate
+// Stock Management tab (js/stock.js) now, not from here — see that file.
 //
 // Also owns the app's one and only Excel export (see exportStockExcel
 // below) — one workbook per day/month covering both stock and shift
-// data, raw rows plus the Analysis tab's summary rollups. The Analysis
-// tab itself is view-only, so this is the only place to export from.
+// data, raw rows plus summary rollups (products, store performance,
+// shift engagement, age range, feedback).
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
 let stockExportMode = 'monthly'; // 'monthly' | 'daily'
 let stockExportMonth = new Date().toISOString().slice(0,7);
 let stockExportDate = todayStr();
+
+// Shift-block and customer-age-range constants — previously lived in the
+// (now-removed) Analysis tab's js/analysis.js and js/shift-analysis.js,
+// but the Excel export below still builds its "Shift Engagement" and
+// "Age Range" summary sheets from them, so they moved here rather than
+// being deleted along with that tab. Mirrors AGE_RANGE_LABELS in the
+// Promoters app's shift.js — keep in sync.
+const ANALYSIS_SHIFT_BLOCKS = [
+  { key: 'before_break', title: 'Before Break', full: 'Before Break (10am–2pm)' },
+  { key: 'after_break', title: 'After Break', full: 'After Break (3pm–6pm)' }
+];
+const AGE_RANGE_LABELS = {
+  under_18: 'Under 18',
+  '18_25': '18–25',
+  '26_35': '26–35',
+  '36_50': '36–50',
+  '50_plus': '50+'
+};
+const AGE_RANGE_ORDER = ['under_18', '18_25', '26_35', '36_50', '50_plus'];
 
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
@@ -174,9 +196,9 @@ function loggedByLabel(r){
 }
 
 // Union of every date that has *either* a stock report or a shift report
-// logged, most recent first. Used by the Stock tab's daily export picker
-// (which now bundles both) and by the Analysis tab's viewing picker —
-// so a day with only a shift report logged still shows up.
+// logged, most recent first. Used by the Sales tab's daily export picker
+// (which bundles both) — so a day with only a shift report logged still
+// shows up.
 function combinedLoggedDatesDesc(){
   const set = new Set([...stockLoggedDatesDesc(), ...shiftReports.map(r=>r.work_date)]);
   return [...set].sort((a,b)=> b.localeCompare(a));
@@ -245,6 +267,7 @@ async function ensureStockRowsForDate(date){
         opening_qty: carryOver,
         sales_qty: 0,
         closing_qty: carryOver,
+        remarks: null,
         photo_url: null,
         is_free_item: giveaway,
         warehouse_qty: warehouseCarryOver
@@ -279,11 +302,11 @@ function renderSales(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}">`}
       <button class="btn btn-gold" id="stock-export-btn">Export .xlsx</button>
     </div>
-    <div class="field-hint" style="margin:-6px 0 14px;">One Excel file for this period — raw stock &amp; shift reports plus the Analysis summaries, all in one place.</div>
+    <div class="field-hint" style="margin:-6px 0 14px;">One Excel file for this period — raw stock &amp; shift reports plus summary rollups, all in one place.</div>
   `;
 
   if(salesReports.length===0 && dayPhotos.length===0){
-    return exportControls + emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for a roadshow date.');
+    return exportControls + emptyState('📦','No sales reports yet','Tap + to log opening stock, sold/given out, and closing stock for a roadshow date.');
   }
 
   // Group entries by work_date, newest date first.
@@ -298,7 +321,7 @@ function renderSales(){
   const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
 
-  let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
+  let html = `<div class="section-title">Sales reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
   html += exportControls;
 
   dates.forEach(date=>{
@@ -351,6 +374,7 @@ function renderSalesItems(items, compact){
           <div class="sales-item-main">
             <div class="sales-item-name">${esc(displayProductName(i))}</div>
             <div class="sales-item-stats">Given out <b>${sales}</b> · Logged by <b>${esc(loggedByLabel(i))}</b></div>
+            ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
           </div>
           <div class="job-actions">
             <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
@@ -371,6 +395,7 @@ function renderSalesItems(items, compact){
             ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
             ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
           </div>
+          ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <div class="job-actions">
           <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
@@ -405,9 +430,9 @@ function renderDayPhotoRow(date){
 }
 
 // One general feedback field per working date, sitting at the bottom of
-// that date's record — replaces the old per-product "Remarks" field.
-// Saved with a small Save button rather than autosaving on blur, so a
-// stray tap/click elsewhere in the card can't silently overwrite it.
+// that date's record — replaces the old per-product "Customer feedback"
+// field. Saved with a small Save button rather than autosaving on blur,
+// so a stray tap/click elsewhere in the card can't silently overwrite it.
 function renderDayFeedbackRow(date){
   const entry = dayFeedback.find(d => d.work_date === date);
   const value = entry ? (entry.feedback || '') : '';
@@ -415,7 +440,7 @@ function renderDayFeedbackRow(date){
   return `
     <div class="day-feedback-block">
       <label for="day-feedback-${safeDate}">General feedback</label>
-      <textarea id="day-feedback-${safeDate}" rows="2" placeholder="Overall feedback or notes for this date (optional)" oninput="onDayFeedbackInput('${date}')">${esc(value)}</textarea>
+      <textarea id="day-feedback-${safeDate}" rows="2" placeholder="Overall customer feedback or notes for this date (optional)" oninput="onDayFeedbackInput('${date}')">${esc(value)}</textarea>
       <div class="day-feedback-actions">
         <span class="field-hint" id="day-feedback-hint-${safeDate}"></span>
         <button type="button" class="btn btn-gold btn-sm" id="day-feedback-save-${safeDate}" style="display:none;" onclick="saveDayFeedback('${date}')">Save feedback</button>
@@ -522,17 +547,7 @@ function openSalesForm(id){
         <input id="s-given-out-display" type="text" value="0" readonly disabled>
         <div class="field-hint"></div>
       </div>
-      <div class="field" id="stock-location-field">
-        <label>Stock by location (optional)</label>
-        <div class="field-row">
-          <div class="field"><label>Store Room</label><input id="s-store-room" type="number" min="0" step="1" value="${editing?editing.store_room_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
-          <div class="field"><label>Home Shelf</label><input id="s-home-shelf" type="number" min="0" step="1" value="${editing?editing.home_shelf_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
-          <div class="field"><label>Standee</label><input id="s-standee" type="number" min="0" step="1" value="${editing?editing.standee_qty:'0'}" placeholder="0" oninput="onLocationFieldInput()"></div>
-        </div>
-        <div class="field-hint" id="s-location-hint">Should add up to the closing stock above.</div>
-      </div>
-      <div class="field"><label>Warehouse stock</label><input id="s-warehouse" type="number" min="0" step="1" value="${editing?editing.warehouse_qty:'0'}" placeholder="0"></div>
-      <div class="field-hint" style="margin:-8px 0 14px;"></div>
+      <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
@@ -545,7 +560,6 @@ function openSalesForm(id){
   // product name field stops overriding their choice.
   salesFormFreeItemTouched = false;
   applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
-  updateLocationHint();
 }
 
 // Tracks whether the person has manually ticked/unticked the "Free item"
@@ -570,13 +584,10 @@ function onFreeItemToggle(){
 // For free items, opening/closing stock is still recorded, but the "Sales
 // qty" field is hidden and replaced with a read-only "Given out" figure
 // computed automatically as opening − closing — no manual entry needed.
-// The Store Room / Home Shelf / Standee breakdown is skipped entirely for
-// free items too, since it's only meant to track sellable stock.
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
   document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
-  document.getElementById('stock-location-field').style.display = giveaway ? 'none' : '';
   if(giveaway) updateGivenOutPreview();
 }
 
@@ -591,33 +602,6 @@ function updateGivenOutPreview(){
 
 function onStockFieldInput(){
   if(document.getElementById('s-free-item').checked) updateGivenOutPreview();
-  updateLocationHint();
-}
-
-// Keeps the "Stock by location" hint in sync as any of the three location
-// fields (or closing stock, which they must always add up to exactly) are
-// typed — Store Room + Home Shelf + Standee must equal closing stock for
-// every non-free item, no exceptions.
-function updateLocationHint(){
-  const hint = document.getElementById('s-location-hint');
-  if(!hint) return; // not rendered for free items
-  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
-  const storeRoom = parseFloat(document.getElementById('s-store-room').value) || 0;
-  const homeShelf = parseFloat(document.getElementById('s-home-shelf').value) || 0;
-  const standee = parseFloat(document.getElementById('s-standee').value) || 0;
-  const sum = storeRoom + homeShelf + standee;
-
-  if(sum === closing){
-    hint.textContent = `✓ Matches closing stock (${closing}).`;
-    hint.classList.remove('field-hint-error');
-  }else{
-    hint.textContent = `${sum} entered so far — closing stock is ${closing}.`;
-    hint.classList.add('field-hint-error');
-  }
-}
-
-function onLocationFieldInput(){
-  updateLocationHint();
 }
 
 async function saveSalesForm(id){
@@ -637,16 +621,7 @@ async function saveSalesForm(id){
   // Free items: "given out" is never typed in — it's always opening minus
   // closing. Regular products: sales qty is entered by hand as before.
   const sales_qty = is_free_item ? Math.max(0, opening_qty - closing_qty) : (parseFloat(document.getElementById('s-sales').value) || 0);
-  // Stock-by-location breakdown — admin-only, separate from the opening/
-  // sales/closing workflow numbers above.
-  const store_room_qty = parseFloat(document.getElementById('s-store-room').value) || 0;
-  const home_shelf_qty = parseFloat(document.getElementById('s-home-shelf').value) || 0;
-  const standee_qty = parseFloat(document.getElementById('s-standee').value) || 0;
-  // Warehouse stock — also admin-only, a separate running total (not part
-  // of the closing-stock breakdown above) that carries forward untouched
-  // to the next working date's row until it's edited again — see the
-  // carryOver logic in ensureStockRowsForDate.
-  const warehouse_qty = parseFloat(document.getElementById('s-warehouse').value) || 0;
+  const remarks = document.getElementById('s-remarks').value.trim();
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
@@ -665,7 +640,11 @@ async function saveSalesForm(id){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, photo_url, is_free_item, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name };
+    // Note: this form never touches store_room_qty / home_shelf_qty /
+    // standee_qty / warehouse_qty — those live in the separate Stock
+    // Management section (js/stock.js) now, and are left exactly as they
+    // were on this row (defaulting to 0 for a brand-new row).
+    const payload = { work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, logged_by_admin_name };
     if(id){
       await DB.updateSalesReport(id, payload);
     }else{
@@ -698,9 +677,8 @@ async function deleteSalesReport(id){
 }
 
 // ---------------- Excel export (day or month, everything in one file) ----------------
-// This is the ONE export in the app — the Analysis tab is view-only.
-// One workbook per period: raw stock reports, raw shift reports, and the
-// same summary rollups the Analysis tab shows on screen (products, store
+// This is the ONE export in the app. One workbook per period: raw stock
+// reports, raw shift reports, and summary rollups (products, store
 // performance, shift engagement, age range, feedback), so nothing has to
 // be exported twice from two different tabs.
 
@@ -748,11 +726,12 @@ function exportStockExcel(){
         'Opening Stock': Number(r.opening_qty||0),
         'Sold / Given Out': Number(r.sales_qty||0),
         'Closing Stock': Number(r.closing_qty||0),
-        'Logged By': loggedByLabel(r)
+        'Logged By': loggedByLabel(r),
+        'Remarks': r.remarks || ''
       };
     });
   const wsStockRaw = XLSX.utils.json_to_sheet(stockRawRows);
-  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20}];
+  wsStockRaw['!cols'] = [{wch:12},{wch:26},{wch:16},{wch:16},{wch:13},{wch:13},{wch:13},{wch:20},{wch:24}];
   XLSX.utils.book_append_sheet(wb, wsStockRaw, 'Stock Reports (Raw)');
 
   // ---- Stock Details: one row per product, with Store Room / Home

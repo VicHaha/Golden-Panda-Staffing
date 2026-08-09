@@ -22,7 +22,7 @@ function formatDateLong(dateStr){
 }
 
 // Compact "Thu, 6 Aug 2026" label — used in date-restricted dropdowns
-// (Stock export, Analysis) where formatDateLong() reads too long.
+// (Stock export) where formatDateLong() reads too long.
 function formatDateShort(dateStr){
   return new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short', year:'numeric'});
 }

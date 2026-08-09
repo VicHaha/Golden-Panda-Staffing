@@ -4,11 +4,12 @@
 -- Run this once in Supabase SQL Editor.
 -- =========================================================
 --
--- Replaces the old per-product `remarks` field on sales_reports (each
--- product row could carry its own note) with a single feedback field
--- for the whole working date, shown at the bottom of that date's
--- record on the Sales page — same idea as day_photos (one overall
--- thing per date, not per product).
+-- Replaces the per-product `customer_feedback` field added in
+-- migration_sales_customer_feedback.sql (each product row could carry
+-- its own feedback note) with a single feedback field for the whole
+-- working date, shown at the bottom of that date's record on the
+-- Sales page — same idea as day_photos (one overall thing per date,
+-- not per product).
 --
 -- Only one row per work_date — saving again replaces the same row
 -- (upsert on work_date).
@@ -45,7 +46,8 @@ drop policy if exists "signed-in users can delete day feedback" on day_feedback;
 create policy "signed-in users can delete day feedback" on day_feedback
   for delete to authenticated using (true);
 
--- The old per-product remarks field is retired — the app no longer
--- writes to it. Left in place (not dropped) so any existing notes
--- already logged against past products aren't destroyed; safe to drop
--- later with: alter table sales_reports drop column remarks;
+-- The old per-product customer_feedback column on sales_reports is
+-- retired — the app no longer reads or writes it. Left in place (not
+-- dropped) so any feedback already logged against past products isn't
+-- destroyed; safe to drop later with:
+--   alter table sales_reports drop column customer_feedback;

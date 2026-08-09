@@ -181,7 +181,7 @@ const DB = {
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
-        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name,
+        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name, customer_feedback,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
@@ -324,9 +324,9 @@ const DB = {
   },
 
   // ---------------- Shift reports (read-only here — logged from the Promoters app) ----------------
-  // Powers the Analysis tab's "Shift Engagement" view. No add/update/delete
-  // here on purpose: promoters log these from their own app; the office
-  // app only reads them for analysis.
+  // Powers the Excel export's "Shift Engagement" sheet. No add/update/
+  // delete here on purpose: promoters log these from their own app; the
+  // office app only reads them.
   async getShiftReports(){
     const { data, error } = await sb
       .from('shift_reports')
