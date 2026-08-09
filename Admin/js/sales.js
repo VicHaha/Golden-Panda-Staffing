@@ -150,6 +150,48 @@ function renderStockTabs(date, grouped, active){
   }).join('')}</div>`;
 }
 
+// ---------------- Outlet tabs ----------------
+// A single working date can end up with reports from more than one
+// outlet/store (e.g. a promoter covers two malls in one day). When that
+// happens, split the date's records into a row of outlet tabs — inserted
+// right below the date's header — so each outlet's products/stock tabs
+// are viewed one at a time instead of all mixed together. A date with
+// only one outlet (the common case) skips the tabs entirely and shows
+// exactly as before. Rows with no store selected are grouped under a
+// single "Unspecified" tab, keeping their original relative order.
+function groupByOutlet(items){
+  const groups = [];
+  const byKey = {};
+  items.forEach(i=>{
+    const key = i.store_id || '__none__';
+    if(!byKey[key]){
+      byKey[key] = { key, label: i.stores ? i.stores.name : 'Unspecified', items: [] };
+      groups.push(byKey[key]);
+    }
+    byKey[key].items.push(i);
+  });
+  return groups;
+}
+
+// Which outlet tab is showing per date — defaults to the first outlet
+// that has records, falling back to whichever comes first if the
+// previously-active outlet's records are gone (e.g. all deleted/edited).
+let salesActiveOutletTab = {};
+function activeOutletTab(date, groups){
+  const current = salesActiveOutletTab[date];
+  if(current && groups.some(g => g.key === current)) return current;
+  return groups.length ? groups[0].key : null;
+}
+function setOutletTab(date, key){
+  salesActiveOutletTab[date] = key;
+  render();
+}
+function renderOutletTabs(date, groups, active){
+  return `<div class="stock-tabs outlet-tabs">${groups.map(g=>`
+    <button class="stock-tab ${active===g.key?'active':''}" onclick="setOutletTab('${date}','${g.key}')">${esc(g.label)}${g.items.length?` <span class="stock-tab-count">${g.items.length}</span>`:''}</button>
+  `).join('')}</div>`;
+}
+
 // Combines the fixed suggestions above with any product names already
 // used in past reports, so custom products you've added before show up
 // as suggestions too — the list grows on its own. Only base names are
@@ -333,10 +375,19 @@ function renderSales(){
     const isToday = date === today;
     let body = '';
     if(expanded){
-      const grouped = groupByStockCategory(items);
+      // Split by outlet first (only rendered as tabs when a date actually
+      // has more than one outlet) — the product-category tabs below then
+      // work on just that outlet's records.
+      const outletGroups = groupByOutlet(items);
+      const showOutletTabs = outletGroups.length > 1;
+      const activeOutletKey = showOutletTabs ? activeOutletTab(date, outletGroups) : null;
+      const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
+
+      const grouped = groupByStockCategory(scopedItems);
       const active = activeStockTab(date, grouped);
       const activeItems = grouped[active];
       body = `<div class="sales-group-body">
+        ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey) : ''}
         ${renderDayPhotoRow(date)}
         ${renderStockTabs(date, grouped, active)}
         ${activeItems.length ? renderSalesItems(activeItems, active==='free') : `<div class="stock-tab-empty">No products in this group yet.</div>`}

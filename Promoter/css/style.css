@@ -311,6 +311,14 @@ body{
   padding:18px 4px; text-align:center; font-size:12px; color:var(--ink-faint);
 }
 
+/* Outlet tabs — separates a date's records by store/outlet when more than
+   one outlet was logged that day. Sits above the product-category tabs,
+   right below the date header. Uses the ink color for its active state
+   (instead of the category tabs' gold) so the two tab rows read as
+   distinct levels at a glance. */
+.outlet-tabs{margin-top:0;}
+.outlet-tabs .stock-tab.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+
 .sales-item{
   display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
   padding:10px 0; border-bottom:1px solid var(--line);
