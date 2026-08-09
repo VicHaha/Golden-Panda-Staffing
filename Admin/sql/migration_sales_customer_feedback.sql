@@ -1,0 +1,16 @@
+-- =========================================================
+-- Golden Panda Roadshow Staffing System
+-- Migration: customer feedback field on sales_reports
+-- Run this once in Supabase SQL Editor.
+-- =========================================================
+--
+-- Adds a free-text "customer feedback" field to each sales record,
+-- entered from the Admin app's Sales form (bottom of each product's
+-- opening/closing/sold entry) — separate from the existing `remarks`
+-- field, which stays as an internal note (e.g. "2 units damaged").
+-- customer_feedback is what a shopper actually said, in their own
+-- words, about that product.
+--
+-- Defaults to null so existing rows are unaffected.
+
+alter table sales_reports add column if not exists customer_feedback text;

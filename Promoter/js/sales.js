@@ -397,12 +397,12 @@ function openSalesForm(id){
       <div class="field-row">
         <div class="field" style="flex:1.6;">
           <label>Product name</label>
-          <input id="s-product" list="product-list" value="${editing?esc(parseProductName(editing.product_name).base):''}" placeholder="e.g. Bio Dishwash 1L" oninput="onProductNameChange()">
+          <input id="s-product" list="product-list" value="${editing?esc(parseProductName(editing.product_name).base):''}" placeholder="e.g. Bio Dishwash 1L" oninput="onProductNameChange()" onchange="onProductNameChange()">
           <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
         <div class="field">
           <label>Variation (optional)</label>
-          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()">
+          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()" onchange="onProductNameChange()">
           <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
@@ -501,7 +501,18 @@ async function saveSalesForm(id){
   const productBase = document.getElementById('s-product').value.trim();
   const variation = document.getElementById('s-variation').value;
   const product_name = composeProductName(productBase, variation);
-  const is_free_item = document.getElementById('s-free-item').checked;
+  // Bug fix: the checkbox is normally kept in sync live via
+  // onProductNameChange() as the product name is typed — but selecting a
+  // suggestion from the datalist dropdown (tap/click, not typing) doesn't
+  // reliably fire an 'input' event on every browser, so the checkbox can
+  // be stale by the time Save is tapped. To make sure a known giveaway
+  // (Gift Set/Flyer/Small Samples/Coupons) is never silently saved as a
+  // regular product, re-derive the guess from the actual typed name at
+  // save time too — but only when the person hasn't manually touched the
+  // checkbox themselves (salesFormFreeItemTouched), so a deliberate
+  // override (ticking/unticking by hand) is still always respected.
+  const checkboxChecked = document.getElementById('s-free-item').checked;
+  const is_free_item = salesFormFreeItemTouched ? checkboxChecked : (checkboxChecked || isGiveaway(productBase));
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
   const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
   // Free items: "given out" is never typed in — it's always opening minus
