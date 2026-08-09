@@ -145,7 +145,6 @@ function openJobForm(id){
         <label>Store / location</label>
         <input id="f-store" list="store-list" value="${editing&&editing.stores?esc(editing.stores.name):''}" placeholder="e.g. Isetan Lot 10">
         <datalist id="store-list">${stores.map(s=>`<option value="${esc(s.name)}">`).join('')}</datalist>
-        <div class="field-hint">Type an existing store or a new one — new ones are saved automatically.</div>
       </div>
       <div class="field"><label>Date</label><input id="f-date" type="date" value="${editing?editing.work_date:''}"></div>
       <div class="field-row">

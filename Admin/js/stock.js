@@ -143,7 +143,6 @@ function renderStockOverview(){
 // ---------------- Main render ----------------
 function renderStockManagement(){
   let html = `<div class="section-title">Stock Management</div>`;
-  html += `<div class="field-hint" style="margin:-8px 0 16px;">Where each product's stock currently sits — Store Room, Home Shelf, Standee, and the central warehouse. Opening/sold/closing counts live on the Sales tab.</div>`;
   html += renderStockOverview();
 
   const sellable = salesReports.filter(r => !isFreeItem(r));
