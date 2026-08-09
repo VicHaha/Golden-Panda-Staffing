@@ -209,7 +209,14 @@ function openStockLocationForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">Edit stock location</div>
-      <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(editing))} · ${formatDateLong(editing.work_date)}${editing.stores?' · '+esc(editing.stores.name):''}</div>
+      <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(editing))} · ${formatDateLong(editing.work_date)}</div>
+      <div class="field">
+        <label>Store</label>
+        <select id="sl-store">
+          <option value="">— Not specified —</option>
+          ${stores.map(s=>`<option value="${s.id}" ${editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
       <div class="field">
         <label>Closing stock (from Sales tab)</label>
         <input id="sl-closing-display" type="text" value="${editing.closing_qty}" disabled>
@@ -255,6 +262,7 @@ function updateStockLocationHint(){
 }
 
 async function saveStockLocationForm(id){
+  const store_id = document.getElementById('sl-store').value || null;
   const store_room_qty = parseFloat(document.getElementById('sl-store-room').value) || 0;
   const home_shelf_qty = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
   const standee_qty = parseFloat(document.getElementById('sl-standee').value) || 0;
@@ -264,9 +272,9 @@ async function saveStockLocationForm(id){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    // Only touches these four columns — opening/sales/closing, remarks,
-    // customer_feedback, and everything else on the row stays untouched.
-    await DB.updateSalesReport(id, { store_room_qty, home_shelf_qty, standee_qty, warehouse_qty });
+    // Only touches these five columns — opening/sales/closing, remarks,
+    // and everything else on the row stays untouched.
+    await DB.updateSalesReport(id, { store_id, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty });
     await refreshData();
     closeModal();
     render();
