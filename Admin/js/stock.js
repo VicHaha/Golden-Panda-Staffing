@@ -123,13 +123,13 @@ function renderStockOverview(){
     html += `<div class="section-title" style="margin-top:2px;">By outlet</div>`;
     storeEntries.forEach((s,i)=>{
       html += `
-        <div class="analysis-table-row" style="align-items:center;">
+        <div class="analysis-table-row" style="align-items:center; gap:12px;">
           <div style="display:flex; align-items:center; min-width:0; flex:1;">
             <span class="analysis-rank">${i+1}</span>
-            <span style="font-size:16px;">${esc(s.name)}</span>
+            <span style="font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(s.name)}</span>
           </div>
-          <div style="text-align:right; flex-shrink:0; min-width:210px;">
-            <div style="font-size:16px;"><b>${s.total}</b> units</div>
+          <div style="flex-shrink:0; text-align:right;">
+            <div style="font-size:16px; line-height:1.2;"><b>${s.total}</b> units</div>
             <div style="font-size:11px; color:var(--ink-soft); margin-top:3px; white-space:nowrap;">
               Store Room ${s.storeRoom} · Home Shelf ${s.homeShelf} · Standee ${s.standee}
             </div>
