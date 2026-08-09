@@ -146,6 +146,7 @@ body{
 .btn-ghost{background:var(--bg); color:var(--ink); border:1px solid var(--line);}
 .btn-danger-ghost{background:var(--brick-tint); color:var(--brick);}
 .btn-block{width:100%;}
+.btn-sm{padding:6px 12px; font-size:12px; border-radius:8px;}
 .btn[disabled]{opacity:0.5; cursor:not-allowed;}
 .fab{
   position:fixed; max-width:460px; margin:0 auto; left:0; right:0;
@@ -227,12 +228,11 @@ body{
 .modal-title{font-family:'Fraunces',Georgia,serif; font-size:17px; font-weight:600; margin:0 0 16px;}
 .field{margin-bottom:13px;}
 .field label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px;}
-.field input, .field select, .field textarea{
+.field input, .field select{
   width:100%; padding:10px 11px; border-radius:9px; border:1px solid var(--line); background:var(--bg);
   font-family:'Inter'; font-size:14px; color:var(--ink);
 }
-.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--gold); outline-offset:0; border-color:var(--gold);}
-.field textarea{resize:vertical; font-family:'Inter';}
+.field input:focus, .field select:focus{outline:2px solid var(--gold); outline-offset:0; border-color:var(--gold);}
 .field-row{display:flex; gap:10px;}
 .field-row .field{flex:1;}
 .checkbox-row{
@@ -354,8 +354,6 @@ body{
 .sales-item-main{flex:1; min-width:0;}
 .sales-item-name{font-weight:700; font-size:13.5px; margin-bottom:2px;}
 .sales-item-stats{font-size:12px; color:var(--ink-soft);}
-.sales-item-remarks{font-size:11.5px; color:var(--ink-faint); margin-top:2px; font-style:italic;}
-.sales-item-feedback{font-size:11.5px; color:var(--ink-soft); margin-top:4px; background:var(--gold-tint); padding:6px 9px; border-radius:8px; line-height:1.4;}
 .sales-variance{
   display:inline-block; margin-left:8px; padding:1px 7px; border-radius:99px; font-weight:600; font-size:11px;
 }
@@ -388,6 +386,15 @@ body{
   background:var(--brick); color:#fff; font-size:9px; line-height:1; padding:0; cursor:pointer; display:flex;
   align-items:center; justify-content:center;
 }
+.day-feedback-block{margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
+.day-feedback-block label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px;}
+.day-feedback-block textarea{
+  width:100%; padding:10px 11px; border-radius:9px; border:1px solid var(--line); background:var(--bg);
+  font-family:'Inter'; font-size:13.5px; color:var(--ink); resize:vertical; min-height:44px;
+}
+.day-feedback-block textarea:focus{outline:2px solid var(--gold); outline-offset:0; border-color:var(--gold);}
+.day-feedback-actions{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px;}
+
 .day-photo-add{
   display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--ink-faint);
   border:1.5px dashed var(--line); background:var(--surface);
@@ -407,7 +414,7 @@ body{
 .photo-picker-actions{flex:1; min-width:0;}
 .photo-picker-actions label.btn{display:inline-flex; cursor:pointer;}
 
-/* ---------------- Ranked list rows (Stock Management overview, etc.) ---------------- */
+/* ---------------- Analysis tab ---------------- */
 .period-toggle{display:flex; gap:6px; margin-bottom:12px;}
 .period-btn{
   flex:1; padding:9px 0; text-align:center; border-radius:9px; border:1px solid var(--line);
@@ -440,7 +447,7 @@ body{
 }
 .analysis-gift-row{margin-top:14px; border-color:var(--bamboo); background:var(--bamboo-tint);}
 
-/* ---------------- Shift engagement pie charts & feedback lists (export-only data, kept for the "Feedback" styling reused elsewhere) ---------------- */
+/* ---------------- Analysis tab: Shift Engagement ---------------- */
 .insight-callout{
   display:flex; gap:10px; align-items:flex-start; background:var(--gold-tint);
   border-radius:12px; padding:12px 14px; margin-bottom:18px; font-size:13px; color:var(--ink); line-height:1.4;

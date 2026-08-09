@@ -7,6 +7,7 @@ let jobs = [];
 let stores = [];
 let salesReports = [];
 let dayPhotos = [];
+let dayFeedback = [];
 let shiftReports = [];
 let currentTab = 'roster';
 let reportMonth = new Date().toISOString().slice(0,7);
@@ -187,11 +188,11 @@ function renderApp(){
         </button>
         <button class="tab" data-tab="sales" onclick="switchTab('sales')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          Sales
-        </button>
-        <button class="tab" data-tab="stock" onclick="switchTab('stock')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
           Stock
+        </button>
+        <button class="tab" data-tab="analysis" onclick="switchTab('analysis')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12" y="8" width="3" height="10" rx="0.5"/><rect x="17" y="4" width="3" height="14" rx="0.5"/></svg>
+          Analysis
         </button>
         <button class="tab" data-tab="reports" onclick="switchTab('reports')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
@@ -208,6 +209,7 @@ async function loadInitialData(){
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await DB.purgeOldSalesReports().catch(e=>console.warn('Purge old sales reports failed (non-fatal):', e));
     await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));
+    await DB.purgeOldDayFeedback().catch(e=>console.warn('Purge old day feedback failed (non-fatal):', e));
     await refreshData();
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up
@@ -221,14 +223,15 @@ async function loadInitialData(){
   switchTab('roster');
 }
 
-// Re-fetches promoters, jobs, stores, sales reports, day photos, and shift reports from Supabase.
+// Re-fetches promoters, jobs, stores, sales reports, day photos, day feedback, and shift reports from Supabase.
 async function refreshData(){
-  const [p, j, s, sr, dp, shr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports()]);
+  const [p, j, s, sr, dp, df, shr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getDayFeedback(), DB.getShiftReports()]);
   promoters = p;
   jobs = j;
   stores = s;
   salesReports = sr;
   dayPhotos = dp;
+  dayFeedback = df;
   shiftReports = shr;
   setSyncDot(true);
 }
@@ -243,6 +246,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'day_feedback' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
@@ -273,7 +277,7 @@ function openFab(){
     else openPromoterForm();
   }
   else if(currentTab==='sales') openSalesForm();
-  else showToast('Switch to Schedule or Sales to add');
+  else showToast('Switch to Schedule or Stock to add');
 }
 
 function render(){
@@ -282,17 +286,16 @@ function render(){
   if(!c) return;
   if(currentTab==='roster') c.innerHTML = renderRosterSection();
   else if(currentTab==='sales') c.innerHTML = renderSales();
-  else if(currentTab==='stock') c.innerHTML = renderStockManagement();
+  else if(currentTab==='analysis') c.innerHTML = renderAnalysis();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
   else if(currentTab==='roster') wireRosterSectionControls();
   else if(currentTab==='sales') wireStockExportControls();
+  else if(currentTab==='analysis') wireAnalysisControls();
 
-  // No "+" action makes sense on Stock Management or Payout — hide the FAB
-  // there. Stock Management only edits fields on existing Sales records
-  // (via the ✎ on each product row), it never creates new ones.
+  // No "+" action makes sense on Analysis or Payout — hide the FAB there.
   const fab = document.getElementById('fab');
-  if(fab) fab.classList.toggle('hidden', currentTab==='stock' || currentTab==='reports');
+  if(fab) fab.classList.toggle('hidden', currentTab==='analysis' || currentTab==='reports');
 }
 
 // ---------- Service worker (offline shell + installability) ----------

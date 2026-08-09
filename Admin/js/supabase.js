@@ -181,7 +181,7 @@ const DB = {
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
-        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name, customer_feedback,
+        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
@@ -289,10 +289,44 @@ const DB = {
     if(error) throw error;
   },
 
+  // ---------------- Day feedback (one general feedback field per working date) ----------------
+  async getDayFeedback(){
+    const { data, error } = await sb
+      .from('day_feedback')
+      .select('*')
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  // One row per work_date — saving again replaces the same row (upsert
+  // on work_date, same idea as the old single-photo-per-date behavior).
+  async upsertDayFeedback(work_date, feedback){
+    const { data, error } = await sb
+      .from('day_feedback')
+      .upsert({ work_date, feedback, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  // Same 3-month cutoff as purgeOldSalesReports/purgeOldDayPhotos.
+  async purgeOldDayFeedback(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('day_feedback')
+      .delete()
+      .lt('work_date', cutoffStr);
+    if(error) throw error;
+  },
+
   // ---------------- Shift reports (read-only here — logged from the Promoters app) ----------------
-  // Powers the Excel export's "Shift Engagement" sheet. No add/update/
-  // delete here on purpose: promoters log these from their own app; the
-  // office app only reads them.
+  // Powers the Analysis tab's "Shift Engagement" view. No add/update/delete
+  // here on purpose: promoters log these from their own app; the office
+  // app only reads them for analysis.
   async getShiftReports(){
     const { data, error } = await sb
       .from('shift_reports')
