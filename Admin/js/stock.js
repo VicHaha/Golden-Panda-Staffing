@@ -7,12 +7,14 @@
 //      product per working date.
 //   2. Warehouse stock — a running total per product, carried forward
 //      automatically to each new working date (see ensureStockRowsForDate
-//      in js/sales.js) until edited again here.
+//      in js/sales.js, and the same carry-over logic reused by the "+"
+//      add form below) until edited again here.
 //
 // Both fields already live on the same `sales_reports` rows the Sales
-// tab reads and writes — this tab just edits a different slice of each
-// row's columns, and never touches opening/sales/closing/remarks/
-// customer_feedback (that's the Sales tab's job — see js/sales.js).
+// tab reads and writes — this tab just edits (or, via the "+" button,
+// adds) a different slice of each row's columns, and never touches
+// opening/sales/closing/remarks (that's the Sales tab's job — see
+// js/sales.js).
 //
 // Free items (Gift Set, Flyer, Small Samples, Coupons, or anything
 // hand-marked "Free item") are excluded entirely — location and
@@ -81,7 +83,7 @@ function computeStockOverview(){
 function renderStockOverview(){
   const ov = computeStockOverview();
   if(!ov){
-    return emptyState('🏬','No stock to show yet','Log opening/closing stock for a product from the Sales tab first, then come back here to record where it sits.');
+    return emptyState('🏬','No stock to show yet','Tap + to add a stock record, or log opening/closing stock for a product from the Sales tab first.');
   }
 
   const storeEntries = Object.entries(ov.byStore)
@@ -279,6 +281,129 @@ async function saveStockLocationForm(id){
     closeModal();
     render();
     showToast('Stock location saved');
+  }catch(e){
+    console.error(e);
+    showToast('Could not save — ' + (e.message || 'check your connection'));
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+// ---------------- Add form ----------------
+// Lets admin add a brand-new stock record straight from this tab,
+// rather than only editing rows that were auto-seeded from the Sales
+// tab. Product name and Store reuse the exact same suggestion list and
+// outlet list as the Sales tab (getProductSuggestions/getVariationSuggestions
+// and the shared `stores` global), so nothing has to be typed twice or
+// risks drifting out of sync between the two tabs.
+//
+// Opening/sold/closing stay at 0 — that side of a record is the Sales
+// tab's job; if a Sales entry already exists for this exact product +
+// date + store, edit stock-by-location there via the ✎ instead of
+// adding a duplicate here.
+function openAddStockRecordForm(){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-title">Add stock record</div>
+      <div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>
+      <div class="field-row">
+        <div class="field" style="flex:1.6;">
+          <label>Product name</label>
+          <input id="asr-product" list="product-list" placeholder="e.g. Bio Dishwash 1L" oninput="onAddStockProductChange()">
+          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+        </div>
+        <div class="field">
+          <label>Variation (optional)</label>
+          <input id="asr-variation" list="variation-list" placeholder="e.g. Bidara" oninput="onAddStockProductChange()">
+          <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="field">
+        <label>Store</label>
+        <select id="asr-store">
+          <option value="">— Not specified —</option>
+          ${stores.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Store Room</label><input id="asr-store-room" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Home Shelf</label><input id="asr-home-shelf" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Standee</label><input id="asr-standee" type="number" min="0" step="1" placeholder="0"></div>
+      </div>
+      <div class="field" style="margin-top:2px;">
+        <label>Warehouse stock</label>
+        <input id="asr-warehouse" type="number" min="0" step="1" value="0" placeholder="0">
+        <div class="field-hint" id="asr-warehouse-hint">Auto-filled from this product's last known warehouse figure once you type a product name.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="add-stock-record-save-btn" onclick="saveAddStockRecordForm()">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+// Re-looks-up the warehouse running total for whatever product name is
+// currently typed, same carry-over idea as ensureStockRowsForDate in
+// js/sales.js (most recent prior entry for that exact product name,
+// across any date or store) — so Warehouse arrives pre-filled while
+// Store Room / Home Shelf / Standee stay empty for a fresh count.
+function onAddStockProductChange(){
+  const base = document.getElementById('asr-product').value.trim();
+  const variation = document.getElementById('asr-variation').value;
+  const productName = composeProductName(base, variation);
+  const warehouseInput = document.getElementById('asr-warehouse');
+  const hint = document.getElementById('asr-warehouse-hint');
+  if(!productName){
+    warehouseInput.value = 0;
+    hint.textContent = "Auto-filled from this product's last known warehouse figure once you type a product name.";
+    return;
+  }
+  const priorEntries = salesReports
+    .filter(r => r.product_name === productName)
+    .sort((a,b) => b.work_date.localeCompare(a.work_date));
+  if(priorEntries.length){
+    warehouseInput.value = Number(priorEntries[0].warehouse_qty||0);
+    hint.textContent = `Carried forward from ${formatDateShort(priorEntries[0].work_date)}'s figure for this product — edit if it's changed.`;
+  }else{
+    warehouseInput.value = 0;
+    hint.textContent = 'No prior record for this product yet — starting from 0.';
+  }
+}
+
+async function saveAddStockRecordForm(){
+  const work_date = todayStr();
+  const productBase = document.getElementById('asr-product').value.trim();
+  const variation = document.getElementById('asr-variation').value;
+  const product_name = composeProductName(productBase, variation);
+  if(!productBase){ showToast('Product name is required'); return; }
+
+  const store_id = document.getElementById('asr-store').value || null;
+  const store_room_qty = parseFloat(document.getElementById('asr-store-room').value) || 0;
+  const home_shelf_qty = parseFloat(document.getElementById('asr-home-shelf').value) || 0;
+  const standee_qty = parseFloat(document.getElementById('asr-standee').value) || 0;
+  const warehouse_qty = parseFloat(document.getElementById('asr-warehouse').value) || 0;
+
+  const btn = document.getElementById('add-stock-record-save-btn');
+  btn.disabled = true;
+  try{
+    btn.textContent = 'Saving…';
+    await DB.addSalesReport({
+      work_date, store_id, promoter_id: null, product_name,
+      opening_qty: 0, sales_qty: 0, closing_qty: 0,
+      remarks: null, photo_url: null, is_free_item: false,
+      store_room_qty, home_shelf_qty, standee_qty, warehouse_qty,
+      logged_by_admin_name: currentAdminName
+    });
+    stockMgmtExpandedDates.add(work_date); // reveal the group you just added into
+    await refreshData();
+    closeModal();
+    render();
+    showToast('Stock record added');
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));

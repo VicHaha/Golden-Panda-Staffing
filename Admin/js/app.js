@@ -277,7 +277,8 @@ function openFab(){
     else openPromoterForm();
   }
   else if(currentTab==='sales') openSalesForm();
-  else showToast('Switch to Schedule or Sales to add');
+  else if(currentTab==='stock') openAddStockRecordForm();
+  else showToast('Switch to Schedule, Sales, or Stock to add');
 }
 
 function render(){
@@ -292,11 +293,12 @@ function render(){
   else if(currentTab==='roster') wireRosterSectionControls();
   else if(currentTab==='sales') wireStockExportControls();
 
-  // No "+" action makes sense on Stock Management or Payout — hide the FAB
-  // there. Stock Management only edits fields on existing Sales records
-  // (via the ✎ on each product row), it never creates new ones.
+  // No "+" action makes sense on Payout — hide the FAB there. Stock
+  // Management's FAB adds a new stock-location record (see
+  // openAddStockRecordForm in js/stock.js); it's separate from the
+  // Sales tab's own "+", which adds a Sales record instead.
   const fab = document.getElementById('fab');
-  if(fab) fab.classList.toggle('hidden', currentTab==='stock' || currentTab==='reports');
+  if(fab) fab.classList.toggle('hidden', currentTab==='reports');
 }
 
 // ---------- Service worker (offline shell + installability) ----------
