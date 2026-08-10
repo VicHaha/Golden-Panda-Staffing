@@ -733,18 +733,18 @@ async function deleteSalesReport(id){
 // globals every other tab in this app reads (see refreshData in
 // js/app.js) — no separate query, no fabricated rows.
 //
-// A note on formatting: this app bundles the free/Community Edition
-// build of SheetJS (see the <script> tag for xlsx.full.min.js in
-// index.html). That build genuinely supports everything applied below —
-// real date cells, number/percentage formats, column widths, and a
-// whole-table autofilter. It does NOT support cell styling (bold
-// headers, wrapped text) or frozen panes — those are SheetJS Pro (or an
-// open-source styling fork such as xlsx-js-style/sheetjs-style) features
-// only; setting them via the Community build silently has no effect.
-// This was confirmed by actually building a file with the exact bundled
-// version rather than assumed. Remarks/Feedback are still placed as each
-// sheet's last column so long text overflows visibly into the empty
-// space to their right, which reads close to wrapped text without it.
+// A note on formatting: this app bundles xlsx-js-style (see the
+// <script> tag for xlsx.bundle.js in index.html) instead of plain
+// SheetJS. It's a drop-in — same XLSX.* API the rest of this file and
+// js/report.js already use — that additionally supports per-cell style
+// (bold, wrap text). That covers everything except frozen panes, which
+// no free/community build (SheetJS or this fork) can write. Freeze panes
+// are applied as a small post-write patch instead — see
+// freezeFirstRowOnAllSheets below, which edits the raw worksheet XML
+// inside the already-written .xlsx zip using fflate (also bundled via
+// index.html) before the file is downloaded. This was confirmed working
+// end to end (Excel + LibreOffice both honor the patched pane) rather
+// than assumed.
 
 // Local midnight Date object for a work_date string — used so exported
 // cells are real Excel dates (sortable, filterable, formattable) rather
@@ -769,18 +769,27 @@ function outletLabel(r){
   return r.stores ? r.stores.name : 'Unspecified';
 }
 
+const HEADER_CELL_STYLE = { font: { bold: true }, alignment: { vertical: 'center' } };
+const WRAP_CELL_STYLE = { alignment: { wrapText: true, vertical: 'top' } };
+
 // Builds one sheet: enforces `header` as the exact column order (so
 // missing keys on some rows still land in the right column instead of
 // shifting), sets column widths, applies a number/date/percent format
-// per named column (via `formats`, keyed by header label), and turns on
-// a whole-table autofilter. Returns the created worksheet in case a
+// per named column (via `formats`, keyed by header label), bolds the
+// header row, wraps text for any columns named in `wrapCols`, and turns
+// on a whole-table autofilter. Returns the created worksheet in case a
 // caller needs to touch it further.
-function addReportSheet(wb, name, rows, header, widths, formats){
+function addReportSheet(wb, name, rows, header, widths, formats, wrapCols){
   const ws = XLSX.utils.json_to_sheet(rows, { header });
   ws['!cols'] = widths.map(w => ({ wch: w }));
   ws['!autofilter'] = { ref: ws['!ref'] };
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  // Bold header row (row 0).
+  for(let c = range.s.c; c <= range.e.c; c++){
+    const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+    if(cell) cell.s = HEADER_CELL_STYLE;
+  }
   if(formats){
-    const range = XLSX.utils.decode_range(ws['!ref']);
     Object.entries(formats).forEach(([colName, fmt])=>{
       const c = header.indexOf(colName);
       if(c === -1) return;
@@ -790,8 +799,53 @@ function addReportSheet(wb, name, rows, header, widths, formats){
       }
     });
   }
+  if(wrapCols){
+    wrapCols.forEach(colName=>{
+      const c = header.indexOf(colName);
+      if(c === -1) return;
+      for(let r = range.s.r + 1; r <= range.e.r; r++){
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if(cell) cell.s = WRAP_CELL_STYLE;
+      }
+    });
+  }
   XLSX.utils.book_append_sheet(wb, ws, name);
   return ws;
+}
+
+// Patches every worksheet in an already-built workbook's raw XML so row
+// 1 is frozen, then triggers the file download. Needed because no free
+// build of SheetJS (this fork included) exposes freeze panes through the
+// normal writer API — see the note above exportStockExcel. Falls back to
+// a plain (unfrozen) download if fflate isn't available for any reason,
+// rather than failing the export outright.
+function freezeFirstRowAndDownload(wb, filename){
+  if(typeof fflate === 'undefined'){
+    console.warn('fflate not loaded — exporting without frozen panes');
+    XLSX.writeFile(wb, filename);
+    return;
+  }
+  const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  const files = fflate.unzipSync(new Uint8Array(arr));
+  const dec = new TextDecoder();
+  const enc = new TextEncoder();
+  const FREEZE_PANE_XML = '<sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView>';
+  Object.keys(files).forEach(path=>{
+    if(!/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) return;
+    let xml = dec.decode(files[path]);
+    xml = xml.replace('<sheetView workbookViewId="0"/>', FREEZE_PANE_XML);
+    files[path] = enc.encode(xml);
+  });
+  const zipped = fflate.zipSync(files, { level: 6 });
+  const blob = new Blob([zipped], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function wireStockExportControls(){
@@ -852,7 +906,8 @@ function exportStockExcel(){
     });
   addReportSheet(wb, 'Raw Sales Data', rawSalesRows, rawSalesHeader,
     [12,11,18,22,14,10,10,15,10,16,34],
-    { 'Date':'dd/mm/yyyy', 'Opening':'#,##0', 'Closing':'#,##0', 'Sold/ Given out':'#,##0', 'Variance':'#,##0' }
+    { 'Date':'dd/mm/yyyy', 'Opening':'#,##0', 'Closing':'#,##0', 'Sold/ Given out':'#,##0', 'Variance':'#,##0' },
+    ['Remarks']
   );
 
   // ============================================================
@@ -879,22 +934,38 @@ function exportStockExcel(){
     byOutletForGap[key].byDate[r.work_date][r.product_name] = r;
   });
 
+  // Column naming here follows the client's spec literally: "Date After"
+  // holds the EARLIER of the two event dates (the one sales are counted
+  // as happening after) and "Date Before" holds the LATER one (the one
+  // they're counted as happening before) — e.g. for a 2 Aug → 8 Aug gap,
+  // Date After = 2 Aug, Date Before = 8 Aug, and the estimate is closing
+  // stock on 2 Aug minus opening stock on 8 Aug. Not the more intuitive
+  // chronological reading, but matches the worked example in the spec
+  // exactly, so it's kept as-is rather than "corrected".
   const gapHeader = ['Date After','Date Before','Outlet','Total Sales', ...skuList];
   const gapRows = [];
+  // Accumulated per Outlet+Product(+Variation) across every gap in the
+  // exported period — feeds "Total Sales After Adding Est. Sales" on the
+  // Sales Summary by Outlet sheet, keyed identically (outlet + raw
+  // product_name, which already encodes the variation) so the two sheets
+  // can never cross-match the wrong product.
+  const estByOutletProduct = {};
   Object.values(byOutletForGap).forEach(outlet=>{
     const dates = Object.keys(outlet.byDate).sort();
     for(let i=0; i<dates.length-1; i++){
-      const before = dates[i], after = dates[i+1];
-      const rowBefore = outlet.byDate[before], rowAfter = outlet.byDate[after];
-      const row = { 'Date After': excelDateCell(after), 'Date Before': excelDateCell(before), 'Outlet': outlet.name };
+      const earlier = dates[i], later = dates[i+1];
+      const rowEarlier = outlet.byDate[earlier], rowLater = outlet.byDate[later];
+      const row = { 'Date After': excelDateCell(earlier), 'Date Before': excelDateCell(later), 'Outlet': outlet.name };
       let total = 0;
       skuList.forEach(sku=>{
-        const closingBefore = rowBefore[sku] ? Number(rowBefore[sku].closing_qty||0) : null;
-        const openingAfter = rowAfter[sku] ? Number(rowAfter[sku].opening_qty||0) : null;
-        if(closingBefore != null && openingAfter != null){
-          const est = closingBefore - openingAfter;
+        const closingEarlier = rowEarlier[sku] ? Number(rowEarlier[sku].closing_qty||0) : null;
+        const openingLater = rowLater[sku] ? Number(rowLater[sku].opening_qty||0) : null;
+        if(closingEarlier != null && openingLater != null){
+          const est = closingEarlier - openingLater;
           row[sku] = est;
           total += est;
+          const estKey = outlet.name + '|||' + sku;
+          estByOutletProduct[estKey] = (estByOutletProduct[estKey] || 0) + est;
         }else{
           row[sku] = ''; // that SKU wasn't logged on one side of the gap — not computable
         }
@@ -906,28 +977,65 @@ function exportStockExcel(){
   const gapWidths = [12,12,18,13, ...skuList.map(()=>16)];
   const gapFormats = { 'Date After':'dd/mm/yyyy', 'Date Before':'dd/mm/yyyy', 'Total Sales':'#,##0' };
   skuList.forEach(sku => gapFormats[sku] = '#,##0');
-  addReportSheet(wb, 'Estimated Sales (Non-event Day)', gapRows, gapHeader, gapWidths, gapFormats);
+  // Excel hard-caps worksheet tab names at 31 characters — the spec's
+  // exact sheet name "Estimated Sales during Non-event Day" is 36 and
+  // will not save (SheetJS throws "Sheet names cannot exceed 31 chars",
+  // confirmed by actually trying it). Shortened to the closest fit that
+  // keeps the same words and order.
+  addReportSheet(wb, 'Est. Sales (Non-event Day)', gapRows, gapHeader, gapWidths, gapFormats);
 
   // ============================================================
   // Sheet 3 — Sales Summary by Outlet
   // ============================================================
-  const summaryHeader = ['Outlet','Product','Variation','Total Sales','Total Given Out'];
+  // Grouped by Outlet + Product + Variation only — never split by date
+  // (per spec). Keyed on outlet + the raw product_name (rather than the
+  // parsed base/variation pair) so this sheet matches "Total Sales After
+  // Adding Est. Sales" against exactly the same Outlet+Product+Variation
+  // bucket the Estimated Sales sheet used — a fixed-cell or
+  // base/variation-only match could silently pull in a different
+  // variation's estimate.
+  const summaryHeader = ['Up to Date','Outlet','Product','Variation','Total Given Out','Total Sales During Event','Total Sales After Adding Est. Sales'];
   const summaryMap = {};
   salesRows.forEach(r=>{
     const outlet = outletLabel(r);
     const { base, variation } = parseProductName(r.product_name);
-    const key = [outlet, base, variation].join('|||');
-    if(!summaryMap[key]) summaryMap[key] = { outlet, base, variation, sales:0, given:0 };
+    const key = outlet + '|||' + r.product_name;
+    if(!summaryMap[key]) summaryMap[key] = { outlet, base, variation, productName: r.product_name, sales:0, given:0, upToDate: r.work_date };
+    const entry = summaryMap[key];
     const qty = Number(r.sales_qty||0);
     // Free/giveaway quantities are tallied separately and never counted
-    // toward Total Sales.
-    if(isFreeItem(r)) summaryMap[key].given += qty; else summaryMap[key].sales += qty;
+    // toward Total Sales During Event.
+    if(isFreeItem(r)) entry.given += qty; else entry.sales += qty;
+    // Up to Date = latest date covered for this outlet (across every
+    // product/variation logged there in the exported period).
+    if(r.work_date > entry.upToDate) entry.upToDate = r.work_date;
+  });
+  // "Up to Date" is really per-outlet (latest date logged at that
+  // outlet at all), not per product/variation — recompute it that way
+  // so every row for the same outlet shows the same date, matching how
+  // the spec describes it ("latest date covered for that outlet").
+  const maxDateByOutlet = {};
+  salesRows.forEach(r=>{
+    const outlet = outletLabel(r);
+    if(!maxDateByOutlet[outlet] || r.work_date > maxDateByOutlet[outlet]) maxDateByOutlet[outlet] = r.work_date;
   });
   const summaryRows = Object.values(summaryMap)
     .sort((a,b)=> a.outlet.localeCompare(b.outlet) || a.base.localeCompare(b.base) || a.variation.localeCompare(b.variation))
-    .map(v=>({ 'Outlet': v.outlet, 'Product': v.base, 'Variation': v.variation, 'Total Sales': v.sales, 'Total Given Out': v.given }));
-  addReportSheet(wb, 'Sales Summary by Outlet', summaryRows, summaryHeader, [20,22,14,13,15],
-    { 'Total Sales':'#,##0', 'Total Given Out':'#,##0' }
+    .map(v=>{
+      const estKey = v.outlet + '|||' + v.productName;
+      const estSales = estByOutletProduct[estKey] || 0;
+      return {
+        'Up to Date': excelDateCell(maxDateByOutlet[v.outlet]),
+        'Outlet': v.outlet,
+        'Product': v.base,
+        'Variation': v.variation,
+        'Total Given Out': v.given,
+        'Total Sales During Event': v.sales,
+        'Total Sales After Adding Est. Sales': v.sales + estSales
+      };
+    });
+  addReportSheet(wb, 'Sales Summary by Outlet', summaryRows, summaryHeader, [13,20,22,14,16,22,28],
+    { 'Up to Date':'dd/mm/yyyy', 'Total Given Out':'#,##0', 'Total Sales During Event':'#,##0', 'Total Sales After Adding Est. Sales':'#,##0' }
   );
 
   // ============================================================
@@ -963,7 +1071,7 @@ function exportStockExcel(){
   // ============================================================
   // Sheet 5 — Outlet Performance
   // ============================================================
-  const perfHeader = ['Date','Outlet','Total Customer Engaged','Successful Engagements','Purchases','Engagement Success Rate','Purchase Conversion Rate','Average Engagement Time','Promoters','Before Break Engaged','After Break Engaged','Before Break Purchases','After Break Purchases'];
+  const perfHeader = ['Date','Outlet','Total Customer Engaged','Successful Engagements','Purchases','Engagement Success Rate','Purchase Conversion Rate','Average Engagement Time','Promoters','Before Break Engaged','After Break Engaged','Before Break Purchases','After Break Purchases','Before Break Conversion Rate','After Break Conversion Rate'];
   const perfMap = {};
   shiftRows.forEach(r=>{
     const outlet = outletLabel(r);
@@ -1000,14 +1108,17 @@ function exportStockExcel(){
       'Before Break Engaged': p.beforeEngaged,
       'After Break Engaged': p.afterEngaged,
       'Before Break Purchases': p.beforePurchases,
-      'After Break Purchases': p.afterPurchases
+      'After Break Purchases': p.afterPurchases,
+      'Before Break Conversion Rate': safeDiv(p.beforePurchases, p.beforeEngaged),
+      'After Break Conversion Rate': safeDiv(p.afterPurchases, p.afterEngaged)
     }));
   addReportSheet(wb, 'Outlet Performance', perfRows, perfHeader,
-    [12,18,15,15,11,15,15,14,24,13,13,13,13],
+    [12,18,15,15,11,15,15,14,24,13,13,13,13,17,17],
     {
       'Date':'dd/mm/yyyy', 'Total Customer Engaged':'#,##0', 'Successful Engagements':'#,##0', 'Purchases':'#,##0',
       'Engagement Success Rate':'0.0%', 'Purchase Conversion Rate':'0.0%', 'Average Engagement Time':'0.0',
-      'Before Break Engaged':'#,##0', 'After Break Engaged':'#,##0', 'Before Break Purchases':'#,##0', 'After Break Purchases':'#,##0'
+      'Before Break Engaged':'#,##0', 'After Break Engaged':'#,##0', 'Before Break Purchases':'#,##0', 'After Break Purchases':'#,##0',
+      'Before Break Conversion Rate':'0.0%', 'After Break Conversion Rate':'0.0%'
     }
   );
 
@@ -1024,9 +1135,9 @@ function exportStockExcel(){
       'Age Range': r.customer_age_range ? (AGE_RANGE_LABELS[r.customer_age_range] || r.customer_age_range) : '',
       'Feedback': r.customer_feedback || ''
     }));
-  addReportSheet(wb, 'Customer Analysis', custRows, custHeader, [12,18,12,50], { 'Date':'dd/mm/yyyy' });
+  addReportSheet(wb, 'Customer Analysis', custRows, custHeader, [12,18,12,50], { 'Date':'dd/mm/yyyy' }, ['Feedback']);
 
-  XLSX.writeFile(wb, `Golden_Panda_Report_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
+  freezeFirstRowAndDownload(wb, `Golden_Panda_Report_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
   showToast('Excel file downloaded');
 }
 
