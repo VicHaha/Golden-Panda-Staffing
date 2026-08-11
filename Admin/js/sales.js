@@ -9,9 +9,9 @@
 // Stock Management tab (js/stock.js) now, not from here — see that file.
 //
 // Also owns the app's one and only Excel export (see exportStockExcel
-// below) — one workbook per day/month, 6 sheets: Raw Sales Data,
-// Estimated Sales during Non-event Day, Sales Summary by Outlet, Raw
-// Stock Data, Outlet Performance, Customer Analysis.
+// below) — one workbook per day/month, 5 sheets: Raw Sales Data,
+// Sales Summary by Outlet, Raw Stock Data, Outlet Performance,
+// Customer Analysis.
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
@@ -532,17 +532,19 @@ function toggleSalesDate(date){
 
 function openSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  // Matches the promoter app's form exactly: no Date or Logged-by fields.
-  // New entries always land on today (auto-seeded rows already cover past
-  // dates); editing an existing entry keeps its original work_date and
-  // promoter_id untouched — there's simply no field to change either.
+  // Matches the promoter app's form exactly: no Logged-by field, and no
+  // Date field either for brand-new rows (those always land on today —
+  // auto-seeded rows already cover past dates). Editing an existing row
+  // keeps promoter_id untouched, but the date itself is editable inline
+  // right where it was already being shown (no new field added) — the
+  // admin can move a report to a different date if it was logged wrong.
   const formDate = editing ? editing.work_date : todayStr();
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
-      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName || 'Admin')}</b> · ${formatDateLong(formDate)}</div>
+      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName || 'Admin')}</b> · ${editing ? `<input type="date" id="s-date" class="date-edit-input" value="${formDate}">` : formatDateLong(formDate)}</div>
       <div class="field">
         <label>Store (optional)</label>
         <select id="s-store">
@@ -655,10 +657,12 @@ function onStockFieldInput(){
 
 async function saveSalesForm(id){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
-  // No Date or Logged-by fields in this form (matches the promoter app) —
-  // new entries always save into today; editing keeps the original
-  // work_date and promoter_id exactly as they were.
-  const work_date = editing ? editing.work_date : todayStr();
+  // No Date field for brand-new rows (matches the promoter app) — those
+  // always save into today. Editing an existing row reads the date back
+  // out of the inline date input added to the form above; if it was
+  // somehow left blank, fall back to the original date rather than
+  // silently moving the report to today. promoter_id is kept as-is.
+  const work_date = editing ? (document.getElementById('s-date').value || editing.work_date) : todayStr();
   const promoter_id = editing ? (editing.promoter_id || null) : null;
   const store_id = document.getElementById('s-store').value || null;
   const productBase = document.getElementById('s-product').value.trim();
@@ -726,9 +730,9 @@ async function deleteSalesReport(id){
 }
 
 // ---------------- Excel export (day or month, everything in one file) ----------------
-// This is the ONE export in the app. One workbook per period, 6 sheets:
-// Raw Sales Data, Estimated Sales during Non-event Day, Sales Summary by
-// Outlet, Raw Stock Data, Outlet Performance, Customer Analysis. Reads
+// This is the ONE export in the app. One workbook per period, 5 sheets:
+// Raw Sales Data, Sales Summary by Outlet, Raw Stock Data, Outlet
+// Performance, Customer Analysis. Reads
 // straight from the same salesReports/shiftReports/stores/promoters
 // globals every other tab in this app reads (see refreshData in
 // js/app.js) — no separate query, no fabricated rows.
@@ -911,96 +915,19 @@ function exportStockExcel(){
   );
 
   // ============================================================
-  // Sheet 2 — Estimated Sales during Non-event Day
-  // ============================================================
-  // For two consecutive event dates logged at the same outlet, the gap
-  // between them is a stretch with nobody from the team on-site. Any
-  // stock that disappeared from the shelf in that gap is stock the
-  // outlet's own staff sold without a promoter around to log it —
-  // estimated per SKU as: closing stock at the end of the earlier date
-  // minus opening stock at the start of the next one. Free/giveaway
-  // items are excluded — this sheet is about sales, not giveaways.
-  // Scoped to the exported period: only dates that fall inside the
-  // chosen day/month are used to find "consecutive" pairs, so a gap
-  // that straddles the edge of the period isn't included here.
-  const nonFreeSalesRows = salesRows.filter(r => !isFreeItem(r));
-  const skuList = [...new Set(nonFreeSalesRows.map(r => r.product_name))].sort();
-
-  const byOutletForGap = {};
-  nonFreeSalesRows.forEach(r=>{
-    const key = r.store_id || '__none__';
-    if(!byOutletForGap[key]) byOutletForGap[key] = { name: outletLabel(r), byDate: {} };
-    if(!byOutletForGap[key].byDate[r.work_date]) byOutletForGap[key].byDate[r.work_date] = {};
-    byOutletForGap[key].byDate[r.work_date][r.product_name] = r;
-  });
-
-  // Column naming here follows the client's spec literally: "Date After"
-  // holds the EARLIER of the two event dates (the one sales are counted
-  // as happening after) and "Date Before" holds the LATER one (the one
-  // they're counted as happening before) — e.g. for a 2 Aug → 8 Aug gap,
-  // Date After = 2 Aug, Date Before = 8 Aug, and the estimate is closing
-  // stock on 2 Aug minus opening stock on 8 Aug. Not the more intuitive
-  // chronological reading, but matches the worked example in the spec
-  // exactly, so it's kept as-is rather than "corrected".
-  const gapHeader = ['Date After','Date Before','Outlet','Total Sales', ...skuList];
-  const gapRows = [];
-  // Accumulated per Outlet+Product(+Variation) across every gap in the
-  // exported period — feeds "Total Sales After Adding Est. Sales" on the
-  // Sales Summary by Outlet sheet, keyed identically (outlet + raw
-  // product_name, which already encodes the variation) so the two sheets
-  // can never cross-match the wrong product.
-  const estByOutletProduct = {};
-  Object.values(byOutletForGap).forEach(outlet=>{
-    const dates = Object.keys(outlet.byDate).sort();
-    for(let i=0; i<dates.length-1; i++){
-      const earlier = dates[i], later = dates[i+1];
-      const rowEarlier = outlet.byDate[earlier], rowLater = outlet.byDate[later];
-      const row = { 'Date After': excelDateCell(earlier), 'Date Before': excelDateCell(later), 'Outlet': outlet.name };
-      let total = 0;
-      skuList.forEach(sku=>{
-        const closingEarlier = rowEarlier[sku] ? Number(rowEarlier[sku].closing_qty||0) : null;
-        const openingLater = rowLater[sku] ? Number(rowLater[sku].opening_qty||0) : null;
-        if(closingEarlier != null && openingLater != null){
-          const est = closingEarlier - openingLater;
-          row[sku] = est;
-          total += est;
-          const estKey = outlet.name + '|||' + sku;
-          estByOutletProduct[estKey] = (estByOutletProduct[estKey] || 0) + est;
-        }else{
-          row[sku] = ''; // that SKU wasn't logged on one side of the gap — not computable
-        }
-      });
-      row['Total Sales'] = total;
-      gapRows.push(row);
-    }
-  });
-  const gapWidths = [12,12,18,13, ...skuList.map(()=>16)];
-  const gapFormats = { 'Date After':'dd/mm/yyyy', 'Date Before':'dd/mm/yyyy', 'Total Sales':'#,##0' };
-  skuList.forEach(sku => gapFormats[sku] = '#,##0');
-  // Excel hard-caps worksheet tab names at 31 characters — the spec's
-  // exact sheet name "Estimated Sales during Non-event Day" is 36 and
-  // will not save (SheetJS throws "Sheet names cannot exceed 31 chars",
-  // confirmed by actually trying it). Shortened to the closest fit that
-  // keeps the same words and order.
-  addReportSheet(wb, 'Est. Sales (Non-event Day)', gapRows, gapHeader, gapWidths, gapFormats);
-
-  // ============================================================
-  // Sheet 3 — Sales Summary by Outlet
+  // Sheet 2 — Sales Summary by Outlet
   // ============================================================
   // Grouped by Outlet + Product + Variation only — never split by date
   // (per spec). Keyed on outlet + the raw product_name (rather than the
-  // parsed base/variation pair) so this sheet matches "Total Sales After
-  // Adding Est. Sales" against exactly the same Outlet+Product+Variation
-  // bucket the Estimated Sales sheet used — a fixed-cell or
-  // base/variation-only match could silently pull in a different
-  // variation's estimate.
-  const summaryHeader = ['Up to Date','Outlet','Product','Variation','Total Given Out','Total Sales During Event','Total Sales After Adding Est. Sales'];
+  // parsed base/variation pair) so multiple variations of the same base
+  // product never get merged into one row.
+  const summaryHeader = ['Up to Date','Outlet','Product','Variation','Total Given Out','Total Sales During Event'];
   const summaryMap = {};
   salesRows.forEach(r=>{
     const outlet = outletLabel(r);
     const { base, variation } = parseProductName(r.product_name);
     const key = outlet + '|||' + r.product_name;
-    if(!summaryMap[key]) summaryMap[key] = { outlet, base, variation, productName: r.product_name, sales:0, given:0, upToDate: r.work_date };
+    if(!summaryMap[key]) summaryMap[key] = { outlet, base, variation, productName: r.product_name, sales:0, given:0, upToDate: r.work_date, isFree: isFreeItem(r) };
     const entry = summaryMap[key];
     const qty = Number(r.sales_qty||0);
     // Free/giveaway quantities are tallied separately and never counted
@@ -1019,27 +946,31 @@ function exportStockExcel(){
     const outlet = outletLabel(r);
     if(!maxDateByOutlet[outlet] || r.work_date > maxDateByOutlet[outlet]) maxDateByOutlet[outlet] = r.work_date;
   });
+  // Row order per outlet: 1L Bio Dishwash bottles first, then Refill,
+  // then all the free giveaway items last — matching the same
+  // bottle/refill/free grouping used for the on-screen stock tabs (see
+  // stockCategoryKey above), rather than a plain alphabetical sort.
+  const summaryCategoryOrder = { bottle:0, refill:1, free:2 };
   const summaryRows = Object.values(summaryMap)
-    .sort((a,b)=> a.outlet.localeCompare(b.outlet) || a.base.localeCompare(b.base) || a.variation.localeCompare(b.variation))
+    .sort((a,b)=> a.outlet.localeCompare(b.outlet)
+      || summaryCategoryOrder[stockCategoryKey({ product_name: a.productName, is_free_item: a.isFree })] - summaryCategoryOrder[stockCategoryKey({ product_name: b.productName, is_free_item: b.isFree })]
+      || a.base.localeCompare(b.base) || a.variation.localeCompare(b.variation))
     .map(v=>{
-      const estKey = v.outlet + '|||' + v.productName;
-      const estSales = estByOutletProduct[estKey] || 0;
       return {
         'Up to Date': excelDateCell(maxDateByOutlet[v.outlet]),
         'Outlet': v.outlet,
         'Product': v.base,
         'Variation': v.variation,
         'Total Given Out': v.given,
-        'Total Sales During Event': v.sales,
-        'Total Sales After Adding Est. Sales': v.sales + estSales
+        'Total Sales During Event': v.sales
       };
     });
-  addReportSheet(wb, 'Sales Summary by Outlet', summaryRows, summaryHeader, [13,20,22,14,16,22,28],
-    { 'Up to Date':'dd/mm/yyyy', 'Total Given Out':'#,##0', 'Total Sales During Event':'#,##0', 'Total Sales After Adding Est. Sales':'#,##0' }
+  addReportSheet(wb, 'Sales Summary by Outlet', summaryRows, summaryHeader, [13,20,22,14,16,22],
+    { 'Up to Date':'dd/mm/yyyy', 'Total Given Out':'#,##0', 'Total Sales During Event':'#,##0' }
   );
 
   // ============================================================
-  // Sheet 4 — Raw Stock Data
+  // Sheet 3 — Raw Stock Data
   // ============================================================
   // Free items carry no store-room/home-shelf/standee/warehouse figures
   // in this app (see js/stock.js — that tab excludes them entirely, as
@@ -1069,7 +1000,7 @@ function exportStockExcel(){
   );
 
   // ============================================================
-  // Sheet 5 — Outlet Performance
+  // Sheet 4 — Outlet Performance
   // ============================================================
   const perfHeader = ['Date','Outlet','Total Customer Engaged','Successful Engagements','Purchases','Engagement Success Rate','Purchase Conversion Rate','Average Engagement Time','Promoters','Before Break Engaged','After Break Engaged','Before Break Purchases','After Break Purchases','Before Break Conversion Rate','After Break Conversion Rate'];
   const perfMap = {};
@@ -1123,7 +1054,7 @@ function exportStockExcel(){
   );
 
   // ============================================================
-  // Sheet 6 — Customer Analysis
+  // Sheet 5 — Customer Analysis
   // ============================================================
   const custHeader = ['Date','Outlet','Age Range','Feedback'];
   const custRows = [...shiftRows]
