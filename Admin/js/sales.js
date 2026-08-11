@@ -32,6 +32,13 @@ const AGE_RANGE_LABELS = {
   '50_plus': '50+'
 };
 
+// Shift label map — same purpose as AGE_RANGE_LABELS above (Excel export
+// only), mirrors the Promoters app's shift.js. Keep in sync.
+const SHIFT_LABELS = {
+  before_break: 'Before Break (10am–2pm)',
+  after_break: 'After Break (3pm–6pm)'
+};
+
 // Suggested products — shown as autocomplete, but the field stays free
 // text so new products can always be typed in and added on the fly.
 // These are the full stored names (base product + variation baked in)
@@ -1064,17 +1071,18 @@ function exportStockExcel(){
   // ============================================================
   // Sheet 5 — Customer Analysis
   // ============================================================
-  const custHeader = ['Date','Outlet','Age Range','Feedback'];
+  const custHeader = ['Date','Outlet','Shift','Age Range','Feedback'];
   const custRows = [...shiftRows]
     .filter(r => r.customer_age_range || (r.customer_feedback && r.customer_feedback.trim()))
     .sort((a,b)=> a.work_date.localeCompare(b.work_date) || outletLabel(a).localeCompare(outletLabel(b)))
     .map(r=>({
       'Date': excelDateCell(r.work_date),
       'Outlet': outletLabel(r),
+      'Shift': SHIFT_LABELS[r.shift] || r.shift || '',
       'Age Range': r.customer_age_range ? (AGE_RANGE_LABELS[r.customer_age_range] || r.customer_age_range) : '',
       'Feedback': r.customer_feedback || ''
     }));
-  addReportSheet(wb, 'Customer Analysis', custRows, custHeader, [12,18,12,50], { 'Date':'dd/mm/yyyy' }, ['Feedback']);
+  addReportSheet(wb, 'Customer Analysis', custRows, custHeader, [12,18,22,12,50], { 'Date':'dd/mm/yyyy' }, ['Feedback']);
 
   freezeFirstRowAndDownload(wb, `Golden_Panda_Report_${daily?'Daily':'Monthly'}_${periodLabel}.xlsx`);
   showToast('Excel file downloaded');

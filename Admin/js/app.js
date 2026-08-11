@@ -25,7 +25,7 @@ function boot(){
   if(typeof DB === 'undefined' || typeof sb === 'undefined'){
     root.innerHTML = `
       <div class="phone" style="align-items:center; justify-content:center; text-align:center; padding:32px;">
-        <div class="brand-mark" style="width:52px;height:52px;font-size:22px;border-radius:14px;margin-bottom:18px;">GP</div>
+        <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo" style="width:52px;height:52px;border-radius:14px;margin-bottom:18px;">
         <h2 style="font-family:'Fraunces',serif; font-size:18px;">Couldn't start the app</h2>
         <p style="font-size:13px; color:var(--ink-soft); max-width:320px;">
           A required script failed to load (likely <code>js/vendor/supabase-sdk.js</code>).
@@ -65,7 +65,7 @@ function renderAuthGate(mode, prefillEmail){
   const isSignup = mode === 'signup';
   root.innerHTML = `
     <div class="gate">
-      <div class="brand-mark">GP</div>
+      <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
       <h2>${isSignup ? 'Create your account' : 'Log in'}</h2>
       <p>${isSignup
         ? 'First time here? Set a password to log in with next time.'
@@ -134,7 +134,7 @@ function renderNameGate(){
   const root = document.getElementById('root');
   root.innerHTML = `
     <div class="gate">
-      <div class="brand-mark">GP</div>
+      <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
       <h2>Who's logging in?</h2>
       <p>Enter your name — it stays saved on this device so you won't need to enter it again next time.</p>
       <input id="gate-admin-name" type="text" placeholder="Your name" autocapitalize="words" autocomplete="name" value="${currentAdminName?esc(currentAdminName):''}">
@@ -170,7 +170,7 @@ function renderApp(){
     <div class="phone">
       <div class="app-header">
         <div class="brand-row">
-          <div class="brand-mark">GP</div>
+          <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
           <div class="brand-text">
             <h1>Golden Panda</h1>
             <p>Roadshow Staffing</p>

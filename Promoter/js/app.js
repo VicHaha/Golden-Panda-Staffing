@@ -22,7 +22,7 @@ function boot(){
   if(typeof DB === 'undefined' || typeof sb === 'undefined'){
     root.innerHTML = `
       <div class="phone" style="align-items:center; justify-content:center; text-align:center; padding:32px;">
-        <div class="brand-mark" style="width:52px;height:52px;font-size:22px;border-radius:14px;margin-bottom:18px;">GP</div>
+        <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo" style="width:52px;height:52px;border-radius:14px;margin-bottom:18px;">
         <h2 style="font-family:'Fraunces',serif; font-size:18px;">Couldn't start the app</h2>
         <p style="font-size:13px; color:var(--ink-soft); max-width:320px;">
           A required script failed to load (likely <code>js/vendor/supabase-sdk.js</code>).
@@ -57,7 +57,7 @@ function renderAuthGate(mode, prefillEmail){
   const isSignup = mode === 'signup';
   root.innerHTML = `
     <div class="gate">
-      <div class="brand-mark">GP</div>
+      <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
       <h2>${isSignup ? 'Create your account' : 'Log in'}</h2>
       <p>${isSignup
         ? 'First time here? Set a password to log in with next time.'
@@ -135,7 +135,7 @@ async function loadPromotersThenGate(){
     console.error(e);
     document.getElementById('root').innerHTML = `
       <div class="gate">
-        <div class="brand-mark">GP</div>
+        <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
         <h2>Couldn't connect</h2>
         <p>Check your internet connection and reload the page.</p>
       </div>
@@ -166,7 +166,7 @@ function renderIdentityGate(){
   if(selectable.length === 0){
     root.innerHTML = `
       <div class="gate">
-        <div class="brand-mark">GP</div>
+        <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
         <h2>No promoters found yet</h2>
         <p>Ask the office to add promoters in the main staffing app first, then reload this page.</p>
       </div>
@@ -175,7 +175,7 @@ function renderIdentityGate(){
   }
   root.innerHTML = `
     <div class="gate">
-      <div class="brand-mark">GP</div>
+      <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
       <h2>Which promoter are you?</h2>
       <p>Pick your name — it stays saved on this phone so you won't need to pick it again next time.</p>
       <select id="gate-promoter">
@@ -205,7 +205,7 @@ async function startApp(){
     <div class="phone">
       <div class="app-header">
         <div class="brand-row">
-          <div class="brand-mark">GP</div>
+          <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
           <div class="brand-text">
             <h1>Golden Panda</h1>
             <p>Field Reports</p>
