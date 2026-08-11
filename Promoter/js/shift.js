@@ -112,7 +112,6 @@ function renderShiftItems(items){
           ${i.promoters ? `<div class="sales-item-remarks">Logged by ${esc(displayName(i.promoters))}</div>` : ''}
           ${i.customer_age_range ? `<div class="sales-item-remarks">Customer age range: ${esc(ageRangeLabel(i.customer_age_range))}</div>` : ''}
           ${i.customer_feedback ? `<div class="sales-item-remarks">“${esc(i.customer_feedback)}”</div>` : ''}
-          ${i.notes ? `<div class="sales-item-remarks">${esc(i.notes)}</div>` : ''}
         </div>
         <div class="job-actions">
           <div class="icon-btn" onclick="openShiftForm('${i.id}')">✎</div>
@@ -174,7 +173,6 @@ function openShiftForm(id){
         </select>
       </div>
       <div class="field"><label>Customer feedback (optional)</label><input id="sh-feedback" value="${editing?esc(editing.customer_feedback||''):''}" placeholder="e.g. Liked the scent, found it pricey"></div>
-      <div class="field"><label>Notes (optional)</label><input id="sh-notes" value="${editing?esc(editing.notes||''):''}" placeholder="e.g. Slow foot traffic after 4pm"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="shift-save-btn" onclick="saveShiftForm('${editing?editing.id:''}')">Save</button>
@@ -200,7 +198,6 @@ async function saveShiftForm(id){
   const avg_engagement_time = avgTimeRaw === '' ? null : parseFloat(avgTimeRaw);
   const customer_age_range = document.getElementById('sh-age-range').value || null;
   const customer_feedback = document.getElementById('sh-feedback').value.trim() || null;
-  const notes = document.getElementById('sh-notes').value.trim() || null;
 
   if(successful_engagements > engaged){
     showToast('Successful engagements can\'t exceed engaged'); return;
@@ -212,7 +209,7 @@ async function saveShiftForm(id){
   const btn = document.getElementById('shift-save-btn');
   btn.disabled = true;
   try{
-    const payload = { work_date, shift, store_id, promoter_id: currentPromoterId, engaged, successful_engagements, purchases, avg_engagement_time, customer_age_range, customer_feedback, notes };
+    const payload = { work_date, shift, store_id, promoter_id: currentPromoterId, engaged, successful_engagements, purchases, avg_engagement_time, customer_age_range, customer_feedback };
     btn.textContent = 'Saving…';
     if(id){
       await DB.updateShiftReport(id, payload);

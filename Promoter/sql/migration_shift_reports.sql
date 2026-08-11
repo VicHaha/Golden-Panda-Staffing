@@ -26,7 +26,6 @@ create table if not exists shift_reports (
   purchases integer not null default 0,
   avg_engagement_time numeric,
   customer_feedback text,
-  notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

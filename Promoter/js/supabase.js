@@ -227,7 +227,7 @@ const DB = {
       .from('shift_reports')
       .select(`
         id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
-        avg_engagement_time, customer_age_range, customer_feedback, notes,
+        avg_engagement_time, customer_age_range, customer_feedback,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)

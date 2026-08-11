@@ -886,8 +886,16 @@ function exportStockExcel(){
   // Sheet 1 — Raw Sales Data
   // ============================================================
   const rawSalesHeader = ['Date','Day','Outlet','Product','Variation','Opening','Closing','Sold/ Given out','Variance','Logged By','Remarks'];
+  // Row order: date, then outlet, then — within the same date+outlet —
+  // 1L Bio Dishwash bottles first, then Refill, then all the free
+  // giveaway items last (same bottle/refill/free grouping as the
+  // on-screen stock tabs and the Sales Summary by Outlet sheet), then
+  // alphabetically by product/variation as the final tiebreaker.
+  const rawCategoryOrder = { bottle:0, refill:1, free:2 };
   const rawSalesRows = [...salesRows]
-    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || outletLabel(a).localeCompare(outletLabel(b)) || (a.product_name||'').localeCompare(b.product_name||''))
+    .sort((a,b)=> a.work_date.localeCompare(b.work_date) || outletLabel(a).localeCompare(outletLabel(b))
+      || rawCategoryOrder[stockCategoryKey(a)] - rawCategoryOrder[stockCategoryKey(b)]
+      || (a.product_name||'').localeCompare(b.product_name||''))
     .map(r=>{
       const { base, variation } = parseProductName(r.product_name);
       const giveaway = isFreeItem(r);
