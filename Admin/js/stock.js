@@ -26,6 +26,7 @@
 // ============================================================
 
 let stockMgmtExpandedDates = new Set();
+let stockMgmtShowMore = false; // toggled by the "Show earlier records" button — only the 2 most recent dates show by default
 
 // Same idea as STOCK_CATEGORIES in js/sales.js, minus "Free" — free
 // items don't carry a location/warehouse breakdown, so there's nothing
@@ -162,7 +163,10 @@ function renderStockManagement(){
 
   html += `<div class="section-title" style="margin-top:22px;">By date <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
 
-  dates.forEach(date=>{
+  const visibleDates = stockMgmtShowMore ? dates : dates.slice(0, 2);
+  const hiddenDates = dates.slice(2);
+
+  visibleDates.forEach(date=>{
     const items = byDate[date];
     const expanded = stockMgmtExpandedDates.has(date);
     const totalOnFloor = items.reduce((s,i)=> s + Number(i.store_room_qty||0) + Number(i.home_shelf_qty||0) + Number(i.standee_qty||0), 0);
@@ -204,7 +208,20 @@ function renderStockManagement(){
     `;
   });
 
+  if(hiddenDates.length > 0){
+    html += `
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleStockMgmtShowMore()">
+        ${stockMgmtShowMore ? 'Hide' : 'Show'} earlier records (${hiddenDates.length})
+      </button>
+    `;
+  }
+
   return html;
+}
+
+function toggleStockMgmtShowMore(){
+  stockMgmtShowMore = !stockMgmtShowMore;
+  render();
 }
 
 function renderStockMgmtItems(items){

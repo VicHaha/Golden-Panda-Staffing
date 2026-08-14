@@ -15,6 +15,7 @@
 // ============================================================
 
 let salesExpandedDates = new Set(); // which date groups are currently expanded
+let salesShowMore = false; // toggled by the "Show earlier reports" button — only the 2 most recent dates show by default
 let stockExportMode = 'monthly'; // 'monthly' | 'daily'
 let stockExportMonth = new Date().toISOString().slice(0,7);
 let stockExportDate = todayStr();
@@ -371,7 +372,10 @@ function renderSales(){
   let html = `<div class="section-title">Sales reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
   html += exportControls;
 
-  dates.forEach(date=>{
+  const visibleDates = salesShowMore ? dates : dates.slice(0, 2);
+  const hiddenDates = dates.slice(2);
+
+  visibleDates.forEach(date=>{
     const items = byDate[date];
     const expanded = salesExpandedDates.has(date);
     const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
@@ -413,7 +417,20 @@ function renderSales(){
     `;
   });
 
+  if(hiddenDates.length > 0){
+    html += `
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowMore()">
+        ${salesShowMore ? 'Hide' : 'Show'} earlier reports (${hiddenDates.length})
+      </button>
+    `;
+  }
+
   return html;
+}
+
+function toggleSalesShowMore(){
+  salesShowMore = !salesShowMore;
+  render();
 }
 
 // `compact` is used for the Free tab — giveaways don't need the full
