@@ -155,22 +155,19 @@ function renderStockSummaryTabs(outletKey, groups, active){
 
 function setStockSummaryTab(outletKey, key){
   stockSummaryActiveTab[outletKey] = key;
-  closeModal();
-  openOutletStockSummary(outletKey);
+  refreshOutletStockSummary(outletKey);
 }
 
-function openOutletStockSummary(outletKey){
+function stockSummaryInnerHtml(outletKey){
   const outlet = currentOutletStocks().find(item=>item.key===outletKey);
-  if(!outlet){ showToast('No stock found for that outlet'); return; }
+  if(!outlet) return null;
   const threshold = stockThreshold(outlet.key);
   const total = outlet.rows.reduce((sum,row)=>sum+stockRowTotal(row),0);
   const productGroups = groupByProductTabs(outlet.rows,false);
   const active = activeProductTab(outlet.key,productGroups,stockSummaryActiveTab);
   const activeGroup = productGroups.find(group=>group.key===active);
   const visibleRows = activeGroup ? activeGroup.items : [];
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-sheet stock-summary-sheet">
+  return `
     <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
     <div class="stock-summary-meta"><span>${total} units across ${outlet.rows.length} SKUs</span></div>
     ${renderStockSummaryTabs(outlet.key,productGroups,active)}
@@ -182,9 +179,27 @@ function openOutletStockSummary(outletKey){
         <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
       </button>`;
     }).join('')}</div>
-  </div>`;
+  `;
+}
+
+function openOutletStockSummary(outletKey){
+  const html = stockSummaryInnerHtml(outletKey);
+  if(html === null){ showToast('No stock found for that outlet'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-sheet stock-summary-sheet" id="stock-summary-sheet">${html}</div>`;
   showModal(overlay);
   overlay.addEventListener('click',event=>{ if(event.target===overlay) closeModal(); });
+}
+
+// Refreshes only the stock summary sheet's own contents in place — used
+// by the product-tab switch above so it doesn't flicker: the overlay and
+// sheet elements stay in the DOM, so the backdrop never flashes and the
+// sheet's open animation never replays.
+function refreshOutletStockSummary(outletKey){
+  const sheet = document.getElementById('stock-summary-sheet');
+  const html = stockSummaryInnerHtml(outletKey);
+  if(sheet && html !== null) sheet.innerHTML = html;
 }
 
 // ---------------- Edit form ----------------

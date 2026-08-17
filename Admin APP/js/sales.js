@@ -497,8 +497,7 @@ function renderSalesSummaryOutletTabs(date, groups, active){
 
 function setSalesSummaryOutlet(date, key){
   salesActiveOutletTab[date] = key;
-  closeModal();
-  openSalesDateSummary(date);
+  refreshSalesSummary(date);
 }
 
 function renderSalesSummaryStockTabs(date, groups, active){
@@ -509,15 +508,11 @@ function renderSalesSummaryStockTabs(date, groups, active){
 
 function setSalesSummaryStockTab(date, key){
   salesActiveTab[date] = key;
-  closeModal();
-  openSalesDateSummary(date);
+  refreshSalesSummary(date);
 }
 
-function openSalesDateSummary(date){
+function salesSummaryInnerHtml(date){
   const items = salesReports.filter(row=>row.work_date===date);
-  const hasPhotos = dayPhotos.some(photo=>photo.work_date===date);
-  if(!items.length && !hasPhotos){ showToast('No sales record found for that date'); return; }
-
   const totalSales = items.filter(item=>!isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
   const totalGiven = items.filter(item=>isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
   const outletGroups = groupByOutlet(items);
@@ -530,9 +525,7 @@ function openSalesDateSummary(date){
   const activeItems = activeGroup ? activeGroup.items : [];
   const storeNames = [...new Set(items.map(item=>item.stores?item.stores.name:'Unspecified outlet'))];
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-sheet sales-summary-sheet">
+  return `
     <div class="stock-summary-head"><div class="modal-title">${formatDateLong(date)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
     <div class="sales-summary-meta">${items.length} SKUs · ${storeNames.map(esc).join(', ')} · ${totalSales} sold${totalGiven?` · ${totalGiven} given out`:''}</div>
     ${renderDayPhotoRow(date)}
@@ -540,9 +533,28 @@ function openSalesDateSummary(date){
     ${productGroups.length?renderSalesSummaryStockTabs(date,productGroups,active):''}
     ${activeItems.length?renderSalesItems(activeItems,active==='free'):`<div class="stock-tab-empty">No products in this group yet.</div>`}
     ${renderDayFeedbackRow(date)}
-  </div>`;
+  `;
+}
+
+function openSalesDateSummary(date){
+  const items = salesReports.filter(row=>row.work_date===date);
+  const hasPhotos = dayPhotos.some(photo=>photo.work_date===date);
+  if(!items.length && !hasPhotos){ showToast('No sales record found for that date'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-sheet sales-summary-sheet" id="sales-summary-sheet">${salesSummaryInnerHtml(date)}</div>`;
   showModal(overlay);
   overlay.addEventListener('click',event=>{ if(event.target===overlay) closeModal(); });
+}
+
+// Refreshes only the sales summary sheet's own contents in place — used
+// by the outlet/stock-category tab switches above so they don't flicker:
+// the overlay and sheet elements stay in the DOM, so the backdrop never
+// flashes and the sheet's open animation never replays.
+function refreshSalesSummary(date){
+  const sheet = document.getElementById('sales-summary-sheet');
+  if(sheet) sheet.innerHTML = salesSummaryInnerHtml(date);
 }
 
 function toggleSalesShowMore(){

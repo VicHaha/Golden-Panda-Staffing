@@ -271,22 +271,46 @@ body{
 }
 .toast.show{opacity:1;}
 
-/* Sales & stock reports */
-.sales-group{
-  background:var(--surface); border:1px solid var(--line); border-radius:12px;
-  margin-bottom:10px; box-shadow:var(--shadow); overflow:hidden;
+/* Sales & stock reports — date grid + summary modal (same design as the
+   office app's Sales tab). Each date is a compact summary card; tapping
+   it opens the full breakdown (outlet/stock tabs, product table, day
+   photo) in a modal instead of expanding inline. */
+.sales-date-grid{display:grid; gap:9px; margin-top:14px;}
+.sales-date-card{
+  display:block; width:100%; padding:14px; border:1px solid var(--line); border-radius:14px;
+  background:var(--surface); box-shadow:var(--shadow); color:var(--ink); font-family:inherit;
+  text-align:left; cursor:pointer; -webkit-tap-highlight-color:transparent;
 }
-.sales-group-header{
-  width:100%; background:none; border:none; cursor:pointer; text-align:left;
-  padding:13px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+.sales-date-card:focus-visible{outline:3px solid var(--gold); outline-offset:2px;}
+.sales-date-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
+.sales-date-card-top strong{display:block; font-family:'Fraunces',Georgia,serif; font-size:15px; line-height:1.3;}
+.sales-date-card-top>span>small{
+  display:inline-flex; margin-top:4px; padding:2px 6px; border-radius:99px;
+  background:var(--gold-tint); color:var(--gold-deep); font-size:9px; font-weight:800;
 }
-.sales-group-date{font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:14.5px;}
-.sales-group-sub{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
-.sales-group-chevron{
-  color:var(--ink-faint); font-size:14px; transition:transform .15s ease; flex-shrink:0;
+.sales-date-card-top>span>small.badge-locked{background:var(--bg); color:var(--ink-soft);}
+.sales-date-total{flex-shrink:0; text-align:right;}
+.sales-date-total b{display:block; font-family:'Fraunces',Georgia,serif; font-size:24px; line-height:.95; color:var(--gold-deep); font-variant-numeric:tabular-nums;}
+.sales-date-total small{display:block; margin-top:4px; color:var(--ink-soft); font-size:10.5px;}
+.sales-date-metrics{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:12px;}
+.sales-date-metrics>span{display:flex; align-items:center; justify-content:space-between; gap:5px; padding:7px 8px; border-radius:8px; background:var(--bg);}
+.sales-date-metrics small{font-size:9.5px; color:var(--ink-soft);}
+.sales-date-metrics b{font-size:13px; font-variant-numeric:tabular-nums;}
+
+/* Sales summary modal (opened by tapping a date card above) */
+.sales-summary-sheet{padding-top:18px;}
+.stock-summary-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:13px;}
+.stock-summary-head .modal-title{margin-bottom:1px;}
+.modal-close-btn{
+  width:38px; height:38px; flex-shrink:0; border:1px solid var(--line); border-radius:50%;
+  background:var(--bg); color:var(--ink); font:inherit; font-size:15px; cursor:pointer;
 }
-.sales-group-chevron.open{transform:rotate(180deg);}
-.sales-group-body{border-top:1px solid var(--line); padding:4px 14px 8px;}
+.sales-summary-meta{margin:-6px 0 12px; color:var(--ink-soft); font-size:11px; line-height:1.4;}
+.sales-summary-sheet .day-photo-section{margin:0 -20px 9px;}
+.sales-summary-sheet .day-photo-heading{padding-left:20px; padding-right:20px;}
+.sales-summary-sheet .day-photo-strip{padding-left:20px; padding-right:20px;}
+.sales-summary-outlet-tabs{margin-top:8px;}
+.sales-summary-stock-tabs{margin-top:8px;}
 
 /* Stock category tabs — split a date's products into 1L Bio Dishwash /
    Refill / Free groups instead of one long mixed list, so keying in or

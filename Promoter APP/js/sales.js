@@ -4,7 +4,6 @@
 // dates are locked for promoters and only editable from the office app.
 // ============================================================
 
-let salesExpandedDates = new Set();
 let salesShowPast = false;
 
 // Fixed default SKU list. Keep this order in the app; do not alphabetize it.
@@ -127,7 +126,7 @@ function activeStockTab(date, grouped){
 }
 function setStockTab(date, key){
   salesActiveTab[date] = key;
-  render();
+  refreshSalesSummary(date);
 }
 function renderStockTabs(date, grouped, active){
   return `<div class="stock-tabs">${STOCK_CATEGORIES.map(c=>{
@@ -170,7 +169,7 @@ function activeOutletTab(date, groups){
 }
 function setOutletTab(date, key){
   salesActiveOutletTab[date] = key;
-  render();
+  refreshSalesSummary(date);
 }
 function renderOutletTabs(date, groups, active){
   return `<div class="stock-tabs outlet-tabs">${groups.map(g=>`
@@ -356,48 +355,16 @@ function renderSales(){
   if(visibleDates.length === 0){
     html += emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
   }else{
-    visibleDates.forEach(date=>{
+    html += `<div class="sales-date-grid">${visibleDates.map(date=>{
       const items = byDate[date];
-      const expanded = salesExpandedDates.has(date);
       const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
       const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
-      const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
       const isToday = date === today;
-
-      let body = '';
-      if(expanded){
-        // Split by outlet first (only rendered as tabs when a date actually
-        // has more than one outlet) — the product-category tabs below then
-        // work on just that outlet's records.
-        const outletGroups = groupByOutlet(items);
-        const showOutletTabs = outletGroups.length > 1;
-        const activeOutletKey = showOutletTabs ? activeOutletTab(date, outletGroups) : null;
-        const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
-
-        const grouped = groupByStockCategory(scopedItems);
-        const active = activeStockTab(date, grouped);
-        const activeItems = grouped[active];
-        body = `<div class="sales-group-body">
-          ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey) : ''}
-          ${renderDayPhotoRow(date, isToday)}
-          ${renderStockTabs(date, grouped, active)}
-          ${activeItems.length ? renderSalesItems(activeItems, isToday, active==='free') : `<div class="stock-tab-empty">No products in this group yet.</div>`}
-        </div>`;
-      }
-
-      html += `
-        <div class="sales-group">
-          <button class="sales-group-header" onclick="toggleSalesDate('${date}')">
-            <div>
-              <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-              <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}</div>
-            </div>
-            <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
-          </button>
-          ${body}
-        </div>
-      `;
-    });
+      return `<button type="button" class="sales-date-card" onclick="openSalesDateSummary('${date}')">
+        <span class="sales-date-card-top"><span><strong>${formatDateLong(date)}</strong>${isToday?'<small>Today</small>':'<small class="badge-locked">🔒 Locked</small>'}</span><span class="sales-date-total"><b>${totalSales}</b><small>sold</small></span></span>
+        <span class="sales-date-metrics"><span><small>SKUs</small><b>${items.length}</b></span><span><small>Given away</small><b>${totalGiven}</b></span></span>
+      </button>`;
+    }).join('')}</div>`;
   }
 
   if(pastDates.length > 0){
@@ -414,6 +381,60 @@ function renderSales(){
 function toggleSalesShowPast(){
   salesShowPast = !salesShowPast;
   render();
+}
+
+// ---------------- Sales date summary modal ----------------
+// Tapping a date card opens the full breakdown here. Switching the
+// outlet/stock-category tabs while it's open calls refreshSalesSummary()
+// below, which only replaces this sheet's own contents — the overlay and
+// sheet elements themselves are never removed/recreated, so there's no
+// backdrop flash or re-triggered open animation when flipping tabs.
+function buildSalesSummaryInner(date){
+  const items = salesReports.filter(row=>row.work_date===date);
+  const isToday = date === todayStr();
+  const totalSales = items.filter(item=>!isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
+  const totalGiven = items.filter(item=>isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
+  const storeNames = [...new Set(items.filter(item=>item.stores).map(item=>item.stores.name))];
+
+  // Split by outlet first (only rendered as tabs when a date actually has
+  // more than one outlet) — the product-category tabs below then work on
+  // just that outlet's records.
+  const outletGroups = groupByOutlet(items);
+  const showOutletTabs = outletGroups.length > 1;
+  const activeOutletKey = showOutletTabs ? activeOutletTab(date, outletGroups) : null;
+  const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
+
+  const grouped = groupByStockCategory(scopedItems);
+  const active = activeStockTab(date, grouped);
+  const activeItems = grouped[active];
+  const hasAnyProducts = grouped.bottle.length || grouped.refill.length || grouped.free.length;
+
+  return `
+    <div class="stock-summary-head"><div class="modal-title">${formatDateLong(date)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
+    <div class="sales-summary-meta">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}${!isToday?' · Only today can be edited':''}</div>
+    ${renderDayPhotoRow(date, isToday)}
+    ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey) : ''}
+    ${hasAnyProducts ? renderStockTabs(date, grouped, active) : ''}
+    ${activeItems.length ? renderSalesItems(activeItems, isToday, active==='free') : `<div class="stock-tab-empty">No products in this group yet.</div>`}
+  `;
+}
+
+function openSalesDateSummary(date){
+  const items = salesReports.filter(row=>row.work_date===date);
+  const hasPhotos = dayPhotos.some(dp=>dp.work_date===date);
+  if(!items.length && !hasPhotos){ showToast('No sales record found for that date'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-sheet sales-summary-sheet" id="sales-summary-sheet">${buildSalesSummaryInner(date)}</div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+// Refreshes only the sales summary sheet's own contents in place — used
+// by tab switches inside the modal so they don't flicker (see above).
+function refreshSalesSummary(date){
+  const sheet = document.getElementById('sales-summary-sheet');
+  if(sheet) sheet.innerHTML = buildSalesSummaryInner(date);
 }
 
 // `compact` is used for the Free tab — giveaways don't need the full
@@ -438,7 +459,7 @@ function renderSalesItems(items, isToday, compact){
         <b class="sales-table-number">${sales}</b>
         <b class="sales-table-number">${closing}</b>
         ${isToday ? `
-          <button type="button" class="icon-btn" onclick="openSalesForm('${i.id}')" aria-label="Edit ${esc(displayProductName(i))}" title="Edit report">✎</button>
+          <button type="button" class="icon-btn" onclick="closeModal();openSalesForm('${i.id}')" aria-label="Edit ${esc(displayProductName(i))}" title="Edit report">✎</button>
         ` : `<div class="sales-locked" title="Only today's reports can be edited">🔒</div>`}
       </div>
     `;
@@ -462,23 +483,17 @@ function renderDayPhotoRow(date, isToday){
       ${dp.photo_url
         ? `<img src="${esc(dp.photo_url)}" alt="Day photo">`
         : `<div class="day-photo-thumb-empty">📷</div>`}
-      ${isToday ? `<button type="button" class="day-photo-thumb-edit" onclick="event.stopPropagation(); openDayPhotoForm('${date}','${dp.id}')" title="Retake photo" aria-label="Retake day photo">✎</button><button class="day-photo-thumb-delete" onclick="event.stopPropagation(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
+      ${isToday ? `<button type="button" class="day-photo-thumb-edit" onclick="event.stopPropagation(); closeModal(); openDayPhotoForm('${date}','${dp.id}')" title="Retake photo" aria-label="Retake day photo">✎</button><button class="day-photo-thumb-delete" onclick="event.stopPropagation(); closeModal(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
     </div>
   `).join('');
 
   if(!isToday) return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}</div></div>`;
 
   const addThumb = `
-    <div class="day-photo-thumb day-photo-add" onclick="openDayPhotoForm('${date}')" title="Add day photo">＋</div>
+    <div class="day-photo-thumb day-photo-add" onclick="closeModal(); openDayPhotoForm('${date}')" title="Add day photo">＋</div>
   `;
 
   return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}${addThumb}</div></div>`;
-}
-
-function toggleSalesDate(date){
-  if(salesExpandedDates.has(date)) salesExpandedDates.delete(date);
-  else salesExpandedDates.add(date);
-  render();
 }
 
 function openSalesForm(id){
@@ -632,7 +647,6 @@ async function saveSalesForm(id){
       await DB.addSalesReport(payload);
     }
     await carryClosingToNextEvent(product_name, work_date, closing_qty);
-    salesExpandedDates.add(work_date);
     await refreshData();
     closeModal();
     render();

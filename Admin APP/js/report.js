@@ -108,14 +108,16 @@ function exportExcel(){
         'End Time': shortTime(j.end_time),
         'Hours Worked': Number(timeDiffHours(j.start_time,j.end_time)),
         'Location': j.stores ? j.stores.name : '(not specified)',
-        'Position': j.position || 'Promoter'
+        'Position': j.position || 'Promoter',
+        'Total Pay (RM)': Number((Number(j.pay||0) + Number(j.commission||0)).toFixed(2))
       };
     });
   const detailsWs = XLSX.utils.json_to_sheet(workingDetails);
-  detailsWs['!cols'] = [{wch:24},{wch:13},{wch:12},{wch:12},{wch:14},{wch:24},{wch:14}];
+  detailsWs['!cols'] = [{wch:24},{wch:13},{wch:12},{wch:12},{wch:14},{wch:24},{wch:14},{wch:15}];
   for(let row=2; row<=workingDetails.length+1; row++){
     if(detailsWs['B'+row]) detailsWs['B'+row].z = 'dd/mm/yyyy';
     if(detailsWs['E'+row]) detailsWs['E'+row].z = '0.0';
+    if(detailsWs['H'+row]) detailsWs['H'+row].z = '0.00';
   }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Monthly Pay');
