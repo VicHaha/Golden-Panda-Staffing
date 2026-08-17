@@ -110,7 +110,7 @@ function openPromoterForm(id){
       </div>
     </div>
   `;
-  document.body.appendChild(overlay);
+  showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 }
 

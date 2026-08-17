@@ -9,7 +9,7 @@ let salesReports = [];
 let dayPhotos = [];
 let dayFeedback = [];
 let shiftReports = [];
-let currentTab = 'roster';
+let currentTab = 'sales';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
 
@@ -70,9 +70,13 @@ function renderAuthGate(mode, prefillEmail){
       <p>${isSignup
         ? 'First time here? Set a password to log in with next time.'
         : 'Enter your email and password to open the office app.'}</p>
-      <input id="auth-email" type="email" placeholder="Email" value="${prefillEmail ? esc(prefillEmail) : ''}" autocapitalize="off" autocomplete="email">
-      <input id="auth-password" type="password" placeholder="Password" autocomplete="${isSignup?'new-password':'current-password'}">
-      <button class="btn btn-primary btn-block" id="auth-submit-btn" onclick="${isSignup?'submitSignup()':'submitLogin()'}">${isSignup ? 'Create account' : 'Log in'}</button>
+      <div class="gate-form">
+        <label for="auth-email">Email address</label>
+        <input id="auth-email" type="email" inputmode="email" placeholder="name@example.com" value="${prefillEmail ? esc(prefillEmail) : ''}" autocapitalize="off" autocomplete="email">
+        <label for="auth-password">Password</label>
+        <input id="auth-password" type="password" placeholder="Enter your password" autocomplete="${isSignup?'new-password':'current-password'}">
+        <button class="btn btn-primary btn-block" id="auth-submit-btn" onclick="${isSignup?'submitSignup()':'submitLogin()'}">${isSignup ? 'Create account' : 'Log in'}</button>
+      </div>
       <p class="fineprint">
         ${isSignup
           ? `Already have an account? <a href="#" onclick="event.preventDefault(); renderAuthGate('login')">Log in</a>`
@@ -81,6 +85,9 @@ function renderAuthGate(mode, prefillEmail){
     </div>
   `;
   document.getElementById('auth-email').focus();
+  document.getElementById('auth-password').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') isSignup ? submitSignup() : submitLogin();
+  });
 }
 
 async function submitSignup(){
@@ -137,8 +144,11 @@ function renderNameGate(){
       <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
       <h2>Who's logging in?</h2>
       <p>Enter your name — it stays saved on this device so you won't need to enter it again next time.</p>
-      <input id="gate-admin-name" type="text" placeholder="Your name" autocapitalize="words" autocomplete="name" value="${currentAdminName?esc(currentAdminName):''}">
-      <button class="btn btn-primary btn-block" onclick="submitAdminName()">Continue</button>
+      <div class="gate-form">
+        <label for="gate-admin-name">Your name</label>
+        <input id="gate-admin-name" type="text" placeholder="e.g. Aisyah" autocapitalize="words" autocomplete="name" value="${currentAdminName?esc(currentAdminName):''}">
+        <button class="btn btn-primary btn-block" onclick="submitAdminName()">Continue</button>
+      </div>
       <p class="fineprint">Not you on this device in future? Tap your name at the top of the app to log out.</p>
     </div>
   `;
@@ -175,30 +185,30 @@ function renderApp(){
             <h1>Golden Panda</h1>
             <p>Roadshow Staffing</p>
           </div>
-          <div class="sync-dot off" id="sync-dot" title="Syncing"></div>
-          <div class="identity-chip" onclick="logOutAdmin()">${esc(currentAdminName)}</div>
+          <span class="sync-status" title="Connection status"><span class="sync-dot off" id="sync-dot"></span><span class="sync-label" id="sync-label">Syncing</span></span>
+          <button type="button" class="identity-chip" onclick="logOutAdmin()" title="Log out ${esc(currentAdminName)}">${esc(currentAdminName)}</button>
         </div>
       </div>
-      <div class="content" id="content"></div>
-      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add">+</button></div>
-      <div class="tabbar">
-        <button class="tab" data-tab="roster" onclick="switchTab('roster')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <main class="content" id="content"><div class="loading-state" role="status"><span class="loading-spinner" aria-hidden="true"></span>Loading your workspace…</div></main>
+      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add job"><span class="fab-icon" aria-hidden="true">+</span><span class="fab-label">Add job</span></button></div>
+      <nav class="tabbar" aria-label="Main navigation">
+        <button type="button" class="tab" data-tab="roster" onclick="switchTab('roster')">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
           Schedule
         </button>
-        <button class="tab" data-tab="sales" onclick="switchTab('sales')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+        <button type="button" class="tab" data-tab="sales" onclick="switchTab('sales')">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
           Sales
         </button>
-        <button class="tab" data-tab="stock" onclick="switchTab('stock')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
+        <button type="button" class="tab" data-tab="stock" onclick="switchTab('stock')">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
           Stock
         </button>
-        <button class="tab" data-tab="reports" onclick="switchTab('reports')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
+        <button type="button" class="tab" data-tab="reports" onclick="switchTab('reports')">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
           Payout
         </button>
-      </div>
+      </nav>
     </div>
   `;
   loadInitialData();
@@ -211,6 +221,7 @@ async function loadInitialData(){
     await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));
     await DB.purgeOldDayFeedback().catch(e=>console.warn('Purge old day feedback failed (non-fatal):', e));
     await refreshData();
+    await linkAllScheduledLocations().catch(e=>console.warn('Link scheduled locations failed (non-fatal):',e));
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
@@ -220,7 +231,7 @@ async function loadInitialData(){
     setSyncDot(false);
     showToast('Could not connect to Supabase — check your internet connection');
   }
-  switchTab('roster');
+  switchTab('sales');
 }
 
 // Re-fetches promoters, jobs, stores, sales reports, day photos, day feedback, and shift reports from Supabase.
@@ -267,8 +278,14 @@ async function handleRemoteChange(){
 // ---------- Tabs ----------
 function switchTab(tab){
   currentTab = tab;
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.tab').forEach(b=>{
+    const active = b.dataset.tab===tab;
+    b.classList.toggle('active', active);
+    if(active) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
   render();
+  const content = document.getElementById('content');
+  if(content) content.scrollTop = 0;
 }
 
 function openFab(){
@@ -282,7 +299,11 @@ function openFab(){
 }
 
 function render(){
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
+  document.querySelectorAll('.tab').forEach(b=>{
+    const active = b.dataset.tab===currentTab;
+    b.classList.toggle('active', active);
+    if(active) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
   const c = document.getElementById('content');
   if(!c) return;
   if(currentTab==='roster') c.innerHTML = renderRosterSection();
@@ -298,7 +319,17 @@ function render(){
   // openAddStockRecordForm in js/stock.js); it's separate from the
   // Sales tab's own "+", which adds a Sales record instead.
   const fab = document.getElementById('fab');
-  if(fab) fab.classList.toggle('hidden', currentTab==='reports');
+  if(fab){
+    fab.classList.toggle('hidden', currentTab==='reports');
+    const label = currentTab==='roster' ? (rosterPage==='schedule' ? 'Add job' : 'Add promoter') : currentTab==='sales' ? 'Add sales report' : 'Add stock record';
+    const button = fab.querySelector('button');
+    if(button){
+      button.setAttribute('aria-label',label);
+      button.title = label;
+      const text = button.querySelector('.fab-label');
+      if(text) text.textContent = label;
+    }
+  }
 }
 
 // ---------- Service worker (offline shell + installability) ----------

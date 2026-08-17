@@ -40,9 +40,14 @@ function emptyState(glyph, title, hint){
 }
 
 function closeModal(){
+  if(typeof stopDayPhotoCamera === 'function') stopDayPhotoCamera();
   const o = document.querySelector('.modal-overlay');
   if(o) o.remove();
 }
+
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && document.querySelector('.photo-lightbox-overlay')) closePhotoLightbox();
+});
 
 function showToast(msg){
   const t = document.getElementById('toast');

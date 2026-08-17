@@ -88,8 +88,38 @@ function exportExcel(){
 
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [{wch:24},{wch:16},{wch:16},{wch:16},{wch:14},{wch:15},{wch:20},{wch:17}];
+
+  // Sheet 2 — one row per shift, grouped by crew and then date. This is
+  // the audit trail behind the monthly payout totals in Sheet 1.
+  const workingDetails = [...monthJobs]
+    .sort((a,b)=>{
+      const ap = promoters.find(p=>p.id===a.promoter_id);
+      const bp = promoters.find(p=>p.id===b.promoter_id);
+      const an = ap ? ap.full_name : '(removed promoter)';
+      const bn = bp ? bp.full_name : '(removed promoter)';
+      return an.localeCompare(bn) || a.work_date.localeCompare(b.work_date) || shortTime(a.start_time).localeCompare(shortTime(b.start_time));
+    })
+    .map(j=>{
+      const p = promoters.find(x=>x.id===j.promoter_id);
+      return {
+        'Crew Name': p ? p.full_name : '(removed promoter)',
+        'Date': new Date(j.work_date+'T00:00:00'),
+        'Start Time': shortTime(j.start_time),
+        'End Time': shortTime(j.end_time),
+        'Hours Worked': Number(timeDiffHours(j.start_time,j.end_time)),
+        'Location': j.stores ? j.stores.name : '(not specified)',
+        'Position': j.position || 'Promoter'
+      };
+    });
+  const detailsWs = XLSX.utils.json_to_sheet(workingDetails);
+  detailsWs['!cols'] = [{wch:24},{wch:13},{wch:12},{wch:12},{wch:14},{wch:24},{wch:14}];
+  for(let row=2; row<=workingDetails.length+1; row++){
+    if(detailsWs['B'+row]) detailsWs['B'+row].z = 'dd/mm/yyyy';
+    if(detailsWs['E'+row]) detailsWs['E'+row].z = '0.0';
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Monthly Pay');
+  XLSX.utils.book_append_sheet(wb, detailsWs, 'Working Details');
   XLSX.writeFile(wb, `Golden_Panda_Pay_${reportMonth}.xlsx`);
   showToast('Excel file downloaded');
 }

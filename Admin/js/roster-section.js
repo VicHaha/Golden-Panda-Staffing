@@ -21,7 +21,7 @@ function renderRosterSection(){
   let html = `
     <div class="period-toggle" id="roster-page-toggle">
       ${ROSTER_PAGES.map(p=>`
-        <button class="period-btn ${rosterPage===p.key?'active':''}" data-roster-page="${p.key}">${p.label}</button>
+        <button type="button" class="period-btn ${rosterPage===p.key?'active':''}" data-roster-page="${p.key}" aria-pressed="${rosterPage===p.key}">${p.label}</button>
       `).join('')}
     </div>
   `;

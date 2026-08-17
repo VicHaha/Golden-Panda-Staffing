@@ -7,17 +7,18 @@
 let salesExpandedDates = new Set();
 let salesShowPast = false;
 
-// Suggested products — shown as autocomplete, but the field stays free
-// text so new products can always be typed in and added on the fly.
-// These are base names only (no variation suffix) and are what
-// auto-seeds each working date's rows — see ensureStockRowsForDate.
+// Fixed default SKU list. Keep this order in the app; do not alphabetize it.
 const PRODUCT_SUGGESTIONS = [
+  '1L Bio Dishwash (Bidara)',
+  '1L Bio Dishwash (Ginger)',
+  '1L Bio Dishwash (Melon)',
+  '480ml Bio Dishwash Refill (Bidara)',
+  '480ml Bio Dishwash Refill (Ginger)',
+  '480ml Bio Dishwash Refill (Melon)',
   'Gift Set',
+  'Sample Set',
   'Flyer',
-  'Small Samples',
-  'Coupons',
-  'Bio Dishwash 1L',
-  'Refill Bio Dishwash 480ml'
+  'Coupon'
 ];
 
 // Product name and variation are entered as two separate fields in the
@@ -30,7 +31,7 @@ const PRODUCT_SUGGESTIONS = [
 // new flavor/variation on the fly and it's stored and parsed the same
 // way as the preset ones.
 const VARIATIONS = ['Bidara', 'Ginger', 'Melon'];
-const VARIANT_BASE_PRODUCTS = ['Bio Dishwash 1L', 'Refill Bio Dishwash 480ml'];
+const VARIANT_BASE_PRODUCTS = ['1L Bio Dishwash', '480ml Bio Dishwash Refill'];
 
 // Splits a stored product_name like "Bio Dishwash 1L (Bidara)" back into
 // its base name and variation, so the form can show them as two fields
@@ -62,9 +63,25 @@ function displayProductName(report){
 // checkbox as you type a new product). Every row also carries its own
 // editable is_free_item flag (see isFreeItem below) so this default can
 // always be overridden by hand, per row. Matched case-insensitively.
-const GIVEAWAY_ITEMS = ['Gift Set', 'Flyer', 'Small Samples', 'Coupons'];
+const GIVEAWAY_ITEMS = ['Gift Set', 'Sample Set', 'Flyer', 'Coupon'];
+function canonicalSkuName(name){
+  const raw = (name || '').trim();
+  const replacements = { 'Small Samples':'Sample Set', 'Coupons':'Coupon' };
+  if(replacements[raw]) return replacements[raw];
+  const oneL = /^(?:Bio Dishwash 1L|1L Bio Dishwash)\s*\((Bidara|Ginger|Melon)\)$/i.exec(raw);
+  if(oneL) return `1L Bio Dishwash (${oneL[1][0].toUpperCase()}${oneL[1].slice(1).toLowerCase()})`;
+  const refill = /^(?:Refill Bio Dishwash 480ml|480ml Bio Dishwash Refill)\s*\((Bidara|Ginger|Melon)\)$/i.exec(raw);
+  if(refill) return `480ml Bio Dishwash Refill (${refill[1][0].toUpperCase()}${refill[1].slice(1).toLowerCase()})`;
+  return raw;
+}
+function skuOrderIndex(nameOrReport){
+  const name = typeof nameOrReport === 'string' ? nameOrReport : (nameOrReport && nameOrReport.product_name);
+  const index = PRODUCT_SUGGESTIONS.indexOf(canonicalSkuName(name));
+  return index === -1 ? PRODUCT_SUGGESTIONS.length : index;
+}
 function isGiveaway(productName){
-  return GIVEAWAY_ITEMS.some(g => g.toLowerCase() === (productName||'').trim().toLowerCase());
+  const canonical = canonicalSkuName(productName).toLowerCase();
+  return GIVEAWAY_ITEMS.some(g => g.toLowerCase() === canonical);
 }
 
 // The actual, authoritative "is this a free item?" check for a saved row —
@@ -95,6 +112,7 @@ function stockCategoryKey(report){
 function groupByStockCategory(items){
   const grouped = { bottle:[], refill:[], free:[] };
   items.forEach(i => grouped[stockCategoryKey(i)].push(i));
+  Object.values(grouped).forEach(group => group.sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b)));
   return grouped;
 }
 
@@ -161,9 +179,9 @@ function renderOutletTabs(date, groups, active){
 }
 
 function getProductSuggestions(){
-  const bases = new Set([...GIVEAWAY_ITEMS, ...VARIANT_BASE_PRODUCTS]);
+  const bases = new Set([...VARIANT_BASE_PRODUCTS, ...GIVEAWAY_ITEMS]);
   salesReports.forEach(r => { if(r.product_name) bases.add(parseProductName(r.product_name).base); });
-  return [...bases].sort();
+  return [...bases];
 }
 
 // Same idea for the Variation field: starts with the preset flavor list
@@ -176,11 +194,35 @@ function getVariationSuggestions(){
     const v = parseProductName(r.product_name).variation;
     if(v) variations.add(v);
   });
-  return [...variations].sort();
+  return [...variations];
 }
 
 function todayStr(){
   return new Date().toISOString().slice(0,10);
+}
+
+function scheduledStoreIdForDate(date, promoterId){
+  const datedJobs = jobs.filter(j=>j.work_date===date && (j.store_id || (j.stores&&j.stores.id)));
+  const matched = promoterId ? datedJobs.find(j=>j.promoter_id===promoterId) : null;
+  const job = matched || datedJobs[0];
+  return job ? (job.store_id || (job.stores&&job.stores.id) || null) : null;
+}
+
+async function linkUnassignedSalesRecordsToJob(date, storeId){
+  if(!date || !storeId) return;
+  const unassigned = salesReports.filter(r=>r.work_date===date && !r.store_id);
+  for(const row of unassigned){
+    await DB.updateSalesReport(row.id,{store_id:storeId});
+    row.store_id = storeId;
+    row.stores = stores.find(s=>s.id===storeId) || row.stores || null;
+  }
+}
+
+async function linkAllScheduledLocations(){
+  const dates = [...new Set(salesReports.filter(r=>!r.store_id).map(r=>r.work_date))];
+  for(const date of dates){
+    await linkUnassignedSalesRecordsToJob(date,scheduledStoreIdForDate(date,currentPromoterId));
+  }
 }
 
 // Who logged a sales report row — the promoter if it came from the
@@ -229,17 +271,18 @@ async function ensureTodaysStockRows(){
 // Gift Set/Flyer/Small Samples/Coupons are auto-seeded as free items by
 // default (is_free_item stays editable per row afterwards from the stock
 // report form) — but they carry opening stock forward exactly like any
-// other product, since "given out" is now calculated as opening − closing
-// rather than typed in by hand.
+// other product. The actual quantity given out remains user-editable.
 async function ensureStockRowsForDate(date){
-  const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => r.product_name));
-  const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(p));
+  const scheduledStoreId = scheduledStoreIdForDate(date,currentPromoterId);
+  await linkUnassignedSalesRecordsToJob(date,scheduledStoreId);
+  const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => canonicalSkuName(r.product_name)));
+  const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(canonicalSkuName(p)));
   if(missing.length === 0) return;
 
   for(const product of missing){
     const giveaway = isGiveaway(product);
     const priorEntries = salesReports
-      .filter(r => r.product_name === product && r.work_date < date)
+      .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(product) && r.work_date < date)
       .sort((a,b) => b.work_date.localeCompare(a.work_date));
     const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
     // Warehouse stock (admin-only field, not shown in this app's form) is
@@ -251,7 +294,7 @@ async function ensureStockRowsForDate(date){
     try{
       const created = await DB.addSalesReport({
         work_date: date,
-        store_id: null,
+        store_id: scheduledStoreId,
         promoter_id: null,
         product_name: product,
         opening_qty: carryOver,
@@ -268,6 +311,20 @@ async function ensureStockRowsForDate(date){
     }catch(e){
       console.warn('Could not auto-create row for', product, 'on', date, e);
     }
+  }
+}
+
+async function carryClosingToNextEvent(productName, workDate, closingQty){
+  const nextDate = [...new Set([...scheduledDates, ...salesReports.map(r=>r.work_date)])].filter(d=>d>workDate).sort()[0];
+  if(!nextDate) return;
+  const nextRows = salesReports.filter(r=>
+    r.work_date === nextDate && canonicalSkuName(r.product_name) === canonicalSkuName(productName)
+  );
+  for(const row of nextRows){
+    const untouched = Number(row.sales_qty||0) === 0 && Number(row.closing_qty||0) === Number(row.opening_qty||0);
+    const update = { opening_qty:Number(closingQty||0) };
+    if(untouched) update.closing_qty = Number(closingQty||0);
+    await DB.updateSalesReport(row.id, update);
   }
 }
 
@@ -363,36 +420,34 @@ function toggleSalesShowPast(){
 // open/sold/close breakdown, just how many went out, so the list stays
 // quick to scan while keying in samples/coupons/etc.
 function renderSalesItems(items, isToday, compact){
-  return items.map(i=>{
+  const loggers = [...new Set(items.map(loggedByLabel))];
+  const commonLogger = loggers.length === 1 ? loggers[0] : null;
+  const rows = items.map(i=>{
     const giveaway = isFreeItem(i);
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
-    const statsHtml = compact
-      ? `Given out <b>${sales}</b> · Logged by <b>${esc(loggedByLabel(i))}</b>`
-      : (()=>{
-          const expectedClosing = opening - sales;
-          const variance = closing - expectedClosing;
-          return `
-            Open <b>${opening}</b> · ${giveaway?'Given out':'Sold'} <b>${sales}</b> · Close <b>${closing}</b> · Logged by <b>${esc(loggedByLabel(i))}</b>
-            ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance} vs expected</span>` : ''}
-            ${giveaway ? `<span class="count-pill">Free item</span>` : ''}
-          `;
-        })();
+    const variance = closing - (opening - sales);
     return `
-      <div class="sales-item">
-        <div class="sales-item-main">
-          <div class="sales-item-name">${esc(displayProductName(i))}</div>
-          <div class="sales-item-stats">${statsHtml}</div>
+      <div class="sales-table-row">
+        <div class="sales-table-sku">
+          <strong>${esc(displayProductName(i))}</strong>
+          ${!commonLogger ? `<small>${esc(loggedByLabel(i))}</small>` : ''}
+          ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance}</span>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
+        <b class="sales-table-number">${opening}</b>
+        <b class="sales-table-number">${sales}</b>
+        <b class="sales-table-number">${closing}</b>
         ${isToday ? `
-          <div class="job-actions">
-            <div class="icon-btn" onclick="openSalesForm('${i.id}')">✎</div>
-            <div class="icon-btn danger" onclick="deleteSalesReport('${i.id}')">✕</div>
-          </div>
+          <button type="button" class="icon-btn" onclick="openSalesForm('${i.id}')" aria-label="Edit ${esc(displayProductName(i))}" title="Edit report">✎</button>
         ` : `<div class="sales-locked" title="Only today's reports can be edited">🔒</div>`}
       </div>
     `;
   }).join('');
+  return `<div class="sales-table">
+    <div class="sales-table-head"><span>SKU</span><span>Opening</span><span>${compact?'Given':'Sold'}</span><span>Closing</span><span aria-hidden="true"></span></div>
+    ${rows}
+    ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
+  </div>`;
 }
 
 // Any number of overall photos allowed per working date (booth/table
@@ -403,21 +458,21 @@ function renderSalesItems(items, isToday, compact){
 function renderDayPhotoRow(date, isToday){
   const photos = dayPhotos.filter(d => d.work_date === date);
   const photoThumbs = photos.map(dp => `
-    <div class="day-photo-thumb" onclick="${isToday ? `openDayPhotoForm('${date}','${dp.id}')` : (dp.photo_url ? `window.open('${esc(dp.photo_url)}','_blank')` : '')}" title="${isToday?'Edit day photo':'View day photo'}">
+    <div class="day-photo-thumb" role="button" tabindex="0" onclick="openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')}" title="Enlarge photo" aria-label="Enlarge day photo">
       ${dp.photo_url
         ? `<img src="${esc(dp.photo_url)}" alt="Day photo">`
         : `<div class="day-photo-thumb-empty">📷</div>`}
-      ${isToday ? `<button class="day-photo-thumb-delete" onclick="event.stopPropagation(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
+      ${isToday ? `<button type="button" class="day-photo-thumb-edit" onclick="event.stopPropagation(); openDayPhotoForm('${date}','${dp.id}')" title="Retake photo" aria-label="Retake day photo">✎</button><button class="day-photo-thumb-delete" onclick="event.stopPropagation(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
     </div>
   `).join('');
 
-  if(!isToday) return `<div class="day-photo-strip">${photoThumbs}</div>`;
+  if(!isToday) return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}</div></div>`;
 
   const addThumb = `
     <div class="day-photo-thumb day-photo-add" onclick="openDayPhotoForm('${date}')" title="Add day photo">＋</div>
   `;
 
-  return `<div class="day-photo-strip">${photoThumbs}${addThumb}</div>`;
+  return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}${addThumb}</div></div>`;
 }
 
 function toggleSalesDate(date){
@@ -432,6 +487,7 @@ function openSalesForm(id){
   if(editing && editing.work_date !== today){
     showToast("Only today's reports can be edited"); return;
   }
+  const defaultStoreId = editing ? editing.store_id : scheduledStoreIdForDate(today,currentPromoterId);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -442,7 +498,7 @@ function openSalesForm(id){
         <label>Store (optional)</label>
         <select id="s-store">
           <option value="">— Not specified —</option>
-          ${stores.map(s=>`<option value="${s.id}" ${editing&&editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+          ${stores.map(s=>`<option value="${s.id}" ${defaultStoreId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
       <div class="field-row">
@@ -466,7 +522,7 @@ function openSalesForm(id){
       <div class="field"><label>Opening stock</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
-          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
         </div>
       </div>
@@ -480,20 +536,25 @@ function openSalesForm(id){
       <div class="field"><label>Closing stock</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
-          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="onStockFieldInput()">
+          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
         </div>
       </div>
       <div class="field" id="given-out-field" style="display:none;">
-        <label>Given out (auto)</label>
-        <input id="s-given-out-display" type="text" value="0" readonly disabled>
-        <div class="field-hint">Calculated automatically: opening stock − closing stock.</div>
+        <label>Given out</label>
+        <div class="qty-stepper">
+          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-given-out',-1)" aria-label="Decrease given out quantity">−</button>
+          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-given-out',1)" aria-label="Increase given out quantity">+</button>
+        </div>
+        <div class="field-hint">Enter the quantity actually distributed.</div>
       </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
       </div>
+      ${editing ? `<button type="button" class="btn btn-danger-ghost btn-block sales-delete-action" onclick="deleteSalesReport('${editing.id}')">Delete this record</button>` : ''}
     </div>
   `;
   document.body.appendChild(overlay);
@@ -521,27 +582,11 @@ function onFreeItemToggle(){
   applyFreeItemFieldLayout();
 }
 
-// For free items, opening/closing stock is still recorded, but the "Sales
-// qty" field is hidden and replaced with a read-only "Given out" figure
-// computed automatically as opening − closing — no manual entry needed.
+// Free items use an editable "Given out" quantity instead of Sales qty.
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
   document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
-  if(giveaway) updateGivenOutPreview();
-}
-
-// Keeps the read-only "Given out" figure in sync as opening/closing stock
-// is typed, whenever the "Free item" checkbox is ticked.
-function updateGivenOutPreview(){
-  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
-  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
-  const given = Math.max(0, opening - closing);
-  document.getElementById('s-given-out-display').value = given;
-}
-
-function onStockFieldInput(){
-  if(document.getElementById('s-free-item').checked) updateGivenOutPreview();
 }
 
 async function saveSalesForm(id){
@@ -564,9 +609,7 @@ async function saveSalesForm(id){
   const is_free_item = salesFormFreeItemTouched ? checkboxChecked : (checkboxChecked || isGiveaway(productBase));
   const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
   const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
-  // Free items: "given out" is never typed in — it's always opening minus
-  // closing. Regular products: sales qty is entered by hand as before.
-  const sales_qty = is_free_item ? Math.max(0, opening_qty - closing_qty) : (parseFloat(document.getElementById('s-sales').value) || 0);
+  const sales_qty = is_free_item ? (parseFloat(document.getElementById('s-given-out').value) || 0) : (parseFloat(document.getElementById('s-sales').value) || 0);
   const remarks = document.getElementById('s-remarks').value.trim();
   const editing = id ? salesReports.find(r=>r.id===id) : null;
   // Photos are no longer captured per product — see the "Day photo" row
@@ -588,6 +631,7 @@ async function saveSalesForm(id){
     }else{
       await DB.addSalesReport(payload);
     }
+    await carryClosingToNextEvent(product_name, work_date, closing_qty);
     salesExpandedDates.add(work_date);
     await refreshData();
     closeModal();
@@ -610,6 +654,7 @@ async function deleteSalesReport(id){
   try{
     await DB.deleteSalesReport(id);
     await refreshData();
+    closeModal();
     render();
     showToast('Stock report deleted');
   }catch(e){
@@ -620,12 +665,77 @@ async function deleteSalesReport(id){
 
 // ---------------- Day photo (one overall photo per working date) ----------------
 
+let dayPhotoCameraStream = null;
+let capturedDayPhotoBlob = null;
+
+function openPhotoLightbox(url, alt){
+  if(!url) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-lightbox-overlay';
+  overlay.setAttribute('role','dialog');
+  overlay.setAttribute('aria-modal','true');
+  overlay.setAttribute('aria-label','Enlarged day photo');
+  overlay.innerHTML = `<button type="button" class="photo-lightbox-close" onclick="closePhotoLightbox()" aria-label="Close enlarged photo">✕</button><img src="${esc(url)}" alt="${esc(alt || 'Enlarged day photo')}">`;
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closePhotoLightbox(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('.photo-lightbox-close').focus();
+}
+
+function closePhotoLightbox(){
+  const overlay = document.querySelector('.photo-lightbox-overlay');
+  if(overlay) overlay.remove();
+}
+
+function stopDayPhotoCamera(){
+  if(dayPhotoCameraStream){
+    dayPhotoCameraStream.getTracks().forEach(track=>track.stop());
+    dayPhotoCameraStream = null;
+  }
+}
+
+async function startDayPhotoCamera(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showToast('Camera access is not available in this browser'); return;
+  }
+  try{
+    stopDayPhotoCamera();
+    dayPhotoCameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false });
+    const video = document.getElementById('day-photo-camera');
+    video.srcObject = dayPhotoCameraStream;
+    document.getElementById('day-photo-camera-panel').hidden = false;
+    await video.play();
+  }catch(e){
+    console.error(e);
+    showToast('Camera permission is needed to take a photo');
+  }
+}
+
+function captureDayPhoto(){
+  const video = document.getElementById('day-photo-camera');
+  if(!video || !video.videoWidth){ showToast('Camera is still starting'); return; }
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  canvas.toBlob(blob=>{
+    if(!blob){ showToast('Could not capture photo'); return; }
+    capturedDayPhotoBlob = blob;
+    const preview = document.getElementById('photo-preview');
+    preview.src = URL.createObjectURL(blob);
+    preview.style.display = '';
+    document.getElementById('photo-preview-empty').style.display = 'none';
+    document.getElementById('day-photo-camera-panel').hidden = true;
+    stopDayPhotoCamera();
+  },'image/jpeg',.9);
+}
+
 function openDayPhotoForm(date, id){
   const today = todayStr();
   if(date !== today){
     showToast("Only today's photo can be edited"); return;
   }
   const existing = id ? dayPhotos.find(d => d.id === id) : null;
+  capturedDayPhotoBlob = null;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -637,8 +747,15 @@ function openDayPhotoForm(date, id){
           <img id="photo-preview" class="photo-preview" src="${existing&&existing.photo_url?esc(existing.photo_url):''}" style="${existing&&existing.photo_url?'':'display:none;'}">
           <div id="photo-preview-empty" class="photo-preview photo-preview-empty" style="${existing&&existing.photo_url?'display:none;':''}">📷</div>
           <div class="photo-picker-actions">
-            <label class="btn btn-ghost" for="dp-photo">Take / choose photo</label>
-            <input type="file" id="dp-photo" accept="image/*" capture="environment" style="display:none;" onchange="previewDayPhoto(this)">
+            <button type="button" class="btn btn-ghost" onclick="startDayPhotoCamera()">Take photo</button>
+            <div class="field-hint">Uses this device's camera.</div>
+          </div>
+        </div>
+        <div class="camera-panel" id="day-photo-camera-panel" hidden>
+          <video id="day-photo-camera" playsinline muted></video>
+          <div class="camera-actions">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('day-photo-camera-panel').hidden=true;stopDayPhotoCamera()">Cancel camera</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="captureDayPhoto()">Capture</button>
           </div>
         </div>
         <input type="hidden" id="dp-photo-url" value="${existing&&existing.photo_url?esc(existing.photo_url):''}">
@@ -653,27 +770,15 @@ function openDayPhotoForm(date, id){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 }
 
-async function previewDayPhoto(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    document.getElementById('photo-preview').src = reader.result;
-    document.getElementById('photo-preview').style.display = '';
-    document.getElementById('photo-preview-empty').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
-}
-
 async function saveDayPhotoForm(date, id){
   if(date !== todayStr()){
     showToast("Only today's photo can be edited"); return;
   }
-  const photoFile = document.getElementById('dp-photo').files[0];
+  const photoFile = capturedDayPhotoBlob;
   let photo_url = document.getElementById('dp-photo-url').value || null;
 
   if(!photoFile && !photo_url){
-    showToast('Choose a photo first'); return;
+    showToast('Take a photo first'); return;
   }
 
   const btn = document.getElementById('day-photo-save-btn');

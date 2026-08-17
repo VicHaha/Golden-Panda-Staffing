@@ -413,3 +413,48 @@ body{
   border:none; background:none; color:var(--ink-soft); font-size:13px; line-height:1;
   cursor:pointer; padding:4px; flex-shrink:0;
 }
+
+/* Sales section: fixed, scannable stock metrics and camera/photo viewer. */
+.day-photo-section{margin:-4px -14px 8px;border-bottom:1px solid var(--line);}
+.day-photo-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 14px 0;background:var(--gold-tint);}
+.day-photo-heading span{font-size:12px;font-weight:700;color:var(--ink);}
+.day-photo-heading small{font-size:10.5px;color:var(--ink-soft);}
+.day-photo-section .day-photo-strip{margin:0 0 2px;}
+.day-photo-thumb-edit{position:absolute;bottom:2px;left:2px;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--surface);background:var(--ink);color:#fff;font-size:10px;line-height:1;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.camera-panel{margin-top:14px;padding:10px;background:var(--ink);border-radius:12px;}
+.camera-panel[hidden]{display:none;}
+.camera-panel video{display:block;width:100%;max-height:55vh;object-fit:cover;border-radius:8px;background:#000;}
+.camera-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+.photo-lightbox-overlay{position:fixed;inset:0;z-index:80;background:rgba(16,15,13,.92);display:flex;align-items:center;justify-content:center;padding:24px;}
+.photo-lightbox-overlay img{display:block;max-width:min(100%,1100px);max-height:calc(100vh - 48px);object-fit:contain;border-radius:10px;box-shadow:var(--shadow);}
+.photo-lightbox-close{position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:1;width:44px;height:44px;border:1px solid rgba(255,255,255,.25);border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:18px;cursor:pointer;}
+.sales-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 5px;}
+.sales-metrics span{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 8px;border-radius:8px;background:var(--bg);border:1px solid var(--line);}
+.sales-metrics small{font-size:9.5px;line-height:1.2;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);}
+.sales-metrics b{font-size:15px;line-height:1.2;color:var(--ink);}
+.sales-item-meta{font-size:11.5px;line-height:1.45;color:var(--ink-soft);}
+.sales-item .sales-variance{margin:5px 0 0;}
+
+/* Compact sales record table: one header, one row per fixed SKU. */
+.sales-table{margin:9px 0 6px;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--surface);}
+.sales-table-head,.sales-table-row{display:grid;grid-template-columns:minmax(88px,1.35fr) repeat(3,minmax(38px,.56fr)) 40px;column-gap:5px;align-items:center;}
+.sales-table-head{min-height:34px;padding:6px 8px;background:var(--bg);border-bottom:1px solid var(--line);}
+.sales-table-head span{font-size:9px;line-height:1.2;font-weight:700;text-transform:uppercase;letter-spacing:.035em;color:var(--ink-soft);text-align:center;}
+.sales-table-head span:first-child{text-align:left;}
+.sales-table-row{min-height:52px;padding:8px;border-bottom:1px solid var(--line);}
+.sales-table-row:last-of-type{border-bottom:none;}
+.sales-table-sku{min-width:0;line-height:1.25;}
+.sales-table-sku strong{display:block;font-size:13px;overflow-wrap:anywhere;}
+.sales-table-sku small{display:block;margin-top:3px;font-size:10px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sales-table-sku .sales-variance{margin:4px 0 0;padding:1px 5px;font-size:9.5px;}
+.sales-table-sku .sales-item-remarks{margin-top:4px;font-size:10px;line-height:1.3;}
+.sales-table-number{text-align:center;font-size:14px;font-variant-numeric:tabular-nums;}
+.sales-table .icon-btn{width:36px;height:36px;justify-self:end;}
+.sales-table .sales-locked{justify-self:center;}
+.sales-table-footer{padding:6px 9px;border-top:1px solid var(--line);background:var(--bg);font-size:10.5px;color:var(--ink-soft);}
+.sales-delete-action{margin-top:10px;}
+@media (max-width:350px){
+  .sales-table-head,.sales-table-row{grid-template-columns:minmax(72px,1.2fr) repeat(3,minmax(34px,.5fr)) 36px;column-gap:3px;}
+  .sales-table-head,.sales-table-row{padding-left:6px;padding-right:6px;}
+  .sales-table .icon-btn{width:34px;height:34px;}
+}

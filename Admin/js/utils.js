@@ -46,9 +46,35 @@ function emptyState(glyph, title, hint){
 }
 
 function closeModal(){
+  if(typeof stopDayPhotoCamera === 'function') stopDayPhotoCamera();
   const o = document.querySelector('.modal-overlay');
   if(o) o.remove();
+  if(window.gpLastFocusedElement && document.contains(window.gpLastFocusedElement)) window.gpLastFocusedElement.focus();
 }
+
+// Applies consistent dialog semantics, Escape-to-close, and focus handling to
+// every form sheet without duplicating that behavior in each feature file.
+function showModal(overlay){
+  window.gpLastFocusedElement = document.activeElement;
+  const sheet = overlay.querySelector('.modal-sheet');
+  const title = overlay.querySelector('.modal-title');
+  if(sheet){
+    sheet.setAttribute('role','dialog');
+    sheet.setAttribute('aria-modal','true');
+    if(title){
+      title.id = title.id || `modal-title-${Date.now()}`;
+      sheet.setAttribute('aria-labelledby',title.id);
+    }
+  }
+  document.body.appendChild(overlay);
+  const firstField = overlay.querySelector('input:not([type="hidden"]), select, textarea, button');
+  if(firstField) requestAnimationFrame(()=>firstField.focus());
+}
+
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && document.querySelector('.photo-lightbox-overlay')) closePhotoLightbox();
+  if(e.key === 'Escape' && document.querySelector('.modal-overlay')) closeModal();
+});
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -60,6 +86,8 @@ function showToast(msg){
 function setSyncDot(ok){
   const dot = document.getElementById('sync-dot');
   if(dot) dot.classList.toggle('off', !ok);
+  const label = document.getElementById('sync-label');
+  if(label) label.textContent = ok ? 'Synced' : 'Syncing or offline';
 }
 
 // Increments/decrements a number input by 1, clamped to its min attribute

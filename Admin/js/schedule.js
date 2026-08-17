@@ -103,8 +103,8 @@ function renderJobList(list, sortDir){
           <div class="job-pay">RM ${Number(j.pay||0).toFixed(2)}${j.commission?` + RM ${Number(j.commission).toFixed(2)} comm.`:''}</div>
         </div>
         <div class="job-actions">
-          <div class="icon-btn" onclick="openJobForm('${j.id}')">✎</div>
-          <div class="icon-btn danger" onclick="deleteJob('${j.id}')">✕</div>
+          <button type="button" class="icon-btn" onclick="openJobForm('${j.id}')" aria-label="Edit job at ${esc(storeName)}" title="Edit job">✎</button>
+          <button type="button" class="icon-btn danger" onclick="deleteJob('${j.id}')" aria-label="Delete job at ${esc(storeName)}" title="Delete job">✕</button>
         </div>
       </div>
     `;
@@ -161,7 +161,7 @@ function openJobForm(id){
       </div>
     </div>
   `;
-  document.body.appendChild(overlay);
+  showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 
   // Build the shift-preset list for the current position, and try to
@@ -239,6 +239,7 @@ async function saveJobForm(id){
     }else{
       await DB.addJob(payload);
     }
+    await linkUnassignedSalesRecordsToJob(work_date, store.id);
     await refreshData();
     closeModal();
     render();

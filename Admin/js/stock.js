@@ -1,256 +1,197 @@
-// ============================================================
-// Stock Management — separate from the Sales tab. Same visual design
-// (date groups that expand/collapse, category tabs, modal-sheet edit
-// forms) as js/sales.js, but this tab only manages two things:
-//
-//   1. Stock by location — Store Room / Home Shelf / Standee, per
-//      product per working date.
-//   2. Warehouse stock — a running total per product, carried forward
-//      automatically to each new working date (see ensureStockRowsForDate
-//      in js/sales.js, and the same carry-over logic reused by the "+"
-//      add form below) until edited again here.
-//
-// Both fields already live on the same `sales_reports` rows the Sales
-// tab reads and writes — this tab just edits (or, via the "+" button,
-// adds) a different slice of each row's columns, and never touches
-// opening/sales/closing/remarks (that's the Sales tab's job — see
-// js/sales.js).
-//
-// Free items (Gift Set, Flyer, Small Samples, Coupons, or anything
-// hand-marked "Free item") are excluded entirely — location and
-// warehouse tracking is only meaningful for sellable stock.
-//
-// Also renders the "overview" strip at the top: total stock currently
-// on hand at each outlet, plus total warehouse stock, both as of the
-// most recent working date that has stock logged.
-// ============================================================
+// Stock Management is current-inventory first: the newest sellable row
+// for every outlet + SKU is treated as that item's present count.
+const STOCK_THRESHOLD_KEY = 'gp-stock-low-thresholds-v1';
+let stockSummaryActiveTab = {};
+let stockThresholdScope = '__all__';
 
-let stockMgmtExpandedDates = new Set();
-let stockMgmtShowMore = false; // toggled by the "Show earlier records" button — only the 2 most recent dates show by default
-
-// Same idea as STOCK_CATEGORIES in js/sales.js, minus "Free" — free
-// items don't carry a location/warehouse breakdown, so there's nothing
-// for this tab to show or edit for them.
-const STOCK_MGMT_CATEGORIES = STOCK_CATEGORIES.filter(c => c.key !== 'free');
-
-let stockMgmtActiveTab = {};
-function activeStockMgmtTab(date, grouped){
-  const current = stockMgmtActiveTab[date];
-  if(current && grouped[current] && grouped[current].length) return current;
-  const firstNonEmpty = STOCK_MGMT_CATEGORIES.find(c => grouped[c.key].length);
-  return firstNonEmpty ? firstNonEmpty.key : 'bottle';
+function stockOutletKey(row){ return row.store_id || '__none__'; }
+function stockRowTotal(row){
+  return Number(row.store_room_qty||0) + Number(row.home_shelf_qty||0) + Number(row.standee_qty||0) + Number(row.warehouse_qty||0);
 }
-function setStockMgmtTab(date, key){
-  stockMgmtActiveTab[date] = key;
-  render();
+function stockLocationTotals(rows){
+  return rows.reduce((sum,row)=>({
+    storeRoom:sum.storeRoom+Number(row.store_room_qty||0),
+    homeShelf:sum.homeShelf+Number(row.home_shelf_qty||0),
+    standee:sum.standee+Number(row.standee_qty||0),
+    warehouse:sum.warehouse+Number(row.warehouse_qty||0)
+  }),{storeRoom:0,homeShelf:0,standee:0,warehouse:0});
 }
-function renderStockMgmtTabs(date, grouped, active){
-  return `<div class="stock-tabs">${STOCK_MGMT_CATEGORIES.map(c=>{
-    const count = grouped[c.key].length;
-    return `<button class="stock-tab ${active===c.key?'active':''}" onclick="setStockMgmtTab('${date}','${c.key}')">${c.label}${count?` <span class="stock-tab-count">${count}</span>`:''}</button>`;
+function getStockThresholds(){
+  try{ return JSON.parse(localStorage.getItem(STOCK_THRESHOLD_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function stockThreshold(outletKey){
+  const settings = getStockThresholds();
+  const outletValue = Number(settings[outletKey]);
+  if(Number.isFinite(outletValue) && outletValue >= 0) return outletValue;
+  const allStoresValue = Number(settings.__all__);
+  return Number.isFinite(allStoresValue) && allStoresValue >= 0 ? allStoresValue : 10;
+}
+function isLowStock(row, threshold){ return threshold > 0 && stockRowTotal(row) <= threshold; }
+function isStockManagedItem(row){ return !isFreeItem(row) && !isGiveaway(row.product_name); }
+
+function currentStockRows(){
+  const latest = new Map();
+  salesReports.filter(isStockManagedItem).forEach(row=>{
+    const key = `${stockOutletKey(row)}|${canonicalSkuName(row.product_name).toLowerCase()}`;
+    const prior = latest.get(key);
+    if(!prior || row.work_date > prior.work_date) latest.set(key,row);
+  });
+  return [...latest.values()];
+}
+
+function currentOutletStocks(){
+  const snapshots = currentStockRows();
+  const outlets = stores.map(store=>({ key:store.id, name:store.name, rows:[] }));
+  const byKey = Object.fromEntries(outlets.map(outlet=>[outlet.key,outlet]));
+  snapshots.forEach(row=>{
+    const key = stockOutletKey(row);
+    if(!byKey[key]){
+      const outlet = { key, name:row.stores ? row.stores.name : 'Unspecified outlet', rows:[] };
+      byKey[key] = outlet;
+      outlets.push(outlet);
+    }
+    byKey[key].rows.push(row);
+  });
+  outlets.forEach(outlet=>outlet.rows.sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b)));
+  return outlets.filter(outlet=>outlet.rows.length);
+}
+
+function stockLocationChips(row, includeZero){
+  const locations = [
+    ['Warehouse',Number(row.warehouse_qty||0)],
+    ['Store room',Number(row.store_room_qty||0)],
+    ['Home shelf',Number(row.home_shelf_qty||0)],
+    ['Standee',Number(row.standee_qty||0)]
+  ].filter(([,qty])=>includeZero || qty > 0);
+  if(!locations.length) return '<span class="stock-location-empty">No stock allocated</span>';
+  return locations.map(([name,qty])=>`<span class="stock-location-chip"><small>${name}</small><b>${qty}</b></span>`).join('');
+}
+
+function renderOutletCards(outlets){
+  if(!outlets.length) return emptyState('🏬','No outlet stock yet','Tap + to add the first stock record.');
+  return `<div class="stock-outlet-grid">${outlets.map(outlet=>{
+    const threshold = stockThreshold(outlet.key);
+    const low = outlet.rows.filter(row=>isLowStock(row,threshold));
+    const totals = stockLocationTotals(outlet.rows);
+    const total = Object.values(totals).reduce((sum,n)=>sum+n,0);
+    const latestDate = outlet.rows.reduce((latest,row)=>row.work_date>latest?row.work_date:latest,'');
+    return `<button type="button" class="stock-outlet-card ${low.length?'has-alert':''}" onclick="openOutletStockSummary('${outlet.key}')">
+        <span class="stock-outlet-top">
+          <span><strong>${esc(outlet.name)}</strong><small>Updated ${formatDateShort(latestDate)}</small></span>
+          <span class="stock-outlet-total"><b>${total}</b><small>units left</small></span>
+        </span>
+        <span class="stock-outlet-locations">
+          <span>Warehouse <b>${totals.warehouse}</b></span><span>Store room <b>${totals.storeRoom}</b></span>
+          <span>Home shelf <b>${totals.homeShelf}</b></span><span>Standee <b>${totals.standee}</b></span>
+        </span>
+        <span class="stock-outlet-footer">${low.length?`<span class="stock-low-badge">⚠ ${low.length} low</span>`:`<span class="stock-ok-badge">✓ Stock healthy</span>`}<span>View SKU summary ›</span></span>
+      </button>`;
   }).join('')}</div>`;
 }
 
-// ---------------- Outlet tabs ----------------
-// Same idea as the Sales tab's outlet tabs (see groupByOutlet /
-// renderOutletTabs in js/sales.js, which this reuses) — split a date's
-// records by outlet when more than one was logged that day, so stock
-// location for each outlet is viewed one at a time. Kept as its own
-// active-tab state (stockMgmtActiveOutletTab) rather than sharing the
-// Sales tab's, so switching outlets in one tab doesn't jump the other.
-let stockMgmtActiveOutletTab = {};
-function activeStockMgmtOutletTab(date, groups){
-  const current = stockMgmtActiveOutletTab[date];
-  if(current && groups.some(g => g.key === current)) return current;
-  return groups.length ? groups[0].key : null;
-}
-function setStockMgmtOutletTab(date, key){
-  stockMgmtActiveOutletTab[date] = key;
-  render();
-}
-
-function toggleStockMgmtDate(date){
-  if(stockMgmtExpandedDates.has(date)) stockMgmtExpandedDates.delete(date);
-  else stockMgmtExpandedDates.add(date);
-  render();
-}
-
-// ---------------- Overview: total stock per outlet ----------------
-// Built from the most recent working date that has any (non-free)
-// stock logged — a live snapshot of what's currently on hand, not a
-// historical rollup.
-function computeStockOverview(){
-  const sellable = salesReports.filter(r => !isFreeItem(r));
-  if(sellable.length === 0) return null;
-  const latestDate = [...new Set(sellable.map(r => r.work_date))].sort((a,b)=> b.localeCompare(a))[0];
-  const rows = sellable.filter(r => r.work_date === latestDate);
-
-  const byStore = {};
-  const bump = name => byStore[name] || (byStore[name] = { storeRoom:0, homeShelf:0, standee:0 });
-  rows.forEach(r=>{
-    const name = r.stores ? r.stores.name : '(store not specified)';
-    const b = bump(name);
-    b.storeRoom += Number(r.store_room_qty||0);
-    b.homeShelf += Number(r.home_shelf_qty||0);
-    b.standee += Number(r.standee_qty||0);
-  });
-  const totalWarehouse = rows.reduce((s,r)=> s + Number(r.warehouse_qty||0), 0);
-
-  return { latestDate, byStore, totalWarehouse };
-}
-
-function renderStockOverview(){
-  const ov = computeStockOverview();
-  if(!ov){
-    return emptyState('🏬','No stock to show yet','Tap + to add a stock record, or log opening/closing stock for a product from the Sales tab first.');
+function stockThresholdScopeValue(){
+  const settings = getStockThresholds();
+  if(stockThresholdScope==='__all__'){
+    const globalValue = Number(settings.__all__);
+    return Number.isFinite(globalValue) && globalValue>=0 ? globalValue : 10;
   }
+  return stockThreshold(stockThresholdScope);
+}
 
-  const storeEntries = Object.entries(ov.byStore)
-    .map(([name, v])=> ({ name, total: v.storeRoom+v.homeShelf+v.standee, ...v }))
-    .sort((a,b)=> b.total - a.total);
-  const grandTotal = storeEntries.reduce((s,v)=> s+v.total, 0);
+function renderStockThresholdControl(outlets){
+  if(stockThresholdScope!=='__all__' && !outlets.some(outlet=>outlet.key===stockThresholdScope)) stockThresholdScope='__all__';
+  return `<div class="stock-alert-control">
+    <strong>Low-stock alert</strong>
+    <select id="stock-threshold-scope" aria-label="Choose low-stock alert scope" onchange="setStockThresholdScope(this.value)">
+      <option value="__all__" ${stockThresholdScope==='__all__'?'selected':''}>All stores</option>
+      ${outlets.map(outlet=>`<option value="${outlet.key}" ${stockThresholdScope===outlet.key?'selected':''}>${esc(outlet.name)}</option>`).join('')}
+    </select>
+    <label class="stock-threshold-inline"><input id="stock-threshold-scope-value" type="number" min="0" step="1" value="${stockThresholdScopeValue()}" aria-label="Low stock threshold" onchange="saveStockThresholdScope()" onkeydown="if(event.key==='Enter'){this.blur()}"><small>units</small></label>
+  </div>`;
+}
 
-  let html = `
-    <div class="section-title">Stock overview <span class="count-pill">as of ${formatDateShort(ov.latestDate)}</span></div>
-    <div class="summary-strip">
-      <div class="stat-card"><div class="num">${grandTotal}</div><div class="lbl">On floor (all outlets)</div></div>
-      <div class="stat-card"><div class="num">${ov.totalWarehouse}</div><div class="lbl">Warehouse stock</div></div>
-    </div>
-  `;
+function setStockThresholdScope(scope){
+  stockThresholdScope = scope;
+  render();
+}
 
-  if(storeEntries.length === 0){
-    html += emptyState('🏬','No outlet stock logged yet','Stock by location is entered per product below, grouped by store.');
+function saveStockThresholdScope(){
+  const input = document.getElementById('stock-threshold-scope-value');
+  if(!input) return;
+  const value = Math.max(0,Math.floor(Number(input.value)||0));
+  const settings = getStockThresholds();
+  if(stockThresholdScope==='__all__'){
+    Object.keys(settings).forEach(key=>{ if(key!=='__all__') delete settings[key]; });
+    settings.__all__ = value;
   }else{
-    html += `<div class="section-title" style="margin-top:2px;">By outlet</div>`;
-    storeEntries.forEach((s,i)=>{
-      html += `
-        <div class="analysis-table-row" style="align-items:center; gap:12px;">
-          <div style="display:flex; align-items:center; min-width:0; flex:1;">
-            <span class="analysis-rank">${i+1}</span>
-            <span style="font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(s.name)}</span>
-          </div>
-          <div style="flex-shrink:0; text-align:right;">
-            <div style="font-size:16px; line-height:1.2;"><b>${s.total}</b> units</div>
-            <div style="font-size:11px; color:var(--ink-soft); margin-top:3px; white-space:nowrap;">
-              Store Room ${s.storeRoom} · Home Shelf ${s.homeShelf} · Standee ${s.standee}
-            </div>
-          </div>
-        </div>
-      `;
-    });
+    settings[stockThresholdScope] = value;
   }
-
-  return html;
-}
-
-// ---------------- Main render ----------------
-function renderStockManagement(){
-  let html = `<div class="section-title">Stock Management</div>`;
-  html += renderStockOverview();
-
-  const sellable = salesReports.filter(r => !isFreeItem(r));
-  if(sellable.length === 0){
-    return html;
-  }
-
-  const byDate = {};
-  sellable.forEach(r=>{
-    if(!byDate[r.work_date]) byDate[r.work_date] = [];
-    byDate[r.work_date].push(r);
-  });
-  const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
-  const today = todayStr();
-
-  html += `<div class="section-title" style="margin-top:22px;">By date <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
-
-  const visibleDates = stockMgmtShowMore ? dates : dates.slice(0, 2);
-  const hiddenDates = dates.slice(2);
-
-  visibleDates.forEach(date=>{
-    const items = byDate[date];
-    const expanded = stockMgmtExpandedDates.has(date);
-    const totalOnFloor = items.reduce((s,i)=> s + Number(i.store_room_qty||0) + Number(i.home_shelf_qty||0) + Number(i.standee_qty||0), 0);
-    const storeNames = [...new Set(items.filter(i=>i.stores).map(i=>i.stores.name))];
-    const isToday = date === today;
-
-    let body = '';
-    if(expanded){
-      // Split by outlet first (only rendered as tabs when a date actually
-      // has more than one outlet) — the product-category tabs below then
-      // work on just that outlet's records. Reuses groupByOutlet from
-      // js/sales.js.
-      const outletGroups = groupByOutlet(items);
-      const showOutletTabs = outletGroups.length > 1;
-      const activeOutletKey = showOutletTabs ? activeStockMgmtOutletTab(date, outletGroups) : null;
-      const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
-
-      const grouped = groupByStockCategory(scopedItems);
-      const active = activeStockMgmtTab(date, grouped);
-      const activeItems = grouped[active];
-      body = `<div class="sales-group-body">
-        ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey, 'setStockMgmtOutletTab') : ''}
-        ${renderStockMgmtTabs(date, grouped, active)}
-        ${activeItems.length ? renderStockMgmtItems(activeItems) : `<div class="stock-tab-empty">No products in this group yet.</div>`}
-      </div>`;
-    }
-
-    html += `
-      <div class="sales-group">
-        <button class="sales-group-header" onclick="toggleStockMgmtDate('${date}')">
-          <div>
-            <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-            <div class="sales-group-sub">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalOnFloor} on floor</div>
-          </div>
-          <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
-        </button>
-        ${body}
-      </div>
-    `;
-  });
-
-  if(hiddenDates.length > 0){
-    html += `
-      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleStockMgmtShowMore()">
-        ${stockMgmtShowMore ? 'Hide' : 'Show'} earlier records (${hiddenDates.length})
-      </button>
-    `;
-  }
-
-  return html;
-}
-
-function toggleStockMgmtShowMore(){
-  stockMgmtShowMore = !stockMgmtShowMore;
+  try{ localStorage.setItem(STOCK_THRESHOLD_KEY,JSON.stringify(settings)); }
+  catch(e){ showToast('Could not save alert setting'); return; }
   render();
+  const scopeLabel = stockThresholdScope==='__all__' ? 'all stores' : (stores.find(store=>store.id===stockThresholdScope)||{}).name || 'this store';
+  showToast(value ? `Low-stock alert set to ${value} for ${scopeLabel}` : `Low-stock alert turned off for ${scopeLabel}`);
 }
 
-function renderStockMgmtItems(items){
-  return items.map(i=>{
-    const storeRoom = Number(i.store_room_qty||0), homeShelf = Number(i.home_shelf_qty||0), standee = Number(i.standee_qty||0);
-    const closing = Number(i.closing_qty||0);
-    const sum = storeRoom + homeShelf + standee;
-    return `
-      <div class="sales-item">
-        <div class="sales-item-main">
-          <div class="sales-item-name">${esc(displayProductName(i))}</div>
-          <div class="sales-item-stats">
-            Store Room <b>${storeRoom}</b> · Home Shelf <b>${homeShelf}</b> · Standee <b>${standee}</b>
-            ${sum !== closing ? `<span class="sales-variance ${sum<closing?'short':'over'}">${sum-closing>0?'+':''}${sum-closing} vs closing (${closing})</span>` : ''}
-          </div>
-          <div class="sales-item-stats" style="margin-top:2px;">Warehouse <b>${Number(i.warehouse_qty||0)}</b></div>
-        </div>
-        <div class="job-actions">
-          <div class="icon-btn" onclick="openStockLocationForm('${i.id}')">✎</div>
-        </div>
-      </div>
-    `;
-  }).join('');
+function renderStockManagement(){
+  const outlets = currentOutletStocks();
+  const lowCount = outlets.reduce((sum,outlet)=>sum+outlet.rows.filter(row=>isLowStock(row,stockThreshold(outlet.key))).length,0);
+  return `<div class="stock-page-head">
+      <div class="section-title">Stock Management</div>
+      ${lowCount?`<span class="stock-page-alert">⚠ ${lowCount} low</span>`:''}
+    </div>
+    ${renderStockThresholdControl(outlets)}
+    <div class="stock-section-heading"><h2>By outlet</h2></div>
+    ${renderOutletCards(outlets)}`;
+}
+
+function renderStockSummaryTabs(outletKey, groups, active){
+  return `<div class="stock-tabs stock-summary-tabs">${groups.map(group=>`
+    <button type="button" class="stock-tab ${active===group.key?'active':''}" aria-pressed="${active===group.key}" onclick="setStockSummaryTab('${outletKey}','${group.key}')">
+      ${esc(group.label)} <span class="stock-tab-count">${group.items.length}</span>
+    </button>`).join('')}</div>`;
+}
+
+function setStockSummaryTab(outletKey, key){
+  stockSummaryActiveTab[outletKey] = key;
+  closeModal();
+  openOutletStockSummary(outletKey);
+}
+
+function openOutletStockSummary(outletKey){
+  const outlet = currentOutletStocks().find(item=>item.key===outletKey);
+  if(!outlet){ showToast('No stock found for that outlet'); return; }
+  const threshold = stockThreshold(outlet.key);
+  const total = outlet.rows.reduce((sum,row)=>sum+stockRowTotal(row),0);
+  const productGroups = groupByProductTabs(outlet.rows,false);
+  const active = activeProductTab(outlet.key,productGroups,stockSummaryActiveTab);
+  const activeGroup = productGroups.find(group=>group.key===active);
+  const visibleRows = activeGroup ? activeGroup.items : [];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-sheet stock-summary-sheet">
+    <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
+    <div class="stock-summary-meta"><span>${total} units across ${outlet.rows.length} SKUs</span></div>
+    ${renderStockSummaryTabs(outlet.key,productGroups,active)}
+    <div class="stock-summary-list">${visibleRows.map(row=>{
+      const low=isLowStock(row,threshold);
+      return `<button type="button" class="stock-summary-sku ${low?'is-low':''}" onclick="closeModal();openStockLocationForm('${row.id}')">
+        <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${stockRowTotal(row)}</b> units ${low?'<em>Low</em>':''}</span></span>
+        <span class="stock-location-chips">${stockLocationChips(row,true)}</span>
+        <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
+      </button>`;
+    }).join('')}</div>
+  </div>`;
+  showModal(overlay);
+  overlay.addEventListener('click',event=>{ if(event.target===overlay) closeModal(); });
 }
 
 // ---------------- Edit form ----------------
 function openStockLocationForm(id){
   const editing = salesReports.find(r=>r.id===id);
   if(!editing){ showToast('Could not find that record'); return; }
+  if(!isStockManagedItem(editing)){ showToast('Free items are not tracked in Stock Management'); return; }
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -286,7 +227,7 @@ function openStockLocationForm(id){
       </div>
     </div>
   `;
-  document.body.appendChild(overlay);
+  showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
   updateStockLocationHint();
 }
@@ -348,6 +289,7 @@ async function saveStockLocationForm(id){
 // date + store, edit stock-by-location there via the ✎ instead of
 // adding a duplicate here.
 function openAddStockRecordForm(){
+  const defaultStoreId = scheduledStoreIdForDate(todayStr());
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -358,19 +300,19 @@ function openAddStockRecordForm(){
         <div class="field" style="flex:1.6;">
           <label>Product name</label>
           <input id="asr-product" list="product-list" placeholder="e.g. Bio Dishwash 1L" oninput="onAddStockProductChange()">
-          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+          <datalist id="product-list">${getProductSuggestions().filter(p=>!isGiveaway(p)).map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
         <div class="field">
           <label>Variation (optional)</label>
-          <input id="asr-variation" list="variation-list" placeholder="e.g. Bidara" oninput="onAddStockProductChange()">
-          <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+          <input id="asr-variation" list="variation-list" placeholder="Type any variation" oninput="onAddStockProductChange()">
+          <datalist id="variation-list"></datalist>
         </div>
       </div>
       <div class="field">
         <label>Store</label>
-        <select id="asr-store">
+        <select id="asr-store" onchange="onAddStockProductChange()">
           <option value="">— Not specified —</option>
-          ${stores.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+          ${stores.map(s=>`<option value="${s.id}" ${defaultStoreId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
       <div class="field-row">
@@ -389,7 +331,7 @@ function openAddStockRecordForm(){
       </div>
     </div>
   `;
-  document.body.appendChild(overlay);
+  showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 }
 
@@ -399,18 +341,42 @@ function openAddStockRecordForm(){
 // across any date or store) — so Warehouse arrives pre-filled while
 // Store Room / Home Shelf / Standee stay empty for a fresh count.
 function onAddStockProductChange(){
+  updateVariationDatalist('asr-product','variation-list');
   const base = document.getElementById('asr-product').value.trim();
   const variation = document.getElementById('asr-variation').value;
   const productName = composeProductName(base, variation);
   const warehouseInput = document.getElementById('asr-warehouse');
+  const storeRoomInput = document.getElementById('asr-store-room');
+  const homeShelfInput = document.getElementById('asr-home-shelf');
+  const standeeInput = document.getElementById('asr-standee');
   const hint = document.getElementById('asr-warehouse-hint');
   if(!productName){
+    storeRoomInput.value = '';
+    homeShelfInput.value = '';
+    standeeInput.value = '';
     warehouseInput.value = 0;
     hint.textContent = "Auto-filled from this product's last known warehouse figure once you type a product name.";
     return;
   }
+  const storeId = document.getElementById('asr-store').value || null;
+  const existing = salesReports.find(row=>
+    row.work_date===todayStr()
+    && (row.store_id||null)===storeId
+    && canonicalSkuName(row.product_name)===canonicalSkuName(productName)
+  );
+  if(existing){
+    storeRoomInput.value = Number(existing.store_room_qty||0);
+    homeShelfInput.value = Number(existing.home_shelf_qty||0);
+    standeeInput.value = Number(existing.standee_qty||0);
+    warehouseInput.value = Number(existing.warehouse_qty||0);
+    hint.textContent = "Today's record already exists — saving will update its counts, not add another row.";
+    return;
+  }
+  storeRoomInput.value = '';
+  homeShelfInput.value = '';
+  standeeInput.value = '';
   const priorEntries = salesReports
-    .filter(r => r.product_name === productName)
+    .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName))
     .sort((a,b) => b.work_date.localeCompare(a.work_date));
   if(priorEntries.length){
     warehouseInput.value = Number(priorEntries[0].warehouse_qty||0);
@@ -427,6 +393,7 @@ async function saveAddStockRecordForm(){
   const variation = document.getElementById('asr-variation').value;
   const product_name = composeProductName(productBase, variation);
   if(!productBase){ showToast('Product name is required'); return; }
+  if(isGiveaway(product_name)){ showToast('Free items are not tracked in Stock Management'); return; }
 
   const store_id = document.getElementById('asr-store').value || null;
   const store_room_qty = parseFloat(document.getElementById('asr-store-room').value) || 0;
@@ -438,18 +405,26 @@ async function saveAddStockRecordForm(){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    await DB.addSalesReport({
-      work_date, store_id, promoter_id: null, product_name,
-      opening_qty: 0, sales_qty: 0, closing_qty: 0,
-      remarks: null, photo_url: null, is_free_item: false,
-      store_room_qty, home_shelf_qty, standee_qty, warehouse_qty,
-      logged_by_admin_name: currentAdminName
-    });
-    stockMgmtExpandedDates.add(work_date); // reveal the group you just added into
+    const existing = salesReports.find(row=>
+      row.work_date===work_date
+      && (row.store_id||null)===store_id
+      && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
+    );
+    if(existing){
+      await DB.updateSalesReport(existing.id,{store_room_qty,home_shelf_qty,standee_qty,warehouse_qty});
+    }else{
+      await DB.addSalesReport({
+        work_date, store_id, promoter_id: null, product_name,
+        opening_qty: 0, sales_qty: 0, closing_qty: 0,
+        remarks: null, photo_url: null, is_free_item: false,
+        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty,
+        logged_by_admin_name: currentAdminName
+      });
+    }
     await refreshData();
     closeModal();
     render();
-    showToast('Stock record added');
+    showToast(existing ? 'Stock count updated' : 'Stock record added');
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));

@@ -240,6 +240,7 @@ async function loadInitialData(){
   try{
     await DB.purgeOldShiftReports().catch(e=>console.warn('Purge old shift reports failed (non-fatal):', e));
     await refreshData();
+    await linkAllScheduledLocations().catch(e=>console.warn('Link scheduled locations failed (non-fatal):',e));
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
