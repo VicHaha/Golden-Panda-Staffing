@@ -264,6 +264,31 @@ body{
 .report-row .rtotal{font-family:'Fraunces',Georgia,serif; font-weight:700; font-size:16px; color:var(--gold-deep); text-align:right;}
 .report-row .rtotal .cur{font-size:11px; font-weight:600; color:var(--ink-faint);}
 
+/* Shift reports — expandable date cards. Keep these styles independent
+   from the sales date grid so either report section can evolve safely. */
+.shift-report-group{
+  overflow:hidden; margin-bottom:10px; border:1px solid var(--line); border-radius:12px;
+  background:var(--surface); box-shadow:var(--shadow);
+}
+.shift-report-header{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; min-height:64px; padding:13px 14px; border:0; background:none;
+  color:var(--ink); font-family:inherit; text-align:left; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.shift-report-header:focus-visible{outline:3px solid var(--gold); outline-offset:-3px;}
+.shift-report-summary{min-width:0;}
+.shift-report-date{
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px;
+  font-family:'Fraunces',Georgia,serif; font-size:14.5px; font-weight:600; line-height:1.35;
+}
+.shift-report-sub{margin-top:3px; color:var(--ink-soft); font-size:11.5px; line-height:1.45;}
+.shift-report-chevron{
+  flex-shrink:0; color:var(--ink-faint); font-size:14px; transition:transform .15s ease;
+}
+.shift-report-chevron.open{transform:rotate(180deg);}
+.shift-report-body{padding:4px 14px 8px; border-top:1px solid var(--line);}
+
 .toast{
   position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
   padding:10px 18px; border-radius:99px; font-size:12.5px; font-weight:600; z-index:60; box-shadow:0 8px 20px rgba(0,0,0,0.25);

@@ -63,15 +63,15 @@ function renderShift(){
       const isToday = date === today;
 
       html += `
-        <div class="sales-group">
-          <button class="sales-group-header" onclick="toggleShiftDate('${date}')">
-            <div>
-              <div class="sales-group-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
-              <div class="sales-group-sub">${items.length} shift${items.length>1?'s':''} logged · ${totalEngaged} engaged · ${totalPurchases} purchases</div>
+        <div class="shift-report-group">
+          <button type="button" class="shift-report-header" onclick="toggleShiftDate('${date}')" aria-expanded="${expanded}">
+            <div class="shift-report-summary">
+              <div class="shift-report-date">${formatDateLong(date)} ${isToday?'<span class="count-pill">Today</span>':''}</div>
+              <div class="shift-report-sub">${items.length} shift${items.length>1?'s':''} logged · ${totalEngaged} engaged · ${totalPurchases} purchases</div>
             </div>
-            <span class="sales-group-chevron ${expanded?'open':''}">▾</span>
+            <span class="shift-report-chevron ${expanded?'open':''}" aria-hidden="true">▾</span>
           </button>
-          ${expanded ? `<div class="sales-group-body">${renderShiftItems(items)}</div>` : ''}
+          ${expanded ? `<div class="shift-report-body">${renderShiftItems(items)}</div>` : ''}
         </div>
       `;
     });
