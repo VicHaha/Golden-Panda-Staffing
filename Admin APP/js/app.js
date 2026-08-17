@@ -190,7 +190,7 @@ function renderApp(){
         </div>
       </div>
       <main class="content" id="content"><div class="loading-state" role="status"><span class="loading-spinner" aria-hidden="true"></span>Loading your workspace…</div></main>
-      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add job"><span class="fab-icon" aria-hidden="true">+</span><span class="fab-label">Add job</span></button></div>
+      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add job">+</button></div>
       <nav class="tabbar" aria-label="Main navigation">
         <button type="button" class="tab" data-tab="roster" onclick="switchTab('roster')">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
@@ -326,8 +326,6 @@ function render(){
     if(button){
       button.setAttribute('aria-label',label);
       button.title = label;
-      const text = button.querySelector('.fab-label');
-      if(text) text.textContent = label;
     }
   }
 }

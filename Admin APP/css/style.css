@@ -607,7 +607,7 @@ body{
   font-size:14px;
   line-height:1.5;
 }
-.phone,.tabbar,.fab{max-width:720px;}
+.phone{max-width:720px;}
 .app-header{
   padding:calc(14px + env(safe-area-inset-top)) 20px 13px;
   box-shadow:0 1px 10px rgba(33,31,27,.04);
@@ -639,14 +639,6 @@ body{
 }
 .btn-sm{min-height:36px;padding:7px 12px;font-size:12px;}
 .btn-gold,.mode-btn.active,.stock-tab.active{background:var(--gold-deep);border-color:var(--gold-deep);color:#fff;}
-.fab{bottom:calc(88px + env(safe-area-inset-bottom));padding:0 22px;}
-.fab button{
-  width:auto;min-width:56px;height:56px;padding:0 18px;border-radius:28px;
-  font:700 14px/1 'Inter',sans-serif;box-shadow:var(--shadow-raised);
-}
-.fab-icon{font-size:24px;font-weight:400;margin-right:7px;line-height:1;}
-.tab{min-height:68px;padding:10px 4px 8px;justify-content:center;color:var(--ink-soft);font-family:inherit;font-size:11px;font-weight:700;}
-.tab.active{background:linear-gradient(180deg,var(--gold-tint),rgba(245,235,214,0));}
 .job-card{padding:15px;margin-bottom:12px;gap:13px;}
 .job-store{font-size:15px;line-height:1.35;margin-bottom:3px;}
 .job-promoter{font-size:13px;margin-bottom:7px;}
