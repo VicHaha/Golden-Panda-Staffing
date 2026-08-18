@@ -136,7 +136,7 @@ function openShiftForm(id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">${editing ? 'Edit shift report' : 'Add shift report'}</div>
+      <div class="form-title-row"><div class="modal-title">${editing ? 'Edit shift report' : 'Add shift report'}</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">Logging as <b>${esc(currentPromoterName)}</b> · ${formatDateLong(formDate)}</div>
       <div class="field">
         <label>Shift</label>

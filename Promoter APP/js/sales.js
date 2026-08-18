@@ -359,10 +359,13 @@ function renderSales(){
       const items = byDate[date];
       const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
       const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
+      const totalCustomers = shiftReports.filter(report=>report.work_date===date).reduce((sum,report)=>sum+Number(report.engaged||0),0);
+      const conversionRate = totalCustomers ? Math.round((totalSales/totalCustomers)*100) : 0;
+      const locations = [...new Set(items.map(item=>item.stores&&item.stores.name).filter(Boolean))];
       const isToday = date === today;
       return `<button type="button" class="sales-date-card" onclick="openSalesDateSummary('${date}')">
-        <span class="sales-date-card-top"><span><strong>${formatDateLong(date)}</strong>${isToday?'<small>Today</small>':'<small class="badge-locked">🔒 Locked</small>'}</span><span class="sales-date-total"><b>${totalSales}</b><small>sold</small></span></span>
-        <span class="sales-date-metrics"><span><small>SKUs</small><b>${items.length}</b></span><span><small>Given away</small><b>${totalGiven}</b></span></span>
+        <span class="sales-date-card-top"><span><strong>${formatDateLong(date)}</strong><span class="sales-date-location">${esc(locations.join(', ') || 'Location not specified')}</span>${isToday?'<small>Today</small>':'<small class="badge-locked">🔒 Locked</small>'}</span><span class="sales-date-total"><b>${totalSales}</b><small>sold</small></span></span>
+        <span class="sales-date-metrics"><span><small>SKUs</small><b>${items.length}</b></span><span><small>Conversion</small><b>${conversionRate}%</b></span></span>
       </button>`;
     }).join('')}</div>`;
   }
@@ -448,7 +451,7 @@ function renderSalesItems(items, isToday, compact){
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const variance = closing - (opening - sales);
     return `
-      <div class="sales-table-row">
+      <div class="sales-table-row ${isToday?'sales-table-row-editable':''}" ${isToday?`role="button" tabindex="0" onclick="closeModal();openSalesForm('${i.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeModal();openSalesForm('${i.id}')}" aria-label="Edit ${esc(displayProductName(i))}"`:''}>
         <div class="sales-table-sku">
           <strong>${esc(displayProductName(i))}</strong>
           ${!commonLogger ? `<small>${esc(loggedByLabel(i))}</small>` : ''}
@@ -458,14 +461,11 @@ function renderSalesItems(items, isToday, compact){
         <b class="sales-table-number">${opening}</b>
         <b class="sales-table-number">${sales}</b>
         <b class="sales-table-number">${closing}</b>
-        ${isToday ? `
-          <button type="button" class="icon-btn" onclick="closeModal();openSalesForm('${i.id}')" aria-label="Edit ${esc(displayProductName(i))}" title="Edit report">✎</button>
-        ` : `<div class="sales-locked" title="Only today's reports can be edited">🔒</div>`}
       </div>
     `;
   }).join('');
   return `<div class="sales-table">
-    <div class="sales-table-head"><span>SKU</span><span>Opening</span><span>${compact?'Given':'Sold'}</span><span>Closing</span><span aria-hidden="true"></span></div>
+    <div class="sales-table-head"><span>SKU</span><span>Opening</span><span>${compact?'Given':'Sold'}</span><span>Closing</span></div>
     ${rows}
     ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
   </div>`;
@@ -483,7 +483,7 @@ function renderDayPhotoRow(date, isToday){
       ${dp.photo_url
         ? `<img src="${esc(dp.photo_url)}" alt="Day photo">`
         : `<div class="day-photo-thumb-empty">📷</div>`}
-      ${isToday ? `<button type="button" class="day-photo-thumb-edit" onclick="event.stopPropagation(); closeModal(); openDayPhotoForm('${date}','${dp.id}')" title="Retake photo" aria-label="Retake day photo">✎</button><button class="day-photo-thumb-delete" onclick="event.stopPropagation(); closeModal(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
+      ${isToday ? `<button class="day-photo-thumb-delete" onclick="event.stopPropagation(); closeModal(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
     </div>
   `).join('');
 
@@ -507,7 +507,7 @@ function openSalesForm(id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div>
+      <div class="form-title-row"><div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">Logging as <b>${esc(currentPromoterName)}</b> · ${formatDateLong(today)}</div>
       <div class="field">
         <label>Store (optional)</label>
@@ -537,21 +537,21 @@ function openSalesForm(id){
       <div class="field"><label>Opening stock</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
-          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0">
+          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="syncSalesQuantities('opening')">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
         </div>
       </div>
       <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-sales',-1)" aria-label="Decrease sales qty">−</button>
-          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('sales')">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-sales',1)" aria-label="Increase sales qty">+</button>
         </div>
       </div>
       <div class="field"><label>Closing stock</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
-          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0">
+          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="syncSalesQuantities('closing')">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
         </div>
       </div>
@@ -559,7 +559,7 @@ function openSalesForm(id){
         <label>Given out</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-given-out',-1)" aria-label="Decrease given out quantity">−</button>
-          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('given')">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-given-out',1)" aria-label="Increase given out quantity">+</button>
         </div>
         <div class="field-hint">Enter the quantity actually distributed.</div>
@@ -575,6 +575,8 @@ function openSalesForm(id){
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
   salesFormFreeItemTouched = false;
+  salesFormDerivedFieldTouched = false;
+  salesFormLastFreeItem = null;
   applyFreeItemFieldLayout();
 }
 
@@ -582,6 +584,8 @@ function openSalesForm(id){
 // checkbox in the currently-open form — once true, typing in the product
 // name field no longer overwrites their choice.
 let salesFormFreeItemTouched = false;
+let salesFormDerivedFieldTouched = false;
+let salesFormLastFreeItem = null;
 
 // Re-guesses the "Free item" checkbox from the product name as you type —
 // but only until the person manually touches the checkbox themselves.
@@ -589,19 +593,42 @@ function onProductNameChange(){
   if(!salesFormFreeItemTouched){
     document.getElementById('s-free-item').checked = isGiveaway(document.getElementById('s-product').value);
   }
-  applyFreeItemFieldLayout();
+  applyFreeItemFieldLayout(true);
 }
 
 function onFreeItemToggle(){
   salesFormFreeItemTouched = true;
-  applyFreeItemFieldLayout();
+  applyFreeItemFieldLayout(true);
 }
 
-// Free items use an editable "Given out" quantity instead of Sales qty.
-function applyFreeItemFieldLayout(){
+// Free rows derive Given out from Opening - Closing. Regular rows derive
+// Closing from Opening - Sales. A hand-edited derived field stays intact.
+function syncSalesQuantities(source){
+  const giveaway = document.getElementById('s-free-item').checked;
+  if((giveaway && source==='given') || (!giveaway && source==='closing')){
+    salesFormDerivedFieldTouched = true;
+    return;
+  }
+  if(salesFormDerivedFieldTouched) return;
+  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
+  if(giveaway){
+    const closing = parseFloat(document.getElementById('s-closing').value) || 0;
+    document.getElementById('s-given-out').value = Math.max(0, opening-closing);
+  }else{
+    const sold = parseFloat(document.getElementById('s-sales').value) || 0;
+    document.getElementById('s-closing').value = Math.max(0, opening-sold);
+  }
+}
+
+function applyFreeItemFieldLayout(recalculate=false){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
   document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
+  if(recalculate && giveaway !== salesFormLastFreeItem){
+    salesFormDerivedFieldTouched = false;
+    syncSalesQuantities('mode');
+  }
+  salesFormLastFreeItem = giveaway;
 }
 
 async function saveSalesForm(id){

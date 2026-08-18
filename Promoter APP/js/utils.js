@@ -76,6 +76,80 @@ function stepQty(inputId, delta){
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+// Small, form-independent calculator. It deliberately uses a tiny parser
+// instead of eval/Function so typed expressions cannot execute code.
+function calculateExpression(expression){
+  const tokens = (expression.replace(/\u00d7/g,'*').replace(/\u00f7/g,'/').match(/\d*\.?\d+|[()+\-*/]/g) || []);
+  if(tokens.join('') !== expression.replace(/\s/g,'').replace(/\u00d7/g,'*').replace(/\u00f7/g,'/')) throw new Error('Invalid expression');
+  let index = 0;
+  function primary(){
+    const token = tokens[index++];
+    if(token === '('){ const value = add(); if(tokens[index++] !== ')') throw new Error('Missing )'); return value; }
+    if(token === '-') return -primary();
+    if(token === '+') return primary();
+    const value = Number(token);
+    if(!Number.isFinite(value)) throw new Error('Number expected');
+    return value;
+  }
+  function multiply(){
+    let value = primary();
+    while(tokens[index] === '*' || tokens[index] === '/'){
+      const operator = tokens[index++], right = primary();
+      value = operator === '*' ? value * right : value / right;
+    }
+    return value;
+  }
+  function add(){
+    let value = multiply();
+    while(tokens[index] === '+' || tokens[index] === '-'){
+      const operator = tokens[index++], right = multiply();
+      value = operator === '+' ? value + right : value - right;
+    }
+    return value;
+  }
+  const result = add();
+  if(index !== tokens.length || !Number.isFinite(result)) throw new Error('Invalid result');
+  return Math.round((result + Number.EPSILON) * 1e10) / 1e10;
+}
+
+function openCalculator(){
+  closeCalculator();
+  const overlay = document.createElement('div');
+  overlay.className = 'calculator-overlay';
+  overlay.innerHTML = `<div class="calculator-card" role="dialog" aria-modal="true" aria-labelledby="calculator-title">
+    <div class="calculator-head"><strong id="calculator-title">Calculator</strong><button type="button" onclick="closeCalculator()" aria-label="Close calculator">\u2715</button></div>
+    <input id="calculator-display" class="calculator-display" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Calculation">
+    <div class="calculator-result" id="calculator-result" aria-live="polite">&nbsp;</div>
+    <div class="calculator-keys">
+      ${['C','(',')','\u00f7','7','8','9','\u00d7','4','5','6','\u2212','1','2','3','+','0','.','\u232b','='].map(key=>`<button type="button" class="${key==='='?'equals':''}" onclick="calculatorKey('${key}')">${key}</button>`).join('')}
+    </div>
+  </div>`;
+  overlay.addEventListener('click',event=>{ if(event.target===overlay) closeCalculator(); });
+  document.body.appendChild(overlay);
+  document.getElementById('calculator-display').addEventListener('keydown',event=>{ if(event.key==='Enter'){ event.preventDefault(); calculatorKey('='); } });
+  document.getElementById('calculator-display').focus();
+}
+
+function closeCalculator(){
+  const overlay = document.querySelector('.calculator-overlay');
+  if(overlay) overlay.remove();
+}
+
+function calculatorKey(key){
+  const display = document.getElementById('calculator-display');
+  const result = document.getElementById('calculator-result');
+  if(!display) return;
+  if(key === 'C'){ display.value=''; result.innerHTML='&nbsp;'; return; }
+  if(key === '\u232b'){ display.value=display.value.slice(0,-1); return; }
+  if(key === '='){
+    try{ const value=calculateExpression(display.value); result.textContent=`= ${value}`; display.value=String(value); }
+    catch(e){ result.textContent='Check the calculation'; }
+    return;
+  }
+  display.value += key === '\u2212' ? '-' : key;
+  display.focus();
+}
+
 // Resizes/compresses an image file in the browser before upload — phone
 // camera photos are often 3-8MB, this brings them down to a small JPEG
 // so uploads are fast and stay well within Cloudinary's free tier.

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gp-stock-report-shell-v12';
+const CACHE_NAME = 'gp-stock-report-shell-v13';
 const SHELL_FILES = [
   './',
   './index.html',
