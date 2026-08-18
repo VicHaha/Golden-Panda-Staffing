@@ -212,7 +212,7 @@ function openStockLocationForm(id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">Edit stock location</div>
+      <div class="form-title-row"><div class="modal-title">Edit stock location</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(editing))} · ${formatDateLong(editing.work_date)}</div>
       <div class="field">
         <label>Store</label>
@@ -309,7 +309,7 @@ function openAddStockRecordForm(){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">Add stock record</div>
+      <div class="form-title-row"><div class="modal-title">Add stock record</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>
       <div class="field-row">
         <div class="field" style="flex:1.6;">
