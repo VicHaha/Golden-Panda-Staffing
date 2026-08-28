@@ -226,12 +226,13 @@ async function loadInitialData(){
     await refreshData(); // re-fetch so any newly auto-created rows show up
     setSyncDot(true);
     subscribeRealtime();
+    startJobReminderChecks();
   }catch(e){
     console.error(e);
     setSyncDot(false);
     showToast('Could not connect to Supabase — check your internet connection');
   }
-  switchTab('sales');
+  switchTab(openTappedScheduleReminder() ? 'roster' : 'sales');
 }
 
 // Re-fetches promoters, jobs, stores, sales reports, day photos, day feedback, and shift reports from Supabase.
@@ -269,6 +270,7 @@ async function handleRemoteChange(){
   if(document.querySelector('.modal-overlay')) return;
   try{
     await refreshData();
+    await checkJobReminders();
     render();
   }catch(e){
     console.error(e);
@@ -277,6 +279,9 @@ async function handleRemoteChange(){
 
 // ---------- Tabs ----------
 function switchTab(tab){
+  if(tab === 'roster' && typeof requestJobNotificationsFromScheduleTap === 'function'){
+    requestJobNotificationsFromScheduleTap();
+  }
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(b=>{
     const active = b.dataset.tab===tab;

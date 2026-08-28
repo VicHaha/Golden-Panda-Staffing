@@ -77,8 +77,9 @@ function renderJobList(list, sortDir){
   let lastDate = null;
   let html = '';
   sorted.forEach(j=>{
+    const highlightTomorrow = isTomorrowScheduleHighlighted(j.work_date);
     if(j.work_date !== lastDate){
-      html += `<div class="day-group-label">${formatDateLong(j.work_date)}</div>`;
+      html += `<div class="day-group-label${highlightTomorrow?' tomorrow-schedule-label':''}">${formatDateLong(j.work_date)}${highlightTomorrow?'<span class="tomorrow-highlight-pill">Tomorrow</span>':''}</div>`;
       lastDate = j.work_date;
     }
     const promoterName = j.promoters ? displayName(j.promoters) : '(promoter removed)';
@@ -89,7 +90,7 @@ function renderJobList(list, sortDir){
     const position = j.position || 'Promoter';
 
     html += `
-      <div class="job-card">
+      <div class="job-card${highlightTomorrow?' tomorrow-schedule-job':''}">
         <div class="job-date">
           <div class="dow">${d.toLocaleDateString('en-GB',{weekday:'short'})}</div>
           <div class="dom">${d.getDate()}</div>

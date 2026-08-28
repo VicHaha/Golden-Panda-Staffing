@@ -2,7 +2,7 @@
 // flaky connection — actual data still needs internet, since it lives in
 // Supabase. This does NOT cache Supabase data for offline editing.
 
-const CACHE_NAME = 'golden-panda-shell-v39';
+const CACHE_NAME = 'golden-panda-shell-v43';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const SHELL_FILES = [
   './css/style.css',
   './js/supabase.js',
   './js/utils.js',
+  './js/notifications.js',
   './js/promoter.js',
   './js/schedule.js',
   './js/roster-section.js',
@@ -65,6 +66,21 @@ self.addEventListener('fetch', event => {
         })
         .catch(() => cached);
       return cached || networkFetch;
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = new URL((event.notification.data && event.notification.data.url) || './index.html', self.location.href).href;
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      const existing = windowClients.find(client => client.url.startsWith(new URL(targetUrl).origin));
+      if(existing){
+        existing.navigate(targetUrl);
+        return existing.focus();
+      }
+      return clients.openWindow(targetUrl);
     })
   );
 });
