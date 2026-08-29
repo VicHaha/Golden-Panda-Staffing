@@ -284,11 +284,12 @@ async function ensureStockRowsForDate(date){
       .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(product) && r.work_date < date)
       .sort((a,b) => b.work_date.localeCompare(a.work_date));
     const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
-    // Warehouse stock (admin-only field, not shown in this app's form) is
-    // a running total, not a daily transaction — carry the last known
-    // figure forward untouched so it stays correct no matter which app
-    // ends up creating the next date's row.
-    const warehouseCarryOver = priorEntries.length ? Number(priorEntries[0].warehouse_qty||0) : 0;
+    // Carry the last location allocation into the next working date.
+    const priorStock = priorEntries[0] || {};
+    const storeRoomCarryOver = Number(priorStock.store_room_qty||0);
+    const homeShelfCarryOver = Number(priorStock.home_shelf_qty||0);
+    const standeeCarryOver = Number(priorStock.standee_qty||0);
+    const warehouseCarryOver = Number(priorStock.warehouse_qty||0);
 
     try{
       const created = await DB.addSalesReport({
@@ -302,6 +303,9 @@ async function ensureStockRowsForDate(date){
         remarks: null,
         photo_url: null,
         is_free_item: giveaway,
+        store_room_qty: storeRoomCarryOver,
+        home_shelf_qty: homeShelfCarryOver,
+        standee_qty: standeeCarryOver,
         warehouse_qty: warehouseCarryOver
       });
       // Keep the local cache current so a later target date processed in
@@ -329,7 +333,7 @@ async function carryClosingToNextEvent(productName, workDate, closingQty){
 
 function renderSales(){
   if(salesReports.length===0 && dayPhotos.length===0){
-    return emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
+    return emptyState('🛒','No sales yet','Tap + to log today\'s sales. Opening and closing counts are in Stock.');
   }
 
   const byDate = {};
@@ -350,10 +354,10 @@ function renderSales(){
   const pastDates = allDates.filter(d => d < today);
   const visibleDates = salesShowPast ? allDates : nearDates;
 
-  let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
+  let html = `<div class="section-title">Sales <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div><p class="section-intro">Record sold and given-out quantities here. Opening and closing counts are kept in Stock.</p>`;
 
   if(visibleDates.length === 0){
-    html += emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
+    html += emptyState('🛒','No sales yet','Tap + to log today\'s sales.');
   }else{
     html += `<div class="sales-date-grid">${visibleDates.map(date=>{
       const items = byDate[date];
@@ -427,7 +431,7 @@ function openSalesDateSummary(date){
   const hasPhotos = dayPhotos.some(dp=>dp.work_date===date);
   if(!items.length && !hasPhotos){ showToast('No sales record found for that date'); return; }
   const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
+  overlay.className = 'modal-overlay modal-overlay-centered';
   overlay.innerHTML = `<div class="modal-sheet sales-summary-sheet" id="sales-summary-sheet">${buildSalesSummaryInner(date)}</div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
@@ -451,24 +455,60 @@ function renderSalesItems(items, isToday, compact){
     const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
     const variance = closing - (opening - sales);
     return `
-      <div class="sales-table-row ${isToday?'sales-table-row-editable':''}" ${isToday?`role="button" tabindex="0" onclick="closeModal();openSalesForm('${i.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeModal();openSalesForm('${i.id}')}" aria-label="Edit ${esc(displayProductName(i))}"`:''}>
-        <div class="sales-table-sku">
+      <div class="sales-table-row sales-only-row ${isToday?'sales-table-row-editable':''}">
+        <div class="sales-table-sku ${isToday?'sales-table-edit':''}" ${isToday?`role="button" tabindex="0" onclick="closeModal();openSalesForm('${i.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeModal();openSalesForm('${i.id}')}" aria-label="Edit ${esc(displayProductName(i))}"`:''}>
           <strong>${esc(displayProductName(i))}</strong>
           ${!commonLogger ? `<small>${esc(loggedByLabel(i))}</small>` : ''}
-          ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance}</span>` : ''}
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
-        <b class="sales-table-number">${opening}</b>
-        <b class="sales-table-number">${sales}</b>
-        <b class="sales-table-number">${closing}</b>
+        ${isToday?renderInlineSalesStepper(i):`<b class="sales-table-number">${sales}</b>`}
       </div>
     `;
   }).join('');
-  return `<div class="sales-table">
-    <div class="sales-table-head"><span>SKU</span><span>Opening</span><span>${compact?'Given':'Sold'}</span><span>Closing</span></div>
+  return `<div class="sales-table sales-only-table">
+    <div class="sales-table-head sales-only-row"><span>SKU</span><span>${compact?'Given out':'Sold'}</span></div>
     ${rows}
     ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
   </div>`;
+}
+
+let inlineSalesSaveTimers = {};
+
+function renderInlineSalesStepper(row){
+  const quantity = Number(row.sales_qty||0);
+  const name = esc(displayProductName(row));
+  return `<div class="sales-inline-stepper" aria-label="Sales quantity for ${name}">
+    <button type="button" onclick="event.stopPropagation();stepSalesQtyInline('${row.id}',-1,'${row.work_date}')" onkeydown="event.stopPropagation()" aria-label="Decrease ${name}">−</button>
+    <b class="sales-table-number">${quantity}</b>
+    <button type="button" onclick="event.stopPropagation();stepSalesQtyInline('${row.id}',1,'${row.work_date}')" onkeydown="event.stopPropagation()" aria-label="Increase ${name}">+</button>
+  </div>`;
+}
+
+function stepSalesQtyInline(id, delta, date){
+  const row = salesReports.find(item=>item.id===id);
+  if(!row || row.work_date!==todayStr()) return;
+  row.sales_qty = Math.max(0,Number(row.sales_qty||0)+Number(delta||0));
+  refreshSalesSummary(date);
+  clearTimeout(inlineSalesSaveTimers[id]);
+  inlineSalesSaveTimers[id] = setTimeout(()=>saveInlineSalesQty(id,date),300);
+}
+
+async function saveInlineSalesQty(id, date){
+  const row = salesReports.find(item=>item.id===id);
+  if(!row) return;
+  delete inlineSalesSaveTimers[id];
+  try{
+    await DB.updateSalesReport(id,{sales_qty:Number(row.sales_qty||0)});
+    await refreshData();
+    render();
+    if(document.getElementById('sales-summary-sheet')) refreshSalesSummary(date);
+  }catch(e){
+    console.error(e);
+    await refreshData().catch(()=>{});
+    render();
+    if(document.getElementById('sales-summary-sheet')) refreshSalesSummary(date);
+    showToast('Could not update sales — '+(e.message||'check your connection'));
+  }
 }
 
 // Any number of overall photos allowed per working date (booth/table
@@ -507,7 +547,7 @@ function openSalesForm(id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="form-title-row"><div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
+      <div class="form-title-row"><div class="modal-title">${editing ? 'Edit sales' : 'Add sales'}</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">Logging as <b>${esc(currentPromoterName)}</b> · ${formatDateLong(today)}</div>
       <div class="field">
         <label>Store (optional)</label>
@@ -534,39 +574,25 @@ function openSalesForm(id){
           Free item (given away, not sold)
         </label>
       </div>
-      <div class="field"><label>Opening stock</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
-          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="syncSalesQuantities('opening')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
-        </div>
-      </div>
       <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-sales',-1)" aria-label="Decrease sales qty">−</button>
-          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('sales')">
+          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-sales',1)" aria-label="Increase sales qty">+</button>
-        </div>
-      </div>
-      <div class="field"><label>Closing stock</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
-          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="syncSalesQuantities('closing')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
         </div>
       </div>
       <div class="field" id="given-out-field" style="display:none;">
         <label>Given out</label>
         <div class="qty-stepper">
           <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-given-out',-1)" aria-label="Decrease given out quantity">−</button>
-          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('given')">
+          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
           <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-given-out',1)" aria-label="Increase given out quantity">+</button>
         </div>
         <div class="field-hint">Enter the quantity actually distributed.</div>
       </div>
       <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-ghost" onclick="returnToSalesCard('${editing?editing.work_date:''}')">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
       </div>
       ${editing ? `<button type="button" class="btn btn-danger-ghost btn-block sales-delete-action" onclick="deleteSalesReport('${editing.id}')">Delete this record</button>` : ''}
@@ -624,14 +650,17 @@ function applyFreeItemFieldLayout(recalculate=false){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
   document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
-  if(recalculate && giveaway !== salesFormLastFreeItem){
-    salesFormDerivedFieldTouched = false;
-    syncSalesQuantities('mode');
-  }
   salesFormLastFreeItem = giveaway;
 }
 
+function returnToSalesCard(date){
+  closeModal();
+  render();
+  if(date) openSalesDateSummary(date);
+}
+
 async function saveSalesForm(id){
+  const editing = id ? salesReports.find(r=>r.id===id) : null;
   const work_date = todayStr(); // promoters can only ever save into today
   const store_id = document.getElementById('s-store').value || null;
   const productBase = document.getElementById('s-product').value.trim();
@@ -649,11 +678,11 @@ async function saveSalesForm(id){
   // override (ticking/unticking by hand) is still always respected.
   const checkboxChecked = document.getElementById('s-free-item').checked;
   const is_free_item = salesFormFreeItemTouched ? checkboxChecked : (checkboxChecked || isGiveaway(productBase));
-  const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
-  const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
   const sales_qty = is_free_item ? (parseFloat(document.getElementById('s-given-out').value) || 0) : (parseFloat(document.getElementById('s-sales').value) || 0);
   const remarks = document.getElementById('s-remarks').value.trim();
-  const editing = id ? salesReports.find(r=>r.id===id) : null;
+  const prior = salesReports.filter(r=>canonicalSkuName(r.product_name)===canonicalSkuName(product_name) && r.work_date<work_date).sort((a,b)=>b.work_date.localeCompare(a.work_date))[0];
+  const opening_qty = editing ? Number(editing.opening_qty||0) : Number(prior&&prior.closing_qty||0);
+  const closing_qty = editing ? Number(editing.closing_qty||0) : opening_qty;
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
@@ -673,11 +702,9 @@ async function saveSalesForm(id){
     }else{
       await DB.addSalesReport(payload);
     }
-    await carryClosingToNextEvent(product_name, work_date, closing_qty);
     await refreshData();
-    closeModal();
-    render();
-    showToast('Stock report saved');
+    returnToSalesCard(editing ? editing.work_date : '');
+    showToast('Sales saved');
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));
@@ -802,13 +829,13 @@ function openDayPhotoForm(date, id){
         <input type="hidden" id="dp-photo-url" value="${existing&&existing.photo_url?esc(existing.photo_url):''}">
       </div>
       <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-ghost" onclick="returnToSalesCard('${date}')">Cancel</button>
         <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}','${id||''}')">Save</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) returnToSalesCard(date); });
 }
 
 async function saveDayPhotoForm(date, id){
@@ -837,8 +864,7 @@ async function saveDayPhotoForm(date, id){
       await DB.addDayPhoto(date, { store_id: null, promoter_id: currentPromoterId, photo_url });
     }
     await refreshData();
-    closeModal();
-    render();
+    returnToSalesCard(date);
     showToast('Day photo saved');
   }catch(e){
     console.error(e);

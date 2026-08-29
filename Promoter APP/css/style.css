@@ -325,6 +325,8 @@ body{
 
 /* Sales summary modal (opened by tapping a date card above) */
 .sales-summary-sheet{padding-top:18px;}
+.modal-overlay.modal-overlay-centered{align-items:center;padding:16px;}
+.modal-overlay-centered .sales-summary-sheet,.modal-overlay-centered .stock-summary-sheet{width:min(100%,460px);max-height:calc(100dvh - 32px);border-radius:18px;box-shadow:var(--shadow-raised);}
 .stock-summary-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:13px;}
 .stock-summary-head .modal-title{margin-bottom:1px;}
 .modal-close-btn{
@@ -505,8 +507,48 @@ body{
 .sales-table .sales-locked{justify-self:center;}
 .sales-table-footer{padding:6px 9px;border-top:1px solid var(--line);background:var(--bg);font-size:10.5px;color:var(--ink-soft);}
 .sales-delete-action{margin-top:10px;}
+.section-intro{margin:-8px 2px 14px;color:var(--ink-soft);font-size:12px;line-height:1.5;}
+.field-hint-error{color:var(--brick);font-weight:600;}
+.sales-table-head.sales-only-row,.sales-table-row.sales-only-row{grid-template-columns:minmax(110px,1fr) 118px;}
+.sales-only-row .sales-table-number{text-align:right;}
+.sales-table-edit{cursor:pointer;border-radius:7px;}
+.sales-table-edit:hover{color:var(--gold-deep);}
+.sales-inline-stepper{display:grid;grid-template-columns:34px minmax(28px,1fr) 34px;align-items:center;gap:4px;justify-self:stretch;}
+.sales-inline-stepper button{display:flex;width:34px;height:34px;align-items:center;justify-content:center;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--gold-deep);font:800 19px/1 inherit;cursor:pointer;touch-action:manipulation;}
+.sales-inline-stepper button:active{background:var(--gold-tint);}
+.sales-inline-stepper .sales-table-number{text-align:center;}
+
+/* Stock is deliberately separate from Sales: one day/location group,
+   with equal Opening and Closing cards that edit the existing fields. */
+.stock-day-list{display:grid;gap:12px;}
+.stock-day-group{padding:13px;border:1px solid var(--line);border-radius:15px;background:var(--surface);box-shadow:var(--shadow);}
+.stock-day-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.stock-day-head strong,.stock-day-head small{display:block;}
+.stock-day-head strong{font-family:'Fraunces',Georgia,serif;font-size:14.5px;line-height:1.35;}
+.stock-day-head small{margin-top:3px;color:var(--ink-soft);font-size:10.5px;}
+.stock-day-head>span{padding:3px 7px;border-radius:99px;background:var(--gold-tint);color:var(--gold-deep);font-size:9px;font-weight:800;}
+.stock-day-head>span.is-locked{background:var(--bg);color:var(--ink-soft);}
+.stock-count-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.stock-count-card{display:flex;min-width:0;min-height:126px;flex-direction:column;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;}
+.stock-count-card.closing{background:var(--gold-tint);border-color:rgba(196,145,32,.35);}
+.stock-count-card .stock-count-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+.stock-count-card b{margin-top:10px;font-family:'Fraunces',Georgia,serif;font-size:27px;line-height:1;color:var(--gold-deep);font-variant-numeric:tabular-nums;}
+.stock-count-card small{margin-top:4px;color:var(--ink-soft);font-size:9.5px;line-height:1.3;}
+.stock-count-card em{margin-top:auto;padding-top:9px;color:var(--ink-soft);font-size:10px;font-style:normal;font-weight:700;}
+.stock-count-list{overflow:hidden;margin-top:10px;border:1px solid var(--line);border-radius:12px;}
+.stock-count-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--surface);}
+.stock-count-row:last-child{border-bottom:0;}
+.stock-count-main{display:grid;width:100%;min-width:0;grid-template-columns:minmax(0,1fr) auto 42px;align-items:center;gap:10px;padding:11px 12px;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;}
+.stock-count-main:disabled{cursor:default;opacity:1;}
+.stock-count-main span strong,.stock-count-main span small{display:block;}
+.stock-count-main span strong{font-size:12.5px;line-height:1.35;}
+.stock-count-main span small{margin-top:3px;color:var(--ink-soft);font-size:9px;line-height:1.4;white-space:normal;}
+.stock-count-main>b{font-size:18px;font-variant-numeric:tabular-nums;}
+.stock-count-main>em{color:var(--ink-soft);font-size:10px;font-style:normal;text-align:right;}
+.stock-location-link{flex:0 0 auto;margin:7px 7px 7px 0;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--gold-tint);color:var(--gold-deep);font:700 9px/1 inherit;cursor:pointer;}
+.stock-readonly-note{margin:11px 2px 0;color:var(--ink-soft);font-size:10.5px;line-height:1.4;}
 @media (max-width:350px){
-  .sales-table-head,.sales-table-row{grid-template-columns:minmax(72px,1.2fr) repeat(3,minmax(34px,.5fr));column-gap:3px;}
+  .sales-table-head:not(.sales-only-row),.sales-table-row:not(.sales-only-row){grid-template-columns:minmax(72px,1.2fr) repeat(3,minmax(34px,.5fr));column-gap:3px;}
   .sales-table-head,.sales-table-row{padding-left:6px;padding-right:6px;}
   .sales-table .icon-btn{width:34px;height:34px;}
 }
