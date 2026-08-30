@@ -8,6 +8,9 @@ function stockOutletKey(row){ return row.store_id || '__none__'; }
 function stockRowTotal(row){
   return Number(row.store_room_qty||0) + Number(row.home_shelf_qty||0) + Number(row.standee_qty||0) + Number(row.warehouse_qty||0);
 }
+function stockOpeningTotal(row){
+  return Number(row.store_room_qty||0) + Number(row.home_shelf_qty||0) + Number(row.standee_qty||0);
+}
 function stockLocationTotals(rows){
   return rows.reduce((sum,row)=>({
     storeRoom:sum.storeRoom+Number(row.store_room_qty||0),
@@ -222,15 +225,15 @@ function openStockLocationForm(id){
         </select>
       </div>
       <div class="field">
-        <label>Closing stock (from Sales tab)</label>
-        <input id="sl-closing-display" type="text" value="${editing.closing_qty}" disabled>
+        <label>Sales opening stock</label>
+        <input id="sl-opening-display" type="text" value="${stockOpeningTotal(editing)}" disabled>
       </div>
       <div class="field-row">
         <div class="field"><label>Store Room</label><input id="sl-store-room" type="number" min="0" step="1" value="${editing.store_room_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Home Shelf</label><input id="sl-home-shelf" type="number" min="0" step="1" value="${editing.home_shelf_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Standee</label><input id="sl-standee" type="number" min="0" step="1" value="${editing.standee_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
       </div>
-      <div class="field-hint" id="sl-location-hint">Should add up to the closing stock above.</div>
+      <div class="field-hint" id="sl-location-hint">Store Room + Home Shelf + Standee. Warehouse is excluded.</div>
       <div class="field" style="margin-top:13px;">
         <label>Warehouse stock</label>
         <input id="sl-warehouse" type="number" min="0" step="1" value="${editing.warehouse_qty||0}" placeholder="0">
@@ -250,19 +253,14 @@ function openStockLocationForm(id){
 function updateStockLocationHint(){
   const hint = document.getElementById('sl-location-hint');
   if(!hint) return;
-  const closing = parseFloat(document.getElementById('sl-closing-display').value) || 0;
   const storeRoom = parseFloat(document.getElementById('sl-store-room').value) || 0;
   const homeShelf = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
   const standee = parseFloat(document.getElementById('sl-standee').value) || 0;
   const sum = storeRoom + homeShelf + standee;
-
-  if(sum === closing){
-    hint.textContent = `✓ Matches closing stock (${closing}).`;
-    hint.classList.remove('field-hint-error');
-  }else{
-    hint.textContent = `${sum} entered so far — closing stock is ${closing}.`;
-    hint.classList.add('field-hint-error');
-  }
+  const openingDisplay = document.getElementById('sl-opening-display');
+  if(openingDisplay) openingDisplay.value = sum;
+  hint.textContent = `${sum} units will be used as Sales opening stock. Warehouse is excluded.`;
+  hint.classList.remove('field-hint-error');
 }
 
 async function saveStockLocationForm(id){
@@ -271,18 +269,19 @@ async function saveStockLocationForm(id){
   const home_shelf_qty = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
   const standee_qty = parseFloat(document.getElementById('sl-standee').value) || 0;
   const warehouse_qty = parseFloat(document.getElementById('sl-warehouse').value) || 0;
+  const opening_qty = store_room_qty + home_shelf_qty + standee_qty;
 
   const btn = document.getElementById('stock-location-save-btn');
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    // Only touches these five columns — opening/sales/closing, remarks,
-    // and everything else on the row stays untouched.
-    await DB.updateSalesReport(id, { store_id, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty });
+    // The three outlet locations form Sales opening stock. Warehouse is a
+    // separate running total and is deliberately excluded from that sum.
+    await DB.updateSalesReport(id, { store_id, opening_qty, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty });
     await refreshData();
     closeModal();
     render();
-    showToast('Stock location saved');
+    showToast(`Stock saved · Sales opening ${opening_qty}`);
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));
@@ -299,10 +298,10 @@ async function saveStockLocationForm(id){
 // and the shared `stores` global), so nothing has to be typed twice or
 // risks drifting out of sync between the two tabs.
 //
-// Opening/sold/closing stay at 0 — that side of a record is the Sales
-// tab's job; if a Sales entry already exists for this exact product +
-// date + store, edit stock-by-location there via the ✎ instead of
-// adding a duplicate here.
+// Store Room + Home Shelf + Standee become the Sales opening count.
+// Warehouse remains separate. If a Sales entry already exists for this
+// exact product + date + store, saving updates that row instead of
+// adding a duplicate.
 function openAddStockRecordForm(){
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
   const overlay = document.createElement('div');
@@ -331,10 +330,11 @@ function openAddStockRecordForm(){
         </select>
       </div>
       <div class="field-row">
-        <div class="field"><label>Store Room</label><input id="asr-store-room" type="number" min="0" step="1" placeholder="0"></div>
-        <div class="field"><label>Home Shelf</label><input id="asr-home-shelf" type="number" min="0" step="1" placeholder="0"></div>
-        <div class="field"><label>Standee</label><input id="asr-standee" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Store Room</label><input id="asr-store-room" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
+        <div class="field"><label>Home Shelf</label><input id="asr-home-shelf" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
+        <div class="field"><label>Standee</label><input id="asr-standee" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
       </div>
+      <div class="field-hint" id="asr-opening-hint">Sales opening stock: 0 units. Warehouse is excluded.</div>
       <div class="field" style="margin-top:2px;">
         <label>Warehouse stock</label>
         <input id="asr-warehouse" type="number" min="0" step="1" value="0" placeholder="0">
@@ -348,6 +348,15 @@ function openAddStockRecordForm(){
   `;
   showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+function updateAddStockOpeningTotal(){
+  const hint = document.getElementById('asr-opening-hint');
+  if(!hint) return;
+  const storeRoom = parseFloat(document.getElementById('asr-store-room').value) || 0;
+  const homeShelf = parseFloat(document.getElementById('asr-home-shelf').value) || 0;
+  const standee = parseFloat(document.getElementById('asr-standee').value) || 0;
+  hint.textContent = `Sales opening stock: ${storeRoom + homeShelf + standee} units. Warehouse is excluded.`;
 }
 
 // Re-looks-up the warehouse running total for whatever product name is
@@ -371,6 +380,7 @@ function onAddStockProductChange(){
     standeeInput.value = '';
     warehouseInput.value = 0;
     hint.textContent = "Auto-filled from this product's last known warehouse figure once you type a product name.";
+    updateAddStockOpeningTotal();
     return;
   }
   const storeId = document.getElementById('asr-store').value || null;
@@ -385,6 +395,7 @@ function onAddStockProductChange(){
     standeeInput.value = Number(existing.standee_qty||0);
     warehouseInput.value = Number(existing.warehouse_qty||0);
     hint.textContent = "Today's record already exists — saving will update its counts, not add another row.";
+    updateAddStockOpeningTotal();
     return;
   }
   storeRoomInput.value = '';
@@ -400,6 +411,7 @@ function onAddStockProductChange(){
     warehouseInput.value = 0;
     hint.textContent = 'No prior record for this product yet — starting from 0.';
   }
+  updateAddStockOpeningTotal();
 }
 
 async function saveAddStockRecordForm(){
@@ -415,6 +427,7 @@ async function saveAddStockRecordForm(){
   const home_shelf_qty = parseFloat(document.getElementById('asr-home-shelf').value) || 0;
   const standee_qty = parseFloat(document.getElementById('asr-standee').value) || 0;
   const warehouse_qty = parseFloat(document.getElementById('asr-warehouse').value) || 0;
+  const opening_qty = store_room_qty + home_shelf_qty + standee_qty;
 
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;
@@ -426,11 +439,11 @@ async function saveAddStockRecordForm(){
       && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
     );
     if(existing){
-      await DB.updateSalesReport(existing.id,{store_room_qty,home_shelf_qty,standee_qty,warehouse_qty});
+      await DB.updateSalesReport(existing.id,{opening_qty,store_room_qty,home_shelf_qty,standee_qty,warehouse_qty});
     }else{
       await DB.addSalesReport({
         work_date, store_id, promoter_id: null, product_name,
-        opening_qty: 0, sales_qty: 0, closing_qty: 0,
+        opening_qty, sales_qty: 0, closing_qty: 0,
         remarks: null, photo_url: null, is_free_item: false,
         store_room_qty, home_shelf_qty, standee_qty, warehouse_qty,
         logged_by_admin_name: currentAdminName
@@ -439,7 +452,7 @@ async function saveAddStockRecordForm(){
     await refreshData();
     closeModal();
     render();
-    showToast(existing ? 'Stock count updated' : 'Stock record added');
+    showToast(`${existing ? 'Stock count updated' : 'Stock record added'} · Sales opening ${opening_qty}`);
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));
