@@ -112,8 +112,31 @@ function calculateExpression(expression){
   return Math.round((result + Number.EPSILON) * 1e10) / 1e10;
 }
 
-function openCalculator(){
+let calculatorTargetInput = null;
+
+// Remember the quantity/amount field the user was editing. Tapping the
+// calculator button moves focus away from that input, so document.activeElement
+// alone is not enough to identify where the result should go.
+document.addEventListener('focusin', event=>{
+  const input = event.target;
+  if(input instanceof HTMLInputElement && input.type === 'number' && input.id !== 'calculator-display'){
+    calculatorTargetInput = input;
+  }
+});
+
+function openCalculator(launcher){
   closeCalculator();
+  const formScope = launcher && launcher.closest('.modal-overlay');
+  const activeInput = document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'number'
+    ? document.activeElement
+    : null;
+  if(activeInput) calculatorTargetInput = activeInput;
+  if(calculatorTargetInput && (!calculatorTargetInput.isConnected || (formScope && !formScope.contains(calculatorTargetInput)))){
+    calculatorTargetInput = null;
+  }
+  const startingValue = calculatorTargetInput && calculatorTargetInput.value.trim() !== ''
+    ? calculatorTargetInput.value
+    : '0';
   const overlay = document.createElement('div');
   overlay.className = 'calculator-overlay';
   overlay.innerHTML = `<div class="calculator-card" role="dialog" aria-modal="true" aria-labelledby="calculator-title">
@@ -126,8 +149,11 @@ function openCalculator(){
   </div>`;
   overlay.addEventListener('click',event=>{ if(event.target===overlay) closeCalculator(); });
   document.body.appendChild(overlay);
-  document.getElementById('calculator-display').addEventListener('keydown',event=>{ if(event.key==='Enter'){ event.preventDefault(); calculatorKey('='); } });
-  document.getElementById('calculator-display').focus();
+  const display = document.getElementById('calculator-display');
+  display.value = startingValue;
+  display.addEventListener('keydown',event=>{ if(event.key==='Enter'){ event.preventDefault(); calculatorKey('='); } });
+  display.focus();
+  display.setSelectionRange(display.value.length, display.value.length);
 }
 
 function closeCalculator(){
@@ -142,7 +168,19 @@ function calculatorKey(key){
   if(key === 'C'){ display.value=''; result.innerHTML='&nbsp;'; return; }
   if(key === '\u232b'){ display.value=display.value.slice(0,-1); return; }
   if(key === '='){
-    try{ const value=calculateExpression(display.value); result.textContent=`= ${value}`; display.value=String(value); }
+    try{
+      const value=calculateExpression(display.value);
+      result.textContent=`= ${value}`;
+      display.value=String(value);
+      if(calculatorTargetInput && calculatorTargetInput.isConnected){
+        const target = calculatorTargetInput;
+        target.value = String(value);
+        target.dispatchEvent(new Event('input', { bubbles:true }));
+        target.dispatchEvent(new Event('change', { bubbles:true }));
+        closeCalculator();
+        target.focus();
+      }
+    }
     catch(e){ result.textContent='Check the calculation'; }
     return;
   }

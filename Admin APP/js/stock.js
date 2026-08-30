@@ -134,7 +134,7 @@ function saveStockThresholdScope(){
   showToast(value ? `Low-stock alert set to ${value} for ${scopeLabel}` : `Low-stock alert turned off for ${scopeLabel}`);
 }
 
-function renderInventoryOverview(){
+function renderStockManagement(){
   const outlets = currentOutletStocks();
   const lowCount = outlets.reduce((sum,outlet)=>sum+outlet.rows.filter(row=>isLowStock(row,stockThreshold(outlet.key))).length,0);
   return `<div class="stock-page-head">
@@ -203,17 +203,16 @@ function refreshOutletStockSummary(outletKey){
 }
 
 // ---------------- Edit form ----------------
-function openStockLocationForm(id, returnDate, returnStoreKey, returnPhase){
+function openStockLocationForm(id){
   const editing = salesReports.find(r=>r.id===id);
   if(!editing){ showToast('Could not find that record'); return; }
+  if(!isStockManagedItem(editing)){ showToast('Free items are not tracked in Stock Management'); return; }
 
-  const phase = returnPhase==='opening' ? 'opening' : 'closing';
-  const phaseLabel = phase==='opening' ? 'Opening' : 'Closing';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="form-title-row"><div class="modal-title">Edit stock location</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
+      <div class="form-title-row"><div class="modal-title">Edit stock location</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(editing))} · ${formatDateLong(editing.work_date)}</div>
       <div class="field">
         <label>Store</label>
@@ -223,28 +222,28 @@ function openStockLocationForm(id, returnDate, returnStoreKey, returnPhase){
         </select>
       </div>
       <div class="field">
-        <label>${phaseLabel} stock total</label>
-        <input id="sl-closing-display" type="text" value="${Number(editing[phase+'_qty']||0)}" disabled>
+        <label>Closing stock (from Sales tab)</label>
+        <input id="sl-closing-display" type="text" value="${editing.closing_qty}" disabled>
       </div>
       <div class="field-row">
         <div class="field"><label>Store Room</label><input id="sl-store-room" type="number" min="0" step="1" value="${editing.store_room_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Home Shelf</label><input id="sl-home-shelf" type="number" min="0" step="1" value="${editing.home_shelf_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Standee</label><input id="sl-standee" type="number" min="0" step="1" value="${editing.standee_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
       </div>
-      <div class="field-hint" id="sl-location-hint">On-site locations should add up to the ${phaseLabel.toLowerCase()} stock above.</div>
+      <div class="field-hint" id="sl-location-hint">Should add up to the closing stock above.</div>
       <div class="field" style="margin-top:13px;">
         <label>Warehouse stock</label>
         <input id="sl-warehouse" type="number" min="0" step="1" value="${editing.warehouse_qty||0}" placeholder="0">
         <div class="field-hint">A running total — carries forward to the next working date automatically until edited again.</div>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="${returnDate?`returnToStockCard('${returnDate}','${returnStoreKey}','${returnPhase||'closing'}')`:'closeModal()'}">Cancel</button>
-        <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}','${returnDate||''}','${returnStoreKey||''}','${returnPhase||''}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}')">Save</button>
       </div>
     </div>
   `;
   showModal(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) returnDate ? returnToStockCard(returnDate,returnStoreKey,returnPhase||'closing') : closeModal(); });
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
   updateStockLocationHint();
 }
 
@@ -258,16 +257,15 @@ function updateStockLocationHint(){
   const sum = storeRoom + homeShelf + standee;
 
   if(sum === closing){
-    hint.textContent = `✓ On-site locations match the stock total (${closing}).`;
+    hint.textContent = `✓ Matches closing stock (${closing}).`;
     hint.classList.remove('field-hint-error');
   }else{
-    hint.textContent = `${sum} allocated on site · stock total is ${closing}. Warehouse is tracked separately.`;
+    hint.textContent = `${sum} entered so far — closing stock is ${closing}.`;
     hint.classList.add('field-hint-error');
   }
 }
 
-async function saveStockLocationForm(id, returnDate, returnStoreKey, returnPhase){
-  const row = salesReports.find(item=>item.id===id);
+async function saveStockLocationForm(id){
   const store_id = document.getElementById('sl-store').value || null;
   const store_room_qty = parseFloat(document.getElementById('sl-store-room').value) || 0;
   const home_shelf_qty = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
@@ -280,12 +278,10 @@ async function saveStockLocationForm(id, returnDate, returnStoreKey, returnPhase
     btn.textContent = 'Saving…';
     // Only touches these five columns — opening/sales/closing, remarks,
     // and everything else on the row stays untouched.
-    const locationPayload = { store_room_qty, home_shelf_qty, standee_qty, warehouse_qty };
-    await DB.updateSalesReport(id, { store_id, ...locationPayload });
-    if(row) await carryAdminStockLocationsToNextEvent(row,locationPayload);
+    await DB.updateSalesReport(id, { store_id, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty });
     await refreshData();
-    if(returnDate) returnToStockCard(returnDate,store_id||'__none__',returnPhase||'closing');
-    else { closeModal(); render(); }
+    closeModal();
+    render();
     showToast('Stock location saved');
   }catch(e){
     console.error(e);
@@ -293,139 +289,6 @@ async function saveStockLocationForm(id, returnDate, returnStoreKey, returnPhase
     btn.disabled = false;
     btn.textContent = 'Save';
   }
-}
-
-async function carryAdminStockLocationsToNextEvent(row,payload){
-  const nextDate = [...new Set([...jobs.map(job=>job.work_date),...salesReports.map(item=>item.work_date)])].filter(date=>date>row.work_date).sort()[0];
-  if(!nextDate) return;
-  const nextRows = salesReports.filter(item=>item.work_date===nextDate&&canonicalSkuName(item.product_name)===canonicalSkuName(row.product_name));
-  for(const nextRow of nextRows) await DB.updateSalesReport(nextRow.id,payload);
-}
-
-// ============================================================
-// Daily stock layout — two equal records per working date and location.
-// The same sales_reports rows and export fields are used unchanged.
-// ============================================================
-
-let dailyStockActiveTab = {};
-
-function dailyStockGroupKey(date, storeKey){ return `${date}|${storeKey || '__none__'}`; }
-
-function dailyStockGroups(){
-  const groups = [];
-  const byKey = {};
-  salesReports.forEach(row=>{
-    const storeKey = row.store_id || '__none__';
-    const key = dailyStockGroupKey(row.work_date,storeKey);
-    if(!byKey[key]){
-      byKey[key] = {key,date:row.work_date,storeKey,location:row.stores?row.stores.name:'Location not specified',items:[]};
-      groups.push(byKey[key]);
-    }
-    byKey[key].items.push(row);
-  });
-  groups.forEach(group=>group.items.sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b)));
-  return groups.sort((a,b)=>b.date.localeCompare(a.date)||a.location.localeCompare(b.location));
-}
-
-// Location allocation from the prior inventory overview remains available
-// inside each Closing record, so no existing workflow or export data is lost.
-function renderStockManagement(){
-  const groups = dailyStockGroups();
-  return `<div class="stock-page-head"><div><div class="section-title">Stock Management</div><p>Opening and closing are separate records for every working date and location.</p></div></div>
-    <p class="section-intro">A saved closing count automatically fills the next working date's opening. That opening stays editable after carry-forward.</p>
-    ${groups.length?`<div class="stock-day-list">${groups.map(renderDailyStockGroup).join('')}</div>`:emptyState('📦','No stock days yet','Stock cards appear when sales-report rows are created for a working day.')}`;
-}
-
-function renderDailyStockGroup(group){
-  const opening = group.items.reduce((sum,row)=>sum+Number(row.opening_qty||0),0);
-  const closing = group.items.reduce((sum,row)=>sum+Number(row.closing_qty||0),0);
-  return `<section class="stock-day-group"><div class="stock-day-head"><div><strong>${formatDateLong(group.date)}</strong><small>${esc(group.location)}</small></div>${group.date===todayStr()?'<span>Today</span>':''}</div>
-    <div class="stock-count-grid">${renderDailyStockCard(group,'opening',opening)}${renderDailyStockCard(group,'closing',closing)}</div></section>`;
-}
-
-function renderDailyStockCard(group,phase,total){
-  const label=phase==='opening'?'Opening':'Closing';
-  return `<button type="button" class="stock-count-card ${phase}" onclick="openStockCountCard('${group.date}','${group.storeKey}','${phase}')"><span class="stock-count-label">${label}</span><b>${total}</b><small>${phase==='opening'?'Start-of-day count':'End-of-day count'}</small><em>View and edit ›</em></button>`;
-}
-
-function dailyStockRows(date,storeKey){
-  return salesReports.filter(row=>row.work_date===date&&(row.store_id||'__none__')===storeKey).sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b));
-}
-
-function dailyStockLocationText(row){
-  return [
-    ['Store room',Number(row.store_room_qty||0)],
-    ['Home shelf',Number(row.home_shelf_qty||0)],
-    ['Standee',Number(row.standee_qty||0)],
-    ['Warehouse',Number(row.warehouse_qty||0)]
-  ].map(([name,qty])=>`${name} ${qty}`).join(' · ');
-}
-
-function stockCountCardHtml(date,storeKey,phase){
-  const rows=dailyStockRows(date,storeKey);
-  if(!rows.length) return null;
-  const groups=groupByProductTabs(rows,true);
-  const stateKey=dailyStockGroupKey(date,storeKey);
-  const active=activeProductTab(stateKey,groups,dailyStockActiveTab);
-  dailyStockActiveTab[stateKey]=active;
-  const activeGroup=groups.find(group=>group.key===active);
-  const visible=activeGroup?activeGroup.items:[];
-  const location=rows[0].stores?rows[0].stores.name:'Location not specified';
-  const label=phase==='opening'?'Opening stock':'Closing stock';
-  return `<div class="stock-summary-head"><div><div class="modal-title">${label}</div><div class="sales-summary-meta">${formatDateLong(date)} · ${esc(location)}</div></div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="stock-tabs">${groups.map(group=>`<button class="stock-tab ${active===group.key?'active':''}" onclick="setDailyStockTab('${date}','${storeKey}','${phase}','${group.key}')">${esc(group.label)} <span class="stock-tab-count">${group.items.length}</span></button>`).join('')}</div>
-    <div class="stock-count-list">${visible.map(row=>`<div class="stock-count-row"><button type="button" class="stock-count-main" onclick="closeModal();openStockCountForm('${row.id}','${phase}')"><span><strong>${esc(displayProductName(row))}</strong><small>${isFreeItem(row)?'Free item · ':''}${dailyStockLocationText(row)}</small></span><b>${Number(row[phase+'_qty']||0)}</b><em>Edit ›</em></button><button type="button" class="stock-location-link" onclick="closeModal();openStockLocationForm('${row.id}','${date}','${storeKey}','${phase}')">Locations</button></div>`).join('')}</div>`;
-}
-
-function openStockCountCard(date,storeKey,phase){
-  const html=stockCountCardHtml(date,storeKey,phase);
-  if(html===null){showToast('No stock records found');return;}
-  const overlay=document.createElement('div');
-  overlay.className='modal-overlay modal-overlay-centered';
-  overlay.innerHTML=`<div class="modal-sheet stock-summary-sheet" id="daily-stock-sheet">${html}</div>`;
-  showModal(overlay);
-  overlay.addEventListener('click',event=>{if(event.target===overlay)closeModal();});
-}
-
-function setDailyStockTab(date,storeKey,phase,tab){
-  dailyStockActiveTab[dailyStockGroupKey(date,storeKey)]=tab;
-  const sheet=document.getElementById('daily-stock-sheet');
-  if(sheet)sheet.innerHTML=stockCountCardHtml(date,storeKey,phase);
-}
-
-function openStockCountForm(id,phase){
-  const row=salesReports.find(item=>item.id===id);
-  if(!row||!['opening','closing'].includes(phase))return;
-  const storeKey=row.store_id||'__none__';
-  const label=phase==='opening'?'Opening stock':'Closing stock';
-  const overlay=document.createElement('div');
-  overlay.className='modal-overlay';
-  overlay.innerHTML=`<div class="modal-sheet"><div class="form-title-row"><div class="modal-title">Edit ${label.toLowerCase()}</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator">🧮</button></div>
-    <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(row))} · ${formatDateLong(row.work_date)} · ${esc(row.stores?row.stores.name:'Location not specified')}</div>
-    <div class="field"><label>${label}</label><div class="qty-stepper"><button type="button" class="qty-btn qty-minus" onclick="stepQty('stock-count-qty',-1)">−</button><input id="stock-count-qty" type="number" min="0" step="1" value="${Number(row[phase+'_qty']||0)}"><button type="button" class="qty-btn qty-plus" onclick="stepQty('stock-count-qty',1)">+</button></div></div>
-    <div class="field-hint">${phase==='opening'?"Carried forward by default. Edit it if the physical opening count differs.":"Saving updates the next working date's opening automatically."}</div>
-    <div class="modal-actions"><button class="btn btn-ghost" onclick="returnToStockCard('${row.work_date}','${storeKey}','${phase}')">Cancel</button><button class="btn btn-primary" id="stock-count-save-btn" onclick="saveStockCountForm('${id}','${phase}')">Save</button></div></div>`;
-  showModal(overlay);
-  overlay.addEventListener('click',event=>{if(event.target===overlay)returnToStockCard(row.work_date,storeKey,phase);});
-}
-
-function returnToStockCard(date,storeKey,phase){
-  closeModal();render();openStockCountCard(date,storeKey,phase);
-}
-
-async function saveStockCountForm(id,phase){
-  const row=salesReports.find(item=>item.id===id);
-  if(!row)return;
-  const quantity=Math.max(0,parseFloat(document.getElementById('stock-count-qty').value)||0);
-  const btn=document.getElementById('stock-count-save-btn');
-  btn.disabled=true;btn.textContent='Saving…';
-  try{
-    await DB.updateSalesReport(id,{[phase+'_qty']:quantity});
-    if(phase==='closing')await carryClosingToNextEvent(row.product_name,row.work_date,quantity);
-    await refreshData();
-    returnToStockCard(row.work_date,row.store_id||'__none__',phase);
-    showToast(`${phase==='opening'?'Opening':'Closing'} stock saved`);
-  }catch(e){console.error(e);showToast('Could not save — '+(e.message||'check your connection'));btn.disabled=false;btn.textContent='Save';}
 }
 
 // ---------------- Add form ----------------
@@ -446,7 +309,7 @@ function openAddStockRecordForm(){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="form-title-row"><div class="modal-title">Add stock record</div><button type="button" class="calculator-launch" onclick="openCalculator()" aria-label="Open calculator" title="Calculator">🧮</button></div>
+      <div class="form-title-row"><div class="modal-title">Add stock record</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>
       <div class="field-row">
         <div class="field" style="flex:1.6;">

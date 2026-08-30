@@ -220,10 +220,6 @@ async function startApp(){
       <div class="tabbar">
         <button class="tab" data-tab="sales" onclick="switchTab('sales')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          Sales
-        </button>
-        <button class="tab" data-tab="stock" onclick="switchTab('stock')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
           Stock
         </button>
         <button class="tab" data-tab="shift" onclick="switchTab('shift')">
@@ -414,9 +410,9 @@ function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
-  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSales();
+  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : renderSales();
   const fab = document.getElementById('fab');
-  if(fab) fab.style.display = (currentTab==='schedule' || currentTab==='stock') ? 'none' : '';
+  if(fab) fab.style.display = currentTab==='schedule' ? 'none' : '';
 }
 
 // ---------- Service worker (offline shell + installability) ----------
