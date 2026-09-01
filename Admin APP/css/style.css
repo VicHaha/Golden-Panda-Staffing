@@ -151,7 +151,7 @@ body{
 .btn[disabled]{opacity:0.5; cursor:not-allowed;}
 .fab{
   position:fixed; max-width:460px; margin:0 auto; left:0; right:0;
-  bottom:calc(82px + env(safe-area-inset-bottom)); display:flex; justify-content:flex-end; padding:0 20px; pointer-events:none;
+  bottom:calc(82px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; align-items:flex-end; gap:10px; padding:0 20px; pointer-events:none;
   z-index:15;
 }
 .fab.hidden{display:none;}
@@ -161,6 +161,10 @@ body{
   font-size:24px; box-shadow:0 8px 20px rgba(33,31,27,0.25); cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
+.fab .fab-calendar{background:var(--gold);}
+.fab .fab-calendar svg{width:23px;height:23px;}
+.fab .fab-calendar.hidden{display:none;}
+.job-position-open{color:var(--ink-soft);background:var(--bg);}
 
 /* Tab bar */
 .tabbar{

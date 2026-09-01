@@ -81,7 +81,8 @@ function renderJobList(list, sortDir){
       html += `<div class="day-group-label">${formatDateLong(j.work_date)}</div>`;
       lastDate = j.work_date;
     }
-    const promoterName = j.promoters ? displayName(j.promoters) : '(promoter removed)';
+    const unassigned = !j.promoter_id;
+    const promoterName = j.promoters ? displayName(j.promoters) : (unassigned ? 'Promoter not assigned' : '(promoter removed)');
     const isMe = j.promoter_id === currentPromoterId;
     const storeName = j.stores ? j.stores.name : '(store removed)';
     const start = shortTime(j.start_time), end = shortTime(j.end_time);
@@ -99,7 +100,7 @@ function renderJobList(list, sortDir){
         <div class="job-body">
           <div class="job-store">${esc(storeName)}</div>
           <div class="job-promoter">${esc(promoterName)}${isMe?' (you)':''}</div>
-          <span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>
+          ${unassigned?'<span class="job-position job-position-open">Open date</span>':`<span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>`}
           <span class="job-time">${start}–${end} · ${hrs}h</span>
         </div>
       </div>

@@ -21,6 +21,10 @@ function formatDateLong(dateStr){
   return new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
 }
 
+function formatDateShort(dateStr){
+  return new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short', year:'numeric'});
+}
+
 function timeDiffHours(start, end){
   if(!start || !end) return '—';
   const [sh,sm] = start.split(':').map(Number);
@@ -43,6 +47,24 @@ function closeModal(){
   if(typeof stopDayPhotoCamera === 'function') stopDayPhotoCamera();
   const o = document.querySelector('.modal-overlay');
   if(o) o.remove();
+  if(window.gpLastFocusedElement && document.contains(window.gpLastFocusedElement)) window.gpLastFocusedElement.focus();
+}
+
+function showModal(overlay){
+  window.gpLastFocusedElement = document.activeElement;
+  const sheet = overlay.querySelector('.modal-sheet');
+  const title = overlay.querySelector('.modal-title');
+  if(sheet){
+    sheet.setAttribute('role','dialog');
+    sheet.setAttribute('aria-modal','true');
+    if(title){
+      title.id = title.id || `modal-title-${Date.now()}`;
+      sheet.setAttribute('aria-labelledby',title.id);
+    }
+  }
+  document.body.appendChild(overlay);
+  const firstField = overlay.querySelector('input:not([type="hidden"]), select, textarea, button');
+  if(firstField) requestAnimationFrame(()=>firstField.focus());
 }
 
 document.addEventListener('keydown', e=>{

@@ -16,6 +16,10 @@ let realtimeChannel = null;
 let currentPromoterId = localStorage.getItem('gp_stock_promoter_id') || null;
 let currentPromoterName = localStorage.getItem('gp_stock_promoter_name') || null;
 
+function stockRecordAttribution(){
+  return { promoter_id:currentPromoterId };
+}
+
 function boot(){
   const root = document.getElementById('root');
 
@@ -220,6 +224,10 @@ async function startApp(){
       <div class="tabbar">
         <button class="tab" data-tab="sales" onclick="switchTab('sales')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          Sales
+        </button>
+        <button class="tab" data-tab="stock" onclick="switchTab('stock')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16v13H4z"/><path d="M2 4h20v3H2zM9 11h6"/></svg>
           Stock
         </button>
         <button class="tab" data-tab="shift" onclick="switchTab('shift')">
@@ -404,13 +412,14 @@ function switchTab(tab){
 function openFab(){
   if(currentTab==='shift') openShiftForm();
   else if(currentTab==='sales') openSalesForm();
+  else if(currentTab==='stock') openAddStockRecordForm();
 }
 
 function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
-  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : renderSales();
+  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSales();
   const fab = document.getElementById('fab');
   if(fab) fab.style.display = currentTab==='schedule' ? 'none' : '';
 }

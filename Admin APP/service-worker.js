@@ -2,7 +2,7 @@
 // flaky connection — actual data still needs internet, since it lives in
 // Supabase. This does NOT cache Supabase data for offline editing.
 
-const CACHE_NAME = 'golden-panda-shell-v45';
+const CACHE_NAME = 'golden-panda-shell-v49';
 const SHELL_FILES = [
   './',
   './index.html',

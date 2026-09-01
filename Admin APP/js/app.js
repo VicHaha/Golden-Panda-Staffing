@@ -19,6 +19,10 @@ let realtimeChannel = null;
 // needing that to double as the account email.
 let currentAdminName = localStorage.getItem('gp_admin_name') || null;
 
+function stockRecordAttribution(){
+  return { promoter_id:null, logged_by_admin_name:currentAdminName };
+}
+
 function boot(){
   const root = document.getElementById('root');
 
@@ -190,7 +194,12 @@ function renderApp(){
         </div>
       </div>
       <main class="content" id="content"><div class="loading-state" role="status"><span class="loading-spinner" aria-hidden="true"></span>Loading your workspace…</div></main>
-      <div class="fab" id="fab"><button onclick="openFab()" aria-label="Add job">+</button></div>
+      <div class="fab" id="fab">
+        <button type="button" class="fab-primary" onclick="openFab()" aria-label="Add job">+</button>
+        <button type="button" class="fab-calendar hidden" onclick="openWorkDateForm()" aria-label="Add working date without promoter" title="Add working date without promoter">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        </button>
+      </div>
       <nav class="tabbar" aria-label="Main navigation">
         <button type="button" class="tab" data-tab="roster" onclick="switchTab('roster')">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
@@ -332,6 +341,8 @@ function render(){
       button.setAttribute('aria-label',label);
       button.title = label;
     }
+    const calendarButton = fab.querySelector('.fab-calendar');
+    if(calendarButton) calendarButton.classList.toggle('hidden', !(currentTab==='roster' && rosterPage==='schedule'));
   }
 }
 

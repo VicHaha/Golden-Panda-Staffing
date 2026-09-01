@@ -107,12 +107,12 @@ their name at the top and choose to log out.
   they show up in the same daily list, but with no opening/closing stock
   fields, no carry-over, and they're excluded from "sold" totals. Just
   log how many were given out.
-- **Editing is locked to today** for **stock reports** — any logged-in
+- **Sales report editing is locked to today** — any logged-in
   promoter can edit or delete *any* stock entry dated today, including
   ones the office added — there's no per-person ownership restriction.
   Once a date is no longer today, it's locked (🔒) for everyone here;
-  only the office app can still edit past stock dates. Past dates are
-  also hidden from the Stock list by default — tap "Show past reports"
+  only the office app can still edit past Sales dates. Past dates are
+  also hidden from the Sales list by default — tap "Show past reports"
   to see them (still read-only from here).
   **Shift reports work differently** — see the Shift Report tab below.
 - **Photos** — attach a photo to any entry (camera or gallery). Stored

@@ -22,11 +22,8 @@ const SHIFT_PRESETS = {
 };
 
 function renderSchedule(){
-  if(promoters.length===0){
-    return emptyState('📅','Add promoters first','You need at least one promoter before building the schedule.');
-  }
   if(jobs.length===0){
-    return emptyState('🗓️','No jobs scheduled','Tap + to assign a promoter to a roadshow date.');
+    return emptyState('🗓️','No jobs scheduled','Tap + to assign a promoter, or use the calendar button to add an unassigned working date.');
   }
 
   const today = new Date(); today.setHours(0,0,0,0);
@@ -82,7 +79,8 @@ function renderJobList(list, sortDir){
       html += `<div class="day-group-label${highlightTomorrow?' tomorrow-schedule-label':''}">${formatDateLong(j.work_date)}${highlightTomorrow?'<span class="tomorrow-highlight-pill">Tomorrow</span>':''}</div>`;
       lastDate = j.work_date;
     }
-    const promoterName = j.promoters ? displayName(j.promoters) : '(promoter removed)';
+    const unassigned = !j.promoter_id;
+    const promoterName = j.promoters ? displayName(j.promoters) : (unassigned ? 'Promoter not assigned' : '(promoter removed)');
     const storeName = j.stores ? j.stores.name : '(store removed)';
     const start = shortTime(j.start_time), end = shortTime(j.end_time);
     const d = new Date(j.work_date+'T00:00:00');
@@ -99,12 +97,12 @@ function renderJobList(list, sortDir){
         <div class="job-body">
           <div class="job-store">${esc(storeName)}</div>
           <div class="job-promoter">${esc(promoterName)}</div>
-          <span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>
+          ${unassigned?'<span class="job-position job-position-open">Open date</span>':`<span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>`}
           <span class="job-time">${start}–${end} · ${hrs}h</span>
-          <div class="job-pay">RM ${Number(j.pay||0).toFixed(2)}${j.commission?` + RM ${Number(j.commission).toFixed(2)} comm.`:''}</div>
+          ${unassigned?'':`<div class="job-pay">RM ${Number(j.pay||0).toFixed(2)}${j.commission?` + RM ${Number(j.commission).toFixed(2)} comm.`:''}</div>`}
         </div>
         <div class="job-actions">
-          <button type="button" class="icon-btn" onclick="openJobForm('${j.id}')" aria-label="Edit job at ${esc(storeName)}" title="Edit job">✎</button>
+          <button type="button" class="icon-btn" onclick="${unassigned?'openWorkDateForm':'openJobForm'}('${j.id}')" aria-label="Edit ${unassigned?'working date':'job'} at ${esc(storeName)}" title="Edit ${unassigned?'working date':'job'}">✎</button>
           <button type="button" class="icon-btn danger" onclick="deleteJob('${j.id}')" aria-label="Delete job at ${esc(storeName)}" title="Delete job">✕</button>
         </div>
       </div>
@@ -172,6 +170,65 @@ function openJobForm(id){
   if(editing){
     const matchKey = findMatchingPresetKey(currentPosition, shortTime(editing.start_time), shortTime(editing.end_time), Number(editing.pay));
     document.getElementById('f-shift-preset').value = matchKey || 'custom';
+  }
+}
+
+function openWorkDateForm(id){
+  const editing = id ? jobs.find(job=>job.id===id) : null;
+  if(editing && editing.promoter_id){ openJobForm(id); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-title">${editing ? 'Edit working date' : 'Add working date'}</div>
+      <div class="field-hint" style="margin-bottom:14px;">Promoter details can be assigned later.</div>
+      <div class="field"><label>Date</label><input id="wd-date" type="date" value="${editing?editing.work_date:''}" required></div>
+      <div class="field">
+        <label>Store / venue</label>
+        <input id="wd-store" list="work-date-store-list" value="${editing&&editing.stores?esc(editing.stores.name):''}" placeholder="e.g. Isetan Lot 10" required>
+        <datalist id="work-date-store-list">${stores.map(store=>`<option value="${esc(store.name)}">`).join('')}</datalist>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Start time</label><input id="wd-start" type="time" value="${editing?shortTime(editing.start_time):'10:00'}" required></div>
+        <div class="field"><label>End time</label><input id="wd-end" type="time" value="${editing?shortTime(editing.end_time):'18:00'}" required></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="work-date-save-btn" onclick="saveWorkDateForm('${editing?editing.id:''}')">Save</button>
+      </div>
+      ${editing?`<button type="button" class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="closeModal();openJobForm('${editing.id}')">Assign promoter details</button>`:''}
+    </div>`;
+  showModal(overlay);
+  overlay.addEventListener('click',event=>{ if(event.target===overlay) closeModal(); });
+}
+
+async function saveWorkDateForm(id){
+  const work_date = document.getElementById('wd-date').value;
+  const storeName = document.getElementById('wd-store').value.trim();
+  const start_time = document.getElementById('wd-start').value;
+  const end_time = document.getElementById('wd-end').value;
+  if(!work_date || !storeName || !start_time || !end_time){
+    showToast('Date, venue, start time, and end time are required');
+    return;
+  }
+  const btn = document.getElementById('work-date-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try{
+    const store = await DB.getOrCreateStore(storeName);
+    const payload = { promoter_id:null, position:'Promoter', store_id:store.id, work_date, start_time, end_time, pay:0, commission:0 };
+    if(id) await DB.updateJob(id,payload);
+    else await DB.addJob(payload);
+    await linkUnassignedSalesRecordsToJob(work_date,store.id);
+    await refreshData();
+    closeModal();
+    render();
+    showToast('Working date saved');
+  }catch(e){
+    console.error(e);
+    showToast('Could not save — '+(e.message||'check your connection'));
+    btn.disabled = false;
+    btn.textContent = 'Save';
   }
 }
 

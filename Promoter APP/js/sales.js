@@ -115,6 +115,30 @@ function groupByStockCategory(items){
   return grouped;
 }
 
+function groupByProductTabs(items, includeFree=true){
+  const ordered = [...items].sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b));
+  const sellable = ordered.filter(item=>!isFreeItem(item));
+  const groups = [];
+  const used = new Set();
+  const addBase = base=>{
+    const rows = sellable.filter(item=>parseProductName(canonicalSkuName(item.product_name)).base.toLowerCase()===base.toLowerCase());
+    if(!rows.length || used.has(base.toLowerCase())) return;
+    used.add(base.toLowerCase());
+    groups.push({key:`product-${encodeURIComponent(base.toLowerCase())}`,label:base,items:rows});
+  };
+  VARIANT_BASE_PRODUCTS.forEach(addBase);
+  sellable.forEach(item=>addBase(parseProductName(canonicalSkuName(item.product_name)).base));
+  const freeRows = includeFree ? ordered.filter(isFreeItem) : [];
+  if(freeRows.length) groups.push({key:'free',label:'Free',items:freeRows});
+  return groups;
+}
+
+function activeProductTab(stateKey, groups, state){
+  const current = state[stateKey];
+  if(current && groups.some(group=>group.key===current)) return current;
+  return groups.length ? groups[0].key : null;
+}
+
 // Which tab is showing per date — defaults to the first category that
 // actually has products for that date, falling back to 'bottle'.
 let salesActiveTab = {};
@@ -196,11 +220,19 @@ function getVariationSuggestions(){
   return [...variations];
 }
 
+function updateVariationDatalist(productInputId, listId){
+  const productInput = document.getElementById(productInputId);
+  const list = document.getElementById(listId);
+  if(!productInput || !list) return;
+  list.innerHTML = getVariationSuggestions(productInput.value).map(variation=>`<option value="${esc(variation)}">`).join('');
+}
+
 function todayStr(){
   return new Date().toISOString().slice(0,10);
 }
 
 function scheduledStoreIdForDate(date, promoterId){
+  if(promoterId === undefined) promoterId = currentPromoterId;
   const datedJobs = jobs.filter(j=>j.work_date===date && (j.store_id || (j.stores&&j.stores.id)));
   const matched = promoterId ? datedJobs.find(j=>j.promoter_id===promoterId) : null;
   const job = matched || datedJobs[0];
