@@ -14,7 +14,7 @@
 // Customer Analysis.
 // ============================================================
 
-let salesShowMore = false; // toggled by the "Show earlier reports" button — only the 2 most recent dates show by default
+let salesShowMore = false;
 let stockExportMode = 'monthly'; // 'monthly' | 'daily'
 let stockExportMonth = new Date().toISOString().slice(0,7);
 let stockExportDate = todayStr();
@@ -384,6 +384,10 @@ async function ensureStockRowsForDate(date){
     // Warehouse stock is a running total, not a daily transaction — carry
     // the last known figure forward untouched until someone edits it.
     const warehouseCarryOver = priorEntries.length ? Number(priorEntries[0].warehouse_qty||0) : 0;
+    const prior = priorEntries[0] || {};
+    const storeRoomCarryOver = Number(prior.closing_store_room_qty||0);
+    const homeShelfCarryOver = Number(prior.closing_home_shelf_qty||0);
+    const standeeCarryOver = Number(prior.closing_standee_qty||0);
 
     try{
       const created = await DB.addSalesReport({
@@ -397,6 +401,12 @@ async function ensureStockRowsForDate(date){
         remarks: null,
         photo_url: null,
         is_free_item: giveaway,
+        store_room_qty: storeRoomCarryOver,
+        home_shelf_qty: homeShelfCarryOver,
+        standee_qty: standeeCarryOver,
+        closing_store_room_qty: storeRoomCarryOver,
+        closing_home_shelf_qty: homeShelfCarryOver,
+        closing_standee_qty: standeeCarryOver,
         warehouse_qty: warehouseCarryOver
       });
       // Keep the local cache current so a later target date processed in
@@ -411,7 +421,7 @@ async function ensureStockRowsForDate(date){
 // Keeps an already-created next event in sync when the previous event's
 // closing count is edited. Untouched auto-seeded rows move both opening
 // and closing together; rows with activity keep their closing count.
-async function carryClosingToNextEvent(productName, workDate, closingQty){
+async function carryClosingToNextEvent(productName, workDate, closingQty, locations=null){
   const nextDate = [...new Set([...jobs.map(j=>j.work_date), ...salesReports.map(r=>r.work_date)])].filter(d=>d>workDate).sort()[0];
   if(!nextDate) return;
   const nextRows = salesReports.filter(r=>
@@ -420,7 +430,17 @@ async function carryClosingToNextEvent(productName, workDate, closingQty){
   for(const row of nextRows){
     const untouched = Number(row.sales_qty||0) === 0 && Number(row.closing_qty||0) === Number(row.opening_qty||0);
     const update = { opening_qty:Number(closingQty||0) };
+    if(locations) Object.assign(update, {
+      store_room_qty:locations.storeRoom,
+      home_shelf_qty:locations.homeShelf,
+      standee_qty:locations.standee
+    });
     if(untouched) update.closing_qty = Number(closingQty||0);
+    if(untouched && locations) Object.assign(update, {
+      closing_store_room_qty:locations.storeRoom,
+      closing_home_shelf_qty:locations.homeShelf,
+      closing_standee_qty:locations.standee
+    });
     await DB.updateSalesReport(row.id, update);
   }
 }
@@ -465,8 +485,8 @@ function renderSales(){
   let html = `<div class="section-title">Sales reports <span class="count-pill">${dates.length} date${dates.length>1?'s':''}</span></div>`;
   html += exportControls;
 
-  const visibleDates = salesShowMore ? dates : dates.slice(0, 2);
-  const hiddenDates = dates.slice(2);
+  const visibleDates = salesShowMore ? dates : dates.slice(0,1);
+  const hiddenDates = dates.slice(1);
 
   html += `<div class="sales-date-grid">${visibleDates.map(date=>{
     const items = byDate[date];
@@ -480,15 +500,16 @@ function renderSales(){
     </button>`;
   }).join('')}</div>`;
 
-  if(hiddenDates.length > 0){
-    html += `
-      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowMore()">
-        ${salesShowMore ? 'Hide' : 'Show'} earlier reports (${hiddenDates.length})
-      </button>
-    `;
+  if(hiddenDates.length){
+    html += `<button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowMore()">${salesShowMore?'Hide':'Show'} earlier sales records (${hiddenDates.length})</button>`;
   }
 
   return html;
+}
+
+function toggleSalesShowMore(){
+  salesShowMore = !salesShowMore;
+  render();
 }
 
 function renderSalesSummaryOutletTabs(date, groups, active){
@@ -559,11 +580,6 @@ function refreshSalesSummary(date){
   if(sheet) sheet.innerHTML = salesSummaryInnerHtml(date);
 }
 
-function toggleSalesShowMore(){
-  salesShowMore = !salesShowMore;
-  render();
-}
-
 // `compact` is used for the Free tab — giveaways don't need the full
 // open/sold/close + shelf-location breakdown, just how many went out,
 // so the list stays quick to scan while keying in samples/coupons/etc.
@@ -584,7 +600,11 @@ function renderSalesItems(items, compact){
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <b class="sales-table-number">${opening}</b>
-        <b class="sales-table-number">${sales}</b>
+        <span class="sales-qty-adjust" onclick="event.stopPropagation()">
+          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',-1,'${i.work_date}')" aria-label="Minus one ${giveaway?'given':'sold'}">−</button>
+          <b class="sales-table-number">${sales}</b>
+          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',1,'${i.work_date}')" aria-label="Add one ${giveaway?'given':'sold'}">+</button>
+        </span>
         <b class="sales-table-number">${closing}</b>
       </div>
     `;
@@ -594,6 +614,27 @@ function renderSalesItems(items, compact){
     ${rows}
     ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
   </div>`;
+}
+
+async function adjustSalesQuantity(event,id,delta,date){
+  event.stopPropagation();
+  const row = salesReports.find(item=>item.id===id);
+  if(!row) return;
+  const next = Math.max(0,Number(row.sales_qty||0)+delta);
+  if(next===Number(row.sales_qty||0)) return;
+  const control = event.currentTarget.closest('.sales-qty-adjust');
+  const buttons = control ? [...control.querySelectorAll('button')] : [];
+  buttons.forEach(button=>button.disabled=true);
+  try{
+    await DB.updateSalesReport(id,{sales_qty:next});
+    await refreshData();
+    refreshSalesSummary(date);
+    showToast(`${isFreeItem(row)?'Given':'Sold'} updated to ${next}`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not update quantity — ' + (e.message || 'check your connection'));
+    buttons.forEach(button=>button.disabled=false);
+  }
 }
 
 // Any number of overall photos allowed per working date (booth/table
@@ -861,6 +902,7 @@ async function saveSalesForm(id){
     await refreshData();
     closeModal();
     render();
+    openSalesDateSummary(work_date);
     showToast('Stock report saved');
   }catch(e){
     console.error(e);
@@ -1149,6 +1191,7 @@ function exportStockExcel(){
   // ============================================================
   // Sheet 3 — Raw Stock Data
   // ============================================================
+  // Export the closing location counts for each latest SKU snapshot.
   // Free items carry no store-room/home-shelf/standee/warehouse figures
   // in this app (see js/stock.js — that tab excludes them entirely, as
   // location/warehouse tracking is only meaningful for sellable stock),
@@ -1158,7 +1201,7 @@ function exportStockExcel(){
     .sort((a,b)=> a.work_date.localeCompare(b.work_date) || outletLabel(a).localeCompare(outletLabel(b)) || compareSkuNames(a.product_name,b.product_name))
     .map(r=>{
       const { base, variation } = parseProductName(r.product_name);
-      const storeRoom = Number(r.store_room_qty||0), homeShelf = Number(r.home_shelf_qty||0), standee = Number(r.standee_qty||0);
+      const storeRoom = Number(r.closing_store_room_qty||0), homeShelf = Number(r.closing_home_shelf_qty||0), standee = Number(r.closing_standee_qty||0);
       return {
         'Date': excelDateCell(r.work_date),
         'Outlet': outletLabel(r),

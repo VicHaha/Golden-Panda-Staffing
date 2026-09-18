@@ -321,6 +321,10 @@ async function ensureStockRowsForDate(date){
     // figure forward untouched so it stays correct no matter which app
     // ends up creating the next date's row.
     const warehouseCarryOver = priorEntries.length ? Number(priorEntries[0].warehouse_qty||0) : 0;
+    const prior = priorEntries[0] || {};
+    const storeRoomCarryOver = Number(prior.closing_store_room_qty||0);
+    const homeShelfCarryOver = Number(prior.closing_home_shelf_qty||0);
+    const standeeCarryOver = Number(prior.closing_standee_qty||0);
 
     try{
       const created = await DB.addSalesReport({
@@ -334,6 +338,12 @@ async function ensureStockRowsForDate(date){
         remarks: null,
         photo_url: null,
         is_free_item: giveaway,
+        store_room_qty: storeRoomCarryOver,
+        home_shelf_qty: homeShelfCarryOver,
+        standee_qty: standeeCarryOver,
+        closing_store_room_qty: storeRoomCarryOver,
+        closing_home_shelf_qty: homeShelfCarryOver,
+        closing_standee_qty: standeeCarryOver,
         warehouse_qty: warehouseCarryOver
       });
       // Keep the local cache current so a later target date processed in
@@ -345,7 +355,7 @@ async function ensureStockRowsForDate(date){
   }
 }
 
-async function carryClosingToNextEvent(productName, workDate, closingQty){
+async function carryClosingToNextEvent(productName, workDate, closingQty, locations=null){
   const nextDate = [...new Set([...scheduledDates, ...salesReports.map(r=>r.work_date)])].filter(d=>d>workDate).sort()[0];
   if(!nextDate) return;
   const nextRows = salesReports.filter(r=>
@@ -354,7 +364,17 @@ async function carryClosingToNextEvent(productName, workDate, closingQty){
   for(const row of nextRows){
     const untouched = Number(row.sales_qty||0) === 0 && Number(row.closing_qty||0) === Number(row.opening_qty||0);
     const update = { opening_qty:Number(closingQty||0) };
+    if(locations) Object.assign(update, {
+      store_room_qty:locations.storeRoom,
+      home_shelf_qty:locations.homeShelf,
+      standee_qty:locations.standee
+    });
     if(untouched) update.closing_qty = Number(closingQty||0);
+    if(untouched && locations) Object.assign(update, {
+      closing_store_room_qty:locations.storeRoom,
+      closing_home_shelf_qty:locations.homeShelf,
+      closing_standee_qty:locations.standee
+    });
     await DB.updateSalesReport(row.id, update);
   }
 }
@@ -375,12 +395,8 @@ function renderSales(){
   const allDates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
 
-  // Past dates are hidden by default — tap "Show past reports" to bring
-  // them back. They're read-only here either way (editing stays
-  // locked to today), this only affects whether they clutter the list.
-  const nearDates = allDates.filter(d => d >= today);
-  const pastDates = allDates.filter(d => d < today);
-  const visibleDates = salesShowPast ? allDates : nearDates;
+  const hiddenDates = allDates.slice(1);
+  const visibleDates = salesShowPast ? allDates : allDates.slice(0,1);
 
   let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
 
@@ -402,12 +418,8 @@ function renderSales(){
     }).join('')}</div>`;
   }
 
-  if(pastDates.length > 0){
-    html += `
-      <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowPast()">
-        ${salesShowPast ? 'Hide' : 'Show'} past reports (${pastDates.length})
-      </button>
-    `;
+  if(hiddenDates.length){
+    html += `<button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowPast()">${salesShowPast?'Hide':'Show'} earlier sales records (${hiddenDates.length})</button>`;
   }
 
   return html;
@@ -491,7 +503,11 @@ function renderSalesItems(items, isToday, compact){
           ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
         </div>
         <b class="sales-table-number">${opening}</b>
-        <b class="sales-table-number">${sales}</b>
+        ${isToday?`<span class="sales-qty-adjust" onclick="event.stopPropagation()">
+          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',-1,'${i.work_date}')" aria-label="Minus one ${giveaway?'given':'sold'}">−</button>
+          <b class="sales-table-number">${sales}</b>
+          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',1,'${i.work_date}')" aria-label="Add one ${giveaway?'given':'sold'}">+</button>
+        </span>`:`<b class="sales-table-number">${sales}</b>`}
         <b class="sales-table-number">${closing}</b>
       </div>
     `;
@@ -501,6 +517,27 @@ function renderSalesItems(items, isToday, compact){
     ${rows}
     ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
   </div>`;
+}
+
+async function adjustSalesQuantity(event,id,delta,date){
+  event.stopPropagation();
+  const row = salesReports.find(item=>item.id===id);
+  if(!row || row.work_date!==todayStr()) return;
+  const next = Math.max(0,Number(row.sales_qty||0)+delta);
+  if(next===Number(row.sales_qty||0)) return;
+  const control = event.currentTarget.closest('.sales-qty-adjust');
+  const buttons = control ? [...control.querySelectorAll('button')] : [];
+  buttons.forEach(button=>button.disabled=true);
+  try{
+    await DB.updateSalesReport(id,{sales_qty:next});
+    await refreshData();
+    refreshSalesSummary(date);
+    showToast(`${isFreeItem(row)?'Given':'Sold'} updated to ${next}`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not update quantity — ' + (e.message || 'check your connection'));
+    buttons.forEach(button=>button.disabled=false);
+  }
 }
 
 // Any number of overall photos allowed per working date (booth/table
@@ -709,6 +746,7 @@ async function saveSalesForm(id){
     await refreshData();
     closeModal();
     render();
+    openSalesDateSummary(work_date);
     showToast('Stock report saved');
   }catch(e){
     console.error(e);

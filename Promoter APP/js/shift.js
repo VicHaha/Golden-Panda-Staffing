@@ -42,13 +42,8 @@ function renderShift(){
   });
   const allDates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
   const today = todayStr();
-
-  // Past reports are hidden by default so the list stays focused on
-  // what's current — tap "Show past reports" to bring the history back.
-  // They're still fully editable once shown (see renderShiftItems).
-  const nearDates = allDates.filter(d => d >= today);
-  const pastDates = allDates.filter(d => d < today);
-  const visibleDates = shiftShowPast ? allDates : nearDates;
+  const hiddenDates = allDates.slice(1);
+  const visibleDates = shiftShowPast ? allDates : allDates.slice(0,1);
 
   let html = `<div class="section-title">Shift reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
 
@@ -77,10 +72,10 @@ function renderShift(){
     });
   }
 
-  if(pastDates.length > 0){
+  if(hiddenDates.length > 0){
     html += `
       <button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleShiftShowPast()">
-        ${shiftShowPast ? 'Hide' : 'Show'} past reports (${pastDates.length})
+        ${shiftShowPast ? 'Hide' : 'Show'} earlier shift records (${hiddenDates.length})
       </button>
     `;
   }

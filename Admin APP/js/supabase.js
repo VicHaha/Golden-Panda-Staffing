@@ -181,7 +181,7 @@ const DB = {
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, created_at, updated_at,
-        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty, logged_by_admin_name, customer_feedback,
+        store_room_qty, home_shelf_qty, standee_qty, closing_store_room_qty, closing_home_shelf_qty, closing_standee_qty, warehouse_qty, logged_by_admin_name, customer_feedback,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)

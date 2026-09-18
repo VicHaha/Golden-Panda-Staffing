@@ -3,20 +3,24 @@
 const STOCK_THRESHOLD_KEY = 'gp-stock-low-thresholds-v1';
 let stockSummaryActiveTab = {};
 let stockThresholdScope = '__all__';
+let stockShowMore = false;
 
 function stockOutletKey(row){ return row.store_id || '__none__'; }
-function stockRowTotal(row){
-  return Number(row.store_room_qty||0) + Number(row.home_shelf_qty||0) + Number(row.standee_qty||0) + Number(row.warehouse_qty||0);
-}
 function stockOpeningTotal(row){
   return Number(row.store_room_qty||0) + Number(row.home_shelf_qty||0) + Number(row.standee_qty||0);
 }
-function stockSyncLabel(field){ return field === 'closing' ? 'Closing' : 'Opening'; }
-function stockLocationTotals(rows){
+function stockClosingTotal(row){
+  return Number(row.closing_store_room_qty||0) + Number(row.closing_home_shelf_qty||0) + Number(row.closing_standee_qty||0);
+}
+function stockRowTotal(row){
+  return stockClosingTotal(row) + Number(row.warehouse_qty||0);
+}
+function stockLocationTotals(rows, field='opening'){
+  const prefix = field === 'closing' ? 'closing_' : '';
   return rows.reduce((sum,row)=>({
-    storeRoom:sum.storeRoom+Number(row.store_room_qty||0),
-    homeShelf:sum.homeShelf+Number(row.home_shelf_qty||0),
-    standee:sum.standee+Number(row.standee_qty||0),
+    storeRoom:sum.storeRoom+Number(row[`${prefix}store_room_qty`]||0),
+    homeShelf:sum.homeShelf+Number(row[`${prefix}home_shelf_qty`]||0),
+    standee:sum.standee+Number(row[`${prefix}standee_qty`]||0),
     warehouse:sum.warehouse+Number(row.warehouse_qty||0)
   }),{storeRoom:0,homeShelf:0,standee:0,warehouse:0});
 }
@@ -61,12 +65,12 @@ function currentOutletStocks(){
   return outlets.filter(outlet=>outlet.rows.length);
 }
 
-function stockLocationChips(row, includeZero){
+function stockLocationChips(row, field, includeZero){
+  const prefix = field === 'closing' ? 'closing_' : '';
   const locations = [
-    ['Warehouse',Number(row.warehouse_qty||0)],
-    ['Store room',Number(row.store_room_qty||0)],
-    ['Home shelf',Number(row.home_shelf_qty||0)],
-    ['Standee',Number(row.standee_qty||0)]
+    ['Store room',Number(row[`${prefix}store_room_qty`]||0)],
+    ['Home shelf',Number(row[`${prefix}home_shelf_qty`]||0)],
+    ['Standee',Number(row[`${prefix}standee_qty`]||0)]
   ].filter(([,qty])=>includeZero || qty > 0);
   if(!locations.length) return '<span class="stock-location-empty">No stock allocated</span>';
   return locations.map(([name,qty])=>`<span class="stock-location-chip"><small>${name}</small><b>${qty}</b></span>`).join('');
@@ -74,25 +78,32 @@ function stockLocationChips(row, includeZero){
 
 function renderOutletCards(outlets){
   if(!outlets.length) return emptyState('🏬','No outlet stock yet','Tap + to add the first stock record.');
-  return `<div class="stock-outlet-grid">${outlets.map(outlet=>{
+  const sortedOutlets = [...outlets].sort((a,b)=>{
+    const aDate = a.rows.reduce((latest,row)=>row.work_date>latest?row.work_date:latest,'');
+    const bDate = b.rows.reduce((latest,row)=>row.work_date>latest?row.work_date:latest,'');
+    return bDate.localeCompare(aDate);
+  });
+  const visibleOutlets = stockShowMore ? sortedOutlets : sortedOutlets.slice(0,1);
+  const hiddenCount = Math.max(0,sortedOutlets.length-1);
+  const cards = `<div class="stock-outlet-grid">${visibleOutlets.map(outlet=>{
     const threshold = stockThreshold(outlet.key);
     const low = outlet.rows.filter(row=>isLowStock(row,threshold));
-    const totals = stockLocationTotals(outlet.rows);
-    const total = Object.values(totals).reduce((sum,n)=>sum+n,0);
+    const openingTotals = stockLocationTotals(outlet.rows,'opening');
+    const closingTotals = stockLocationTotals(outlet.rows,'closing');
+    const opening = openingTotals.storeRoom + openingTotals.homeShelf + openingTotals.standee;
+    const closing = closingTotals.storeRoom + closingTotals.homeShelf + closingTotals.standee;
+    const variance = outlet.rows.reduce((sum,row)=>sum + stockClosingTotal(row) - (stockOpeningTotal(row) - Number(row.sales_qty||0)),0);
     const latestDate = outlet.rows.reduce((latest,row)=>row.work_date>latest?row.work_date:latest,'');
     return `<button type="button" class="stock-outlet-card ${low.length?'has-alert':''}" onclick="openOutletStockSummary('${outlet.key}')">
-        <span class="stock-outlet-top">
-          <span><strong>${esc(outlet.name)}</strong><small>Updated ${formatDateShort(latestDate)}</small></span>
-          <span class="stock-outlet-total"><b>${total}</b><small>units left</small></span>
-        </span>
-        <span class="stock-outlet-locations">
-          <span>Warehouse <b>${totals.warehouse}</b></span><span>Store room <b>${totals.storeRoom}</b></span>
-          <span>Home shelf <b>${totals.homeShelf}</b></span><span>Standee <b>${totals.standee}</b></span>
-        </span>
+        <span class="stock-outlet-top"><span><strong>${esc(outlet.name)}</strong><small>Updated ${formatDateShort(latestDate)}</small></span><span class="stock-outlet-total"><b>${closing}</b><small>closing</small></span></span>
+        <span class="stock-outlet-locations"><span>Opening <b>${opening}</b></span><span>Closing <b>${closing}</b></span><span>Warehouse <b>${closingTotals.warehouse}</b></span>${variance!==0?`<span>Variance <b>${variance>0?'+':''}${variance}</b></span>`:''}</span>
         <span class="stock-outlet-footer">${low.length?`<span class="stock-low-badge">⚠ ${low.length} low</span>`:`<span class="stock-ok-badge">✓ Stock healthy</span>`}<span>View SKU summary ›</span></span>
       </button>`;
   }).join('')}</div>`;
+  return cards + (hiddenCount ? `<button class="btn btn-ghost btn-block stock-history-toggle" onclick="toggleStockShowMore()">${stockShowMore?'Hide':'Show'} earlier stock records (${hiddenCount})</button>` : '');
 }
+
+function toggleStockShowMore(){ stockShowMore=!stockShowMore; render(); }
 
 function stockThresholdScopeValue(){
   const settings = getStockThresholds();
@@ -166,23 +177,32 @@ function stockSummaryInnerHtml(outletKey){
   const outlet = currentOutletStocks().find(item=>item.key===outletKey);
   if(!outlet) return null;
   const threshold = stockThreshold(outlet.key);
-  const total = outlet.rows.reduce((sum,row)=>sum+stockRowTotal(row),0);
+  const openingTotal = outlet.rows.reduce((sum,row)=>sum+stockOpeningTotal(row),0);
+  const closingTotal = outlet.rows.reduce((sum,row)=>sum+stockClosingTotal(row),0);
   const productGroups = groupByProductTabs(outlet.rows,false);
   const active = activeProductTab(outlet.key,productGroups,stockSummaryActiveTab);
   const activeGroup = productGroups.find(group=>group.key===active);
   const visibleRows = activeGroup ? activeGroup.items : [];
+  const rows = visibleRows.map(row=>{
+    const low = isLowStock(row,threshold);
+    const variance = stockClosingTotal(row)-(stockOpeningTotal(row)-Number(row.sales_qty||0));
+    return `<div class="stock-summary-sku ${low?'is-low':''}">
+      <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${stockClosingTotal(row)}</b> closing ${low?'<em>Low</em>':''}</span></span>
+      <span class="field-hint">Opening ${stockOpeningTotal(row)} · Closing ${stockClosingTotal(row)}${variance!==0?` · Variance ${variance>0?'+':''}${variance}`:''}</span>
+      <button type="button" class="stock-count-card" onclick="closeModal();openStockLocationForm('${row.id}','opening')">
+        <small>Opening locations</small><span class="stock-location-chips">${stockLocationChips(row,'opening',true)}</span>
+      </button>
+      <button type="button" class="stock-count-card" onclick="closeModal();openStockLocationForm('${row.id}','closing')">
+        <small>Closing locations</small><span class="stock-location-chips">${stockLocationChips(row,'closing',true)}</span>
+      </button>
+      <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
+    </div>`;
+  }).join('');
   return `
     <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="stock-summary-meta"><span>${total} units across ${outlet.rows.length} SKUs</span></div>
+    <div class="stock-summary-meta"><span>Opening ${openingTotal} · Closing ${closingTotal} · ${outlet.rows.length} SKUs</span></div>
     ${renderStockSummaryTabs(outlet.key,productGroups,active)}
-    <div class="stock-summary-list">${visibleRows.map(row=>{
-      const low=isLowStock(row,threshold);
-      return `<button type="button" class="stock-summary-sku ${low?'is-low':''}" onclick="closeModal();openStockLocationForm('${row.id}')">
-        <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${stockRowTotal(row)}</b> units ${low?'<em>Low</em>':''}</span></span>
-        <span class="stock-location-chips">${stockLocationChips(row,true)}</span>
-        <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
-      </button>`;
-    }).join('')}</div>
+    <div class="stock-summary-list">${rows}</div>
   `;
 }
 
@@ -207,7 +227,7 @@ function refreshOutletStockSummary(outletKey){
 }
 
 // ---------------- Edit form ----------------
-function openStockLocationForm(id){
+function openStockLocationForm(id, field='opening'){
   const editing = salesReports.find(r=>r.id===id);
   if(!editing){ showToast('Could not find that record'); return; }
   if(!isStockManagedItem(editing)){ showToast('Free items are not tracked in Stock Management'); return; }
@@ -216,7 +236,7 @@ function openStockLocationForm(id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="form-title-row"><div class="modal-title">Edit stock location</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
+      <div class="form-title-row"><div class="modal-title">Edit ${field==='closing'?'closing':'opening'} stock</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
       <div class="field-hint" style="margin-bottom:12px;">${esc(displayProductName(editing))} · ${formatDateLong(editing.work_date)}</div>
       <div class="field">
         <label>Store</label>
@@ -225,25 +245,18 @@ function openStockLocationForm(id){
           ${stores.map(s=>`<option value="${s.id}" ${editing.store_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field-row">
-        <div class="field" style="flex:.75;">
-          <label>Apply count to</label>
-          <select id="sl-sync-field" onchange="updateStockLocationHint()">
-            <option value="opening">Opening</option>
-            <option value="closing">Closing</option>
-          </select>
-        </div>
-        <div class="field">
-          <label id="sl-sync-total-label">Sales opening stock</label>
-          <input id="sl-sync-total-display" type="text" value="${stockOpeningTotal(editing)}" disabled>
-        </div>
-      </div>
+      ${field==='opening'?`<div class="stock-section-heading"><h2>Opening stock</h2><span id="sl-opening-total">${stockOpeningTotal(editing)}</span></div>
       <div class="field-row">
         <div class="field"><label>Store Room</label><input id="sl-store-room" type="number" min="0" step="1" value="${editing.store_room_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Home Shelf</label><input id="sl-home-shelf" type="number" min="0" step="1" value="${editing.home_shelf_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
         <div class="field"><label>Standee</label><input id="sl-standee" type="number" min="0" step="1" value="${editing.standee_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
-      </div>
-      <div class="field-hint" id="sl-location-hint">Store Room + Home Shelf + Standee. Warehouse is excluded.</div>
+      </div>`:`<div class="stock-section-heading"><h2>Closing stock</h2><span id="sl-closing-total">${stockClosingTotal(editing)}</span></div>
+      <div class="field-row">
+        <div class="field"><label>Store Room</label><input id="sl-closing-store-room" type="number" min="0" step="1" value="${editing.closing_store_room_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
+        <div class="field"><label>Home Shelf</label><input id="sl-closing-home-shelf" type="number" min="0" step="1" value="${editing.closing_home_shelf_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
+        <div class="field"><label>Standee</label><input id="sl-closing-standee" type="number" min="0" step="1" value="${editing.closing_standee_qty||0}" placeholder="0" oninput="updateStockLocationHint()"></div>
+      </div>`}
+      <div class="field-hint" id="sl-location-hint">This ${field} total syncs to Sales. Warehouse is excluded.</div>
       <div class="field" style="margin-top:13px;">
         <label>Warehouse stock</label>
         <input id="sl-warehouse" type="number" min="0" step="1" value="${editing.warehouse_qty||0}" placeholder="0">
@@ -251,7 +264,7 @@ function openStockLocationForm(id){
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}')">Save</button>
+        <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}','${field}')">Save</button>
       </div>
     </div>
   `;
@@ -263,45 +276,44 @@ function openStockLocationForm(id){
 function updateStockLocationHint(){
   const hint = document.getElementById('sl-location-hint');
   if(!hint) return;
-  const storeRoom = parseFloat(document.getElementById('sl-store-room').value) || 0;
-  const homeShelf = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
-  const standee = parseFloat(document.getElementById('sl-standee').value) || 0;
-  const sum = storeRoom + homeShelf + standee;
-  const syncField = document.getElementById('sl-sync-field').value;
-  const label = stockSyncLabel(syncField);
-  const totalDisplay = document.getElementById('sl-sync-total-display');
-  const totalLabel = document.getElementById('sl-sync-total-label');
-  if(totalDisplay) totalDisplay.value = sum;
-  if(totalLabel) totalLabel.textContent = `Sales ${label.toLowerCase()} stock`;
-  hint.textContent = `${sum} units will be used as Sales ${label.toLowerCase()} stock. Warehouse is excluded.`;
+  const opening = ['sl-store-room','sl-home-shelf','sl-standee'].reduce((sum,id)=>sum+(parseFloat(document.getElementById(id)?.value)||0),0);
+  const closing = ['sl-closing-store-room','sl-closing-home-shelf','sl-closing-standee'].reduce((sum,id)=>sum+(parseFloat(document.getElementById(id)?.value)||0),0);
+  const openingDisplay = document.getElementById('sl-opening-total');
+  const closingDisplay = document.getElementById('sl-closing-total');
+  if(openingDisplay) openingDisplay.textContent = opening;
+  if(closingDisplay) closingDisplay.textContent = closing;
+  hint.textContent = openingDisplay ? `Sales opening ${opening}. Warehouse is excluded.` : `Sales closing ${closing}. Warehouse is excluded.`;
   hint.classList.remove('field-hint-error');
 }
 
-async function saveStockLocationForm(id){
+async function saveStockLocationForm(id, field='opening'){
   const editing = salesReports.find(row=>row.id===id);
   if(!editing){ showToast('Could not find that record'); return; }
   const store_id = document.getElementById('sl-store').value || null;
-  const store_room_qty = parseFloat(document.getElementById('sl-store-room').value) || 0;
-  const home_shelf_qty = parseFloat(document.getElementById('sl-home-shelf').value) || 0;
-  const standee_qty = parseFloat(document.getElementById('sl-standee').value) || 0;
+  const store_room_qty = parseFloat(document.getElementById('sl-store-room')?.value) || 0;
+  const home_shelf_qty = parseFloat(document.getElementById('sl-home-shelf')?.value) || 0;
+  const standee_qty = parseFloat(document.getElementById('sl-standee')?.value) || 0;
+  const closing_store_room_qty = parseFloat(document.getElementById('sl-closing-store-room')?.value) || 0;
+  const closing_home_shelf_qty = parseFloat(document.getElementById('sl-closing-home-shelf')?.value) || 0;
+  const closing_standee_qty = parseFloat(document.getElementById('sl-closing-standee')?.value) || 0;
   const warehouse_qty = parseFloat(document.getElementById('sl-warehouse').value) || 0;
-  const stockTotal = store_room_qty + home_shelf_qty + standee_qty;
-  const syncField = document.getElementById('sl-sync-field').value === 'closing' ? 'closing' : 'opening';
+  const openingTotal = store_room_qty + home_shelf_qty + standee_qty;
+  const closingTotal = closing_store_room_qty + closing_home_shelf_qty + closing_standee_qty;
 
   const btn = document.getElementById('stock-location-save-btn');
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    // The selector controls which Sales count receives the three-location
-    // total. Warehouse is a separate running total and is excluded.
-    const payload = { store_id, store_room_qty, home_shelf_qty, standee_qty, warehouse_qty };
-    payload[`${syncField}_qty`] = stockTotal;
+    const payload = { store_id, warehouse_qty };
+    if(field==='closing') Object.assign(payload,{ closing_store_room_qty, closing_home_shelf_qty, closing_standee_qty, closing_qty:closingTotal });
+    else Object.assign(payload,{ store_room_qty, home_shelf_qty, standee_qty, opening_qty:openingTotal });
     await DB.updateSalesReport(id, payload);
-    if(syncField === 'closing') await carryClosingToNextEvent(editing.product_name,editing.work_date,stockTotal);
+    if(field==='closing') await carryClosingToNextEvent(editing.product_name,editing.work_date,closingTotal,{storeRoom:closing_store_room_qty,homeShelf:closing_home_shelf_qty,standee:closing_standee_qty});
     await refreshData();
     closeModal();
     render();
-    showToast(`Stock saved · Sales ${syncField} ${stockTotal}`);
+    openOutletStockSummary(store_id || '__none__');
+    showToast(`${field==='closing'?'Closing':'Opening'} stock saved · ${field==='closing'?closingTotal:openingTotal}`);
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));
@@ -348,21 +360,19 @@ function openAddStockRecordForm(){
           ${stores.map(s=>`<option value="${s.id}" ${defaultStoreId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
+      <div class="stock-section-heading"><h2>Opening stock</h2><span id="asr-opening-total">0</span></div>
       <div class="field-row">
         <div class="field"><label>Store Room</label><input id="asr-store-room" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
         <div class="field"><label>Home Shelf</label><input id="asr-home-shelf" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
         <div class="field"><label>Standee</label><input id="asr-standee" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
       </div>
-      <div class="field-row" style="margin-top:2px;">
-        <div class="field" style="flex:.75;">
-          <label>Apply count to</label>
-          <select id="asr-sync-field" onchange="updateAddStockOpeningTotal()">
-            <option value="opening">Opening</option>
-            <option value="closing">Closing</option>
-          </select>
-        </div>
-        <div class="field"><label>Sales total</label><div class="field-hint" id="asr-opening-hint">Opening: 0 units. Warehouse is excluded.</div></div>
+      <div class="stock-section-heading"><h2>Closing stock</h2><span id="asr-closing-total">0</span></div>
+      <div class="field-row">
+        <div class="field"><label>Store Room</label><input id="asr-closing-store-room" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
+        <div class="field"><label>Home Shelf</label><input id="asr-closing-home-shelf" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
+        <div class="field"><label>Standee</label><input id="asr-closing-standee" type="number" min="0" step="1" placeholder="0" oninput="updateAddStockOpeningTotal()"></div>
       </div>
+      <div class="field-hint" id="asr-opening-hint">Sales opening 0 · Sales closing 0. Warehouse is excluded.</div>
       <div class="field" style="margin-top:2px;">
         <label>Warehouse stock</label>
         <input id="asr-warehouse" type="number" min="0" step="1" value="0" placeholder="0">
@@ -384,8 +394,14 @@ function updateAddStockOpeningTotal(){
   const storeRoom = parseFloat(document.getElementById('asr-store-room').value) || 0;
   const homeShelf = parseFloat(document.getElementById('asr-home-shelf').value) || 0;
   const standee = parseFloat(document.getElementById('asr-standee').value) || 0;
-  const syncField = document.getElementById('asr-sync-field').value;
-  hint.textContent = `${stockSyncLabel(syncField)}: ${storeRoom + homeShelf + standee} units. Warehouse is excluded.`;
+  const closingStoreRoom = parseFloat(document.getElementById('asr-closing-store-room').value) || 0;
+  const closingHomeShelf = parseFloat(document.getElementById('asr-closing-home-shelf').value) || 0;
+  const closingStandee = parseFloat(document.getElementById('asr-closing-standee').value) || 0;
+  const opening = storeRoom + homeShelf + standee;
+  const closing = closingStoreRoom + closingHomeShelf + closingStandee;
+  document.getElementById('asr-opening-total').textContent = opening;
+  document.getElementById('asr-closing-total').textContent = closing;
+  hint.textContent = `Sales opening ${opening} · Sales closing ${closing}. Warehouse is excluded.`;
 }
 
 // Re-looks-up the warehouse running total for whatever product name is
@@ -402,11 +418,17 @@ function onAddStockProductChange(){
   const storeRoomInput = document.getElementById('asr-store-room');
   const homeShelfInput = document.getElementById('asr-home-shelf');
   const standeeInput = document.getElementById('asr-standee');
+  const closingStoreRoomInput = document.getElementById('asr-closing-store-room');
+  const closingHomeShelfInput = document.getElementById('asr-closing-home-shelf');
+  const closingStandeeInput = document.getElementById('asr-closing-standee');
   const hint = document.getElementById('asr-warehouse-hint');
   if(!productName){
     storeRoomInput.value = '';
     homeShelfInput.value = '';
     standeeInput.value = '';
+    closingStoreRoomInput.value = '';
+    closingHomeShelfInput.value = '';
+    closingStandeeInput.value = '';
     warehouseInput.value = 0;
     hint.textContent = "Auto-filled from this product's last known warehouse figure once you type a product name.";
     updateAddStockOpeningTotal();
@@ -422,6 +444,9 @@ function onAddStockProductChange(){
     storeRoomInput.value = Number(existing.store_room_qty||0);
     homeShelfInput.value = Number(existing.home_shelf_qty||0);
     standeeInput.value = Number(existing.standee_qty||0);
+    closingStoreRoomInput.value = Number(existing.closing_store_room_qty||0);
+    closingHomeShelfInput.value = Number(existing.closing_home_shelf_qty||0);
+    closingStandeeInput.value = Number(existing.closing_standee_qty||0);
     warehouseInput.value = Number(existing.warehouse_qty||0);
     hint.textContent = "Today's record already exists — saving will update its counts, not add another row.";
     updateAddStockOpeningTotal();
@@ -430,6 +455,9 @@ function onAddStockProductChange(){
   storeRoomInput.value = '';
   homeShelfInput.value = '';
   standeeInput.value = '';
+  closingStoreRoomInput.value = '';
+  closingHomeShelfInput.value = '';
+  closingStandeeInput.value = '';
   const priorEntries = salesReports
     .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName))
     .sort((a,b) => b.work_date.localeCompare(a.work_date));
@@ -455,9 +483,12 @@ async function saveAddStockRecordForm(){
   const store_room_qty = parseFloat(document.getElementById('asr-store-room').value) || 0;
   const home_shelf_qty = parseFloat(document.getElementById('asr-home-shelf').value) || 0;
   const standee_qty = parseFloat(document.getElementById('asr-standee').value) || 0;
+  const closing_store_room_qty = parseFloat(document.getElementById('asr-closing-store-room').value) || 0;
+  const closing_home_shelf_qty = parseFloat(document.getElementById('asr-closing-home-shelf').value) || 0;
+  const closing_standee_qty = parseFloat(document.getElementById('asr-closing-standee').value) || 0;
   const warehouse_qty = parseFloat(document.getElementById('asr-warehouse').value) || 0;
-  const stockTotal = store_room_qty + home_shelf_qty + standee_qty;
-  const syncField = document.getElementById('asr-sync-field').value === 'closing' ? 'closing' : 'opening';
+  const openingTotal = store_room_qty + home_shelf_qty + standee_qty;
+  const closingTotal = closing_store_room_qty + closing_home_shelf_qty + closing_standee_qty;
 
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;
@@ -469,24 +500,22 @@ async function saveAddStockRecordForm(){
       && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
     );
     if(existing){
-      const payload = {store_room_qty,home_shelf_qty,standee_qty,warehouse_qty};
-      payload[`${syncField}_qty`] = stockTotal;
+      const payload = {store_room_qty,home_shelf_qty,standee_qty,closing_store_room_qty,closing_home_shelf_qty,closing_standee_qty,warehouse_qty,opening_qty:openingTotal,closing_qty:closingTotal};
       await DB.updateSalesReport(existing.id,payload);
     }else{
-      const opening_qty = syncField === 'opening' ? stockTotal : 0;
-      const closing_qty = syncField === 'closing' ? stockTotal : 0;
       await DB.addSalesReport({
         work_date, store_id, ...stockRecordAttribution(), product_name,
-        opening_qty, sales_qty: 0, closing_qty,
+        opening_qty:openingTotal, sales_qty: 0, closing_qty:closingTotal,
         remarks: null, photo_url: null, is_free_item: false,
-        store_room_qty, home_shelf_qty, standee_qty, warehouse_qty
+        store_room_qty, home_shelf_qty, standee_qty, closing_store_room_qty, closing_home_shelf_qty, closing_standee_qty, warehouse_qty
       });
     }
-    if(syncField === 'closing') await carryClosingToNextEvent(product_name,work_date,stockTotal);
+    await carryClosingToNextEvent(product_name,work_date,closingTotal,{storeRoom:closing_store_room_qty,homeShelf:closing_home_shelf_qty,standee:closing_standee_qty});
     await refreshData();
     closeModal();
     render();
-    showToast(`${existing ? 'Stock count updated' : 'Stock record added'} · Sales ${syncField} ${stockTotal}`);
+    openOutletStockSummary(store_id || '__none__');
+    showToast(`${existing ? 'Stock count updated' : 'Stock record added'} · Opening ${openingTotal} · Closing ${closingTotal}`);
   }catch(e){
     console.error(e);
     showToast('Could not save — ' + (e.message || 'check your connection'));
