@@ -33,7 +33,7 @@ function ageRangeLabel(range){
 function renderShift(){
   // Not a working date for this promoter: no records, just the message.
   if(!scheduledStoreIdsForDate(todayStr()).size){
-    return emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
+    return `<div class="section-title">Shift Report</div>` + emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
   }
   if(shiftReports.length === 0){
     return emptyState('📋','No shift reports yet','Tap + to log engagement numbers for a shift.');
@@ -49,7 +49,7 @@ function renderShift(){
   const hiddenDates = allDates.slice(1);
   const visibleDates = shiftShowPast ? allDates : allDates.slice(0,1);
 
-  let html = `<div class="section-title">Shift reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
+  let html = `<div class="section-title">Shift Report <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
 
   if(visibleDates.length === 0){
     html += emptyState('📋','No shift reports yet','Tap + to log engagement numbers for a shift.');

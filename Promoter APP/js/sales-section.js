@@ -134,10 +134,10 @@ function renderSalesSection(){
 
   // Not a working date: no records at all, just the message.
   if(isToday && !scheduled.size){
-    return emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
+    return `<div class="section-title">Sales Report</div>` + emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
   }
 
-  let html = `<div class="ss-date-row">
+  let html = `<div class="section-title">Sales Report</div><div class="ss-date-row">
       <label class="ss-date-label" for="sales-date-select">Date</label>
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
         ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':'🔒 '}${formatDateShort(d)}</option>`).join('')}
