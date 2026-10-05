@@ -1343,3 +1343,18 @@ button,input,select,textarea{font-family:inherit;}
 /* Date boxes in green, as before (Schedule job cards) */
 .job-date{background:var(--bamboo-tint);color:var(--bamboo);}
 .job-date .dow,.job-date .mon,.job-date .dom{color:var(--bamboo);}
+
+/* Big figures in the same serif as the section titles */
+.stat-card .num,.summary-strip .stat-card .num,.kpi b,.stock-total-btn b,.report-row .rtotal{
+  font-family:'Fraunces',Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:0;
+}
+.summary-strip .stat-card .num{font-size:24px;}
+
+/* Same serif for every other prominent figure */
+.sales-table-number,.sales-qty-adjust.ss-stepper .sales-table-number,
+.stock-summary-sku-head b,.stock-count-switch button b,
+.stock-box b,.stock-block-total b,.stock-outlet-total b,.sales-date-total b,
+.stock-section-heading>span,.home-list li b,.home-low,.stock-location-chip b{
+  font-family:'Fraunces',Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:0;
+}
+.sales-qty-adjust.ss-stepper .sales-table-number{font-size:18px;}
