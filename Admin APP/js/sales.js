@@ -570,13 +570,11 @@ function openSalesForm(id, reuseOverlay=false){
           <datalist id="variation-list">${getVariationSuggestions(editing?parseProductName(editing.product_name).base:'').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
-      <div class="field-hint" style="margin:-8px 0 14px;"></div>
       <div class="field">
         <label class="checkbox-row">
           <input type="checkbox" id="s-free-item" ${(editing?isFreeItem(editing):isGiveaway(''))?'checked':''} onchange="onFreeItemToggle()">
           Free item (given away, not sold)
         </label>
-        <div class="field-hint" id="s-free-item-hint"></div>
       </div>
       <div class="qty-row" id="s-qty-row">
         <div id="s-free-fields" style="display:none;">
@@ -1239,7 +1237,6 @@ function openDayPhotoForm(date, id){
           <div id="photo-preview-empty" class="photo-preview photo-preview-empty" style="${existing&&existing.photo_url?'display:none;':''}">📷</div>
           <div class="photo-picker-actions">
             <button type="button" class="btn btn-ghost" onclick="startDayPhotoCamera()">Take photo</button>
-            <div class="field-hint">Uses this device's camera.</div>
           </div>
         </div>
         <div class="camera-panel" id="day-photo-camera-panel" hidden>

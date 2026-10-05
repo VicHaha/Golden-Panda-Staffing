@@ -201,7 +201,9 @@ function renderSalesSection(){
   // Fell back to the previous working day because today isn't one.
   const idle = !isToday && salesViewDateValue() === today;
   // Admin app: everything is editable. Promoter app: only today.
-  const canEdit = isToday || canEditPastSales();
+  // The − / + buttons (and Undo) exist for TODAY only. On earlier days the numbers are
+  // plain; the admin changes them from the SKU's edit form (tap the SKU name).
+  const canEdit = isToday || canEditPastSales();   // can open the edit form
   const dates = salesDateOptions();
   // Today (and everything in the promoter app) only shows scheduled outlets; the admin app's earlier days show everything logged.
   const scheduled = (isToday || isPromoterApp()) ? scheduledStoreIdsForDate(date) : null;
@@ -219,17 +221,16 @@ function renderSalesSection(){
         ${dates.includes(date) ? '' : `<option value="${date}" selected>${formatDateShort(date)}</option>`}
         ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':(canEditPastSales()?'':'')}${formatDateShort(d)}</option>`).join('')}
       </select>
-      ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">Undo</button>` : ''}
+      ${isToday ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">Undo</button>` : ''}
     </div>`;
   // Promoter app on a non-working day: just the previous record, with its date.
   let html = `<div class="section-title">Sales Report</div>` + (idle && isPromoterApp() ? `<div class="ss-prev-date">${formatDateShort(date)}</div>` : dateRow);
-  if(!canEdit && !idle) html += `<div class="ss-lock-note">Locked — only today's sales can be changed.</div>`;
 
   if(!rows.length){
     html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Add SKUs in Stock Management and they appear here.' : 'Pick another date above.');
     return html;
   }else{
-    html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');
+    html += outlets.map(group=>renderSalesOutlet(group,isToday,canEdit)).join('');
   }
 
   // Day photos and the day's general notes sit under the tables.
@@ -248,7 +249,7 @@ function renderSalesSection(){
 async function adjustSalesQuantity(event, id, delta){
   event.stopPropagation();
   const row = salesReports.find(item=>item.id===id);
-  if(!row || (row.work_date !== todayStr() && !canEditPastSales())) return;
+  if(!row || row.work_date !== todayStr()) return;
   const prev = Number(row.sales_qty||0);
   const next = Math.max(0, prev + delta);
   if(next === prev) return;

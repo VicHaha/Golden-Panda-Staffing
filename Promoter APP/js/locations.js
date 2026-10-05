@@ -195,9 +195,6 @@ function renderLocationsManagerHtml(){
         <option value="__all__" ${!sid?'selected':''}>All outlets (shared)</option>
         ${stores.map(s=>`<option value="${s.id}" ${sid===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
       </select>
-      <div class="field-hint">${sid
-        ? `Locations for ${esc(outletName)}: the shared ones plus any you add here. Past records keep their numbers.`
-        : 'Shared locations appear on every outlet unless hidden for it. Removing one hides it everywhere.'}</div>
     </div>
     <div class="location-list">
       ${shared.map(loc=>`

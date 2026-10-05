@@ -1436,3 +1436,8 @@ button,input,select,textarea{font-family:inherit;}
 .ss-row .sales-table-number,.sales-qty-adjust.ss-stepper .sales-table-number,.ss-locked .sales-table-number,.ss-vrow .sales-table-number{
   font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;font-weight:700;
 }
+
+/* No explanatory notes anywhere */
+.ss-lock-note{display:none;}
+
+.stock-summary-edit{display:none;}

@@ -181,7 +181,6 @@ function openWorkDateForm(id){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-title">${editing ? 'Edit working date' : 'Add working date'}</div>
-      <div class="field-hint" style="margin-bottom:14px;">Promoter details can be assigned later.</div>
       <div class="field"><label>Date</label><input id="wd-date" type="date" value="${editing?editing.work_date:''}" required></div>
       <div class="field">
         <label>Store / venue</label>

@@ -201,7 +201,6 @@ function stockSummaryInnerHtml(outletKey, date){
       <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${total}</b> ${field} ${low?'<em>Low</em>':''}</span></span>
       ${field==='closing'?`<span class="stock-variance-line ${variance===0?'ok':variance<0?'short':'over'}">Variance ${variance===0?'0':formatVariance(variance)}</span>`:''}
       <span class="stock-location-chips">${stockLocationChips(row,field)}</span>
-      <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)}${editable?' · Tap to edit':' · View only'}</span>
     </${editable?'button':'div'}>`;
   }).join('');
   return `
@@ -263,7 +262,6 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
       </div>
       <div class="stock-section-heading"><h2>${closing?'Closing':'Opening'} stock</h2><span id="sl-total">${stockTotal(editing,field)}</span></div>
       ${renderLocationInputs('sl-loc-', locationMap(editing,field), 'updateStockLocationHint()', stockFormStoreId)}
-      <div class="field-hint" id="sl-location-hint">This ${field} total syncs to Sales.</div>
       <div class="field">
         <label for="sl-remarks">Remarks (optional)</label>
         <input id="sl-remarks" value="${esc(editing.remarks||'')}" placeholder="e.g. 2 units damaged">
@@ -384,7 +382,7 @@ function openAddStockRecordForm(){
       <div id="asr-open-wrap">${renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
       <div class="stock-section-heading"><h2>Closing stock</h2><span id="asr-closing-total">0</span></div>
       <div id="asr-close-wrap">${renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
-      <div class="field-hint" id="asr-hint">Opening and closing totals sync to Sales.</div>
+      <div id="asr-hint" hidden></div>
       <div class="field">
         <label for="asr-remarks">Remarks (optional)</label>
         <input id="asr-remarks" placeholder="e.g. 2 units damaged">
@@ -546,7 +544,6 @@ function productPhotosSheetHtml(busyFamily){
   }).join('');
   return `
     <div class="stock-summary-head"><div class="modal-title">Product photos</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="field-hint" style="margin:-6px 0 8px;">One photo per product — it is shared by all its variations and shows in the Sales Report.</div>
     ${rows}`;
 }
 

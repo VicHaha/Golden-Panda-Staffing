@@ -49,7 +49,7 @@ function shortTime(t){
 }
 
 function emptyState(glyph, title, hint){
-  return `<div class="empty-state"><div class="glyph">${glyph}</div><p>${title}</p><p class="hint">${hint}</p></div>`;
+  return `<div class="empty-state"><div class="glyph">${glyph}</div><p>${title}</p>${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
 }
 
 function closeModal(){

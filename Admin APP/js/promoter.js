@@ -92,7 +92,6 @@ function openPromoterForm(id){
       <div class="field">
         <label>Nickname (optional)</label>
         <input id="f-nickname" value="${editing?esc(editing.nickname||''):''}" placeholder="e.g. Aisyah">
-        <div class="field-hint">Shown everywhere instead of the full name — except the Payout report, which always uses the full name.</div>
       </div>
       <div class="field"><label>IC number</label><input id="f-ic" value="${editing?esc(editing.ic_number||''):''}" placeholder="e.g. 950101-01-1234"></div>
       <div class="field-row">
