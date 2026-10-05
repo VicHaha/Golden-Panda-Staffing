@@ -134,7 +134,18 @@ function renderHome(){
   // Schedule. Monthly mode shows just the month's Sales Record.
   const homeDate = daily ? stockExportDate : today;
   const homeLabel = homeDate === today ? 'Today' : formatDateShort(homeDate);
-  if(!daily) return controls + renderHomeSalesRecord();
+  if(!daily){
+    // Month: same three tiles, totalled over the month.
+    const monthRows = salesReports.filter(r=>r.work_date.startsWith(stockExportMonth) && !isFreeItem(r));
+    const monthOutlets = new Set(jobs.filter(job=>job.work_date.startsWith(stockExportMonth)).map(jobStoreId).filter(Boolean)).size;
+    const monthSold = homeSalesRecord().reduce((sum,[,qty])=>sum+qty,0);
+    const monthSkus = new Set(monthRows.map(r=>canonicalSkuName(r.product_name))).size;
+    return controls + `<div class="kpi-row kpi-3">
+      <div class="kpi static"><small>Sold</small><b>${monthSold}</b></div>
+      <div class="kpi static"><small>SKUs</small><b>${monthSkus}</b></div>
+      <div class="kpi static"><small>Outlets</small><b>${monthOutlets}</b></div>
+    </div>` + renderHomeSalesRecord();
+  }
   if(!isWorkingDate(homeDate)) return controls + renderNotWorkingCard(homeLabel);
 
   const record = homeSalesRecord();
