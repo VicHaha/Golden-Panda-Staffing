@@ -40,6 +40,23 @@ const Auth = {
 
 // Only the reads/writes this stand-alone app needs — promoters and
 // stores are read-only lookups here (managed from the main office app).
+// Supabase returns at most 1000 rows per request, silently cutting off the
+// rest. Anything that can grow past that (jobs, sales rows, shift reports)
+// is fetched page by page so nothing — e.g. today's jobs — goes missing.
+async function fetchAllRows(buildQuery){
+  const pageSize = 1000;
+  let from = 0;
+  let rows = [];
+  for(;;){
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if(error) throw error;
+    rows = rows.concat(data || []);
+    if(!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
+}
+
 const DB = {
 
   async getPromoters(){
@@ -113,16 +130,15 @@ const DB = {
   // date, time, location and position for their own and others' shifts,
   // but never each other's pay.
   async getAllJobs(){
-    const { data, error } = await sb
+    return fetchAllRows(() => sb
       .from('jobs')
       .select(`
         id, work_date, position, start_time, end_time, promoter_id,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
-      .order('work_date', { ascending: true });
-    if(error) throw error;
-    return data;
+      .order('work_date', { ascending: true })
+      .order('id'))
   },
 
   // This promoter's own pay for a given month — kept as a separate,
@@ -140,7 +156,7 @@ const DB = {
   },
 
   async getSalesReports(){
-    const { data, error } = await sb
+    return fetchAllRows(() => sb
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, created_at, updated_at,
@@ -148,9 +164,8 @@ const DB = {
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
-      .order('work_date', { ascending: false });
-    if(error) throw error;
-    return data;
+      .order('work_date', { ascending: false })
+      .order('id'))
   },
 
   async addSalesReport(entry){
@@ -264,7 +279,7 @@ const DB = {
 
   // ---------------- Shift reports (engagement/conversion, per promoter/date/shift) ----------------
   async getShiftReports(){
-    const { data, error } = await sb
+    return fetchAllRows(() => sb
       .from('shift_reports')
       .select(`
         id, work_date, shift, store_id, promoter_id, engaged, successful_engagements, purchases,
@@ -272,9 +287,8 @@ const DB = {
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
-      .order('work_date', { ascending: false });
-    if(error) throw error;
-    return data;
+      .order('work_date', { ascending: false })
+      .order('id'))
   },
 
   async addShiftReport(entry){

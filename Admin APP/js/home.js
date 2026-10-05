@@ -50,8 +50,7 @@ function renderHomeSalesRecord(){
   return homeCard('sales','Sales Record', body);
 }
 
-function renderHomeStockRecord(){
-  const date = stockActiveDate();
+function renderHomeStockRecord(date){
   const low = lowStockEntries(date);
   let body;
   if(!stockDatesDesc().length){
@@ -72,10 +71,10 @@ function renderHomeStockRecord(){
   return homeCard('stock','Stock Record', body);
 }
 
-function renderHomeOnDuty(){
-  // Everyone scheduled today — Promoter, Assistant and Mascot — by outlet.
+function renderHomeOnDuty(date){
+  // Everyone scheduled on the chosen day — Promoter, Assistant and Mascot — by outlet.
   const dayJobs = jobs
-    .filter(job=>job.work_date === todayStr())
+    .filter(job=>job.work_date === date)
     .sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)) || displayName(a.promoters).localeCompare(displayName(b.promoters)));
   const byStore = new Map();
   dayJobs.forEach(job=>{
@@ -124,12 +123,19 @@ function renderHome(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}" aria-label="Month">`}
     </div>`;
 
-  // Records only show for working dates (days that have jobs on the Schedule).
-  const salesCard = daily && !isWorkingDate(stockExportDate)
-    ? renderNotWorkingCard(stockExportDate === today ? 'Today' : formatDateShort(stockExportDate))
+  // Everything on Home follows the day picked above (Daily) — Sales Record,
+  // Stock Record and On Duty all describe that same day, straight from the
+  // Schedule. In Monthly mode the day-based cards describe today. Records only
+  // show for working dates (days that have jobs on the Schedule).
+  const homeDate = daily ? stockExportDate : today;
+  const homeLabel = homeDate === today ? 'Today' : formatDateShort(homeDate);
+  // Monthly mode: just the Sales Record card for the month.
+  if(!daily) return controls + renderHomeSalesRecord();
+  const salesCard = daily && !isWorkingDate(homeDate)
+    ? renderNotWorkingCard(homeLabel)
     : renderHomeSalesRecord();
-  const todayCards = isWorkingDate(today)
-    ? renderHomeStockRecord() + renderHomeOnDuty()
-    : renderNotWorkingCard('Today');
-  return controls + salesCard + todayCards;
+  const dayCards = isWorkingDate(homeDate)
+    ? renderHomeStockRecord(homeDate) + renderHomeOnDuty(homeDate)
+    : renderNotWorkingCard(homeLabel);
+  return controls + salesCard + dayCards;
 }
