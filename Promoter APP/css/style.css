@@ -1254,3 +1254,13 @@ strong,b{font-weight:600;}
 
 /* Given-out items: no divider lines between them */
 .ss-row.ss-row-free,.ss-row.ss-row-free.ss-group-end{border-bottom:none;}
+
+/* Section titles in the serif (Fraunces), like the promoter names on the cards */
+.section-title,.panel-head h2,.modal-title,.ss-outlet-title,.stock-section-heading h2,.gate h2{
+  font-family:'Fraunces',Georgia,'Times New Roman',serif;
+  font-weight:700;
+  letter-spacing:0;
+}
+.section-title{font-size:21px;}
+.panel-head h2{font-size:17px;}
+.modal-title{font-size:20px;}
