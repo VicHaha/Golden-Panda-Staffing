@@ -219,7 +219,7 @@ function renderSalesSection(){
   if(!canEdit && !idle) html += `<div class="ss-lock-note">Locked — only today's sales can be changed.</div>`;
 
   if(!rows.length){
-    html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
+    html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Add SKUs in Stock Management and they appear here.' : 'Pick another date above.');
     return html;
   }else{
     html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');

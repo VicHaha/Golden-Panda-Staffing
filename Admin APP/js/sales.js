@@ -588,17 +588,6 @@ function openSalesForm(id, reuseOverlay=false){
         <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.sales_qty:''}" placeholder="0">
       </div>
       </div>
-      <div class="field">
-        <label>Product photo (optional) <small>— one photo for all variations</small></label>
-        <div class="photo-picker">
-          <img id="sp-preview" class="photo-preview" alt="Product photo" src="${editing&&productPhotoFor(editing.product_name)?esc(productPhotoFor(editing.product_name)):''}" style="${editing&&productPhotoFor(editing.product_name)?'':'display:none;'}">
-          <div id="sp-empty" class="photo-preview photo-preview-empty" style="${editing&&productPhotoFor(editing.product_name)?'display:none;':''}"></div>
-          <div class="photo-picker-actions">
-            <label class="btn btn-ghost btn-sm">Take / choose photo<input type="file" accept="image/*" capture="environment" hidden onchange="onSkuPhotoPicked(this)"></label>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="clearSkuPhoto()">Remove</button>
-          </div>
-        </div>
-      </div>
       <div class="field-hint" id="s-variance" style="display:none;"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -614,8 +603,6 @@ function openSalesForm(id, reuseOverlay=false){
   // Once the person has hand-toggled the checkbox, typing further in the
   // product name field stops overriding their choice.
   salesFormFreeItemTouched = false;
-  skuPhotoFile = null;
-  skuPhotoCleared = false;
   salesFormDerivedFieldTouched = false;
   salesFormLastFreeItem = null;
   applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
@@ -637,7 +624,7 @@ function productPhotoFor(name){
   return found ? found.photo_url : null;
 }
 
-// Photo chosen in the open sales form (uploaded to Cloudinary on Save).
+// Photo chosen in the open stock form (uploaded to Cloudinary on Save).
 let skuPhotoFile = null;
 let skuPhotoCleared = false;
 function onSkuPhotoPicked(input){
@@ -658,9 +645,11 @@ function clearSkuPhoto(){
   document.getElementById('sp-empty').style.display = '';
 }
 // Typing a different product shows that product's existing photo.
-function refreshSkuPhotoPreview(){
+function refreshSkuPhotoPreview(inputId){
   if(skuPhotoFile || skuPhotoCleared) return;
-  const url = productPhotoFor(document.getElementById('s-product').value);
+  const input = document.getElementById(inputId || 's-product');
+  if(!input || !document.getElementById('sp-preview')) return;
+  const url = productPhotoFor(input.value);
   const preview = document.getElementById('sp-preview');
   if(url){ preview.src = url; preview.style.display = ''; document.getElementById('sp-empty').style.display = 'none'; }
   else{ preview.style.display = 'none'; document.getElementById('sp-empty').style.display = ''; }
@@ -678,7 +667,6 @@ function onProductNameChange(){
     document.getElementById('s-free-item').checked = isGiveaway(document.getElementById('s-product').value);
   }
   applyFreeItemFieldLayout();
-  refreshSkuPhotoPreview();
 }
 
 function onFreeItemToggle(){
@@ -754,12 +742,6 @@ async function saveSalesForm(id){
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
-    let familyPhotoUrl = null;
-    if(skuPhotoFile){
-      btn.textContent = 'Uploading photo…';
-      const compressed = await compressImageFile(skuPhotoFile);
-      familyPhotoUrl = await uploadPhotoToCloudinary(compressed);
-    }
     btn.textContent = 'Saving…';
     // Note: this form never touches the per-location quantities
     // (location_qty / closing_location_qty) — those live in the separate Stock
@@ -770,15 +752,6 @@ async function saveSalesForm(id){
       await DB.updateSalesReport(id, payload);
     }else{
       await DB.addSalesReport(payload);
-    }
-    // The photo belongs to the product type, not to this one variation.
-    const family = parseProductName(product_name).base;
-    try{
-      if(familyPhotoUrl) await DB.setProductPhoto(family, familyPhotoUrl);
-      else if(skuPhotoCleared) await DB.deleteProductPhoto(family);
-    }catch(photoError){
-      console.error(photoError);
-      showToast('Saved, but the photo could not be saved');
     }
     await refreshData();
     closeModal();

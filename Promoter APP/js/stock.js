@@ -325,6 +325,8 @@ function openAddStockRecordForm(){
   if(!scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
   addStockStoreId = defaultStoreId || null;
+  skuPhotoFile = null;
+  skuPhotoCleared = false;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -357,6 +359,17 @@ function openAddStockRecordForm(){
       <div class="field">
         <label for="asr-remarks">Remarks (optional)</label>
         <input id="asr-remarks" placeholder="e.g. 2 units damaged">
+      </div>
+      <div class="field">
+        <label>Product photo (optional) <small>— one photo for all variations</small></label>
+        <div class="photo-picker">
+          <img id="sp-preview" class="photo-preview" alt="Product photo" style="display:none;">
+          <div id="sp-empty" class="photo-preview photo-preview-empty"></div>
+          <div class="photo-picker-actions">
+            <label class="btn btn-ghost btn-sm">Take / choose photo<input type="file" accept="image/*" capture="environment" hidden onchange="onSkuPhotoPicked(this)"></label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="clearSkuPhoto()">Remove</button>
+          </div>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -400,6 +413,7 @@ function fillAddStockInputs(openingMap, closingMap, remarks){
 // figures carried forward (same store first), otherwise empty.
 function onAddStockProductChange(){
   updateVariationDatalist('asr-product','variation-list');
+  refreshSkuPhotoPreview('asr-product');
   rebuildAddStockInputs(document.getElementById('asr-store').value || null);
   const base = document.getElementById('asr-product').value.trim();
   const variation = document.getElementById('asr-variation').value;
@@ -456,6 +470,12 @@ async function saveAddStockRecordForm(){
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;
   try{
+    let familyPhotoUrl = null;
+    if(skuPhotoFile){
+      btn.textContent = 'Uploading photo…';
+      const compressed = await compressImageFile(skuPhotoFile);
+      familyPhotoUrl = await uploadPhotoToCloudinary(compressed);
+    }
     btn.textContent = 'Saving…';
     const existing = salesReports.find(row=>
       row.work_date===work_date
@@ -473,6 +493,15 @@ async function saveAddStockRecordForm(){
       });
     }
     await carryClosingToNextEvent(product_name,work_date,closingTotal,closing_location_qty,store_id);
+    // The photo belongs to the product type (e.g. 1L Bio Dishwash), not to one variation.
+    try{
+      const family = parseProductName(product_name).base;
+      if(familyPhotoUrl) await DB.setProductPhoto(family, familyPhotoUrl);
+      else if(skuPhotoCleared) await DB.deleteProductPhoto(family);
+    }catch(photoError){
+      console.error(photoError);
+      showToast('Saved, but the photo could not be saved');
+    }
     await refreshData();
     render();
     openOutletStockSummary(store_id || '__none__',work_date,true);

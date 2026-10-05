@@ -452,7 +452,7 @@ function render(){
   if(!c) return;
   c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSalesSection();
   const fab = document.getElementById('fab');
-  if(fab) fab.style.display = currentTab==='schedule' ? 'none' : '';
+  if(fab) fab.style.display = (currentTab==='schedule' || currentTab==='sales') ? 'none' : '';
 }
 
 // ---------- Service worker (offline shell + installability) ----------

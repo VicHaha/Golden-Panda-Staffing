@@ -378,11 +378,11 @@ function render(){
   else if(currentTab==='home') wireStockExportControls();
   else if(currentTab==='sales') restoreNotesDraft(notesDraft);
 
-  // No "+" action makes sense on Home or Payout — hide the FAB there. The
+  // No "+" on Home, Payout or the Sales Report (SKUs are added in Stock Management and then appear in Sales). The
   // memo button only appears on Schedule, above the "+".
   const fab = document.getElementById('fab');
   if(fab){
-    fab.classList.toggle('hidden', currentTab==='reports' || currentTab==='home');
+    fab.classList.toggle('hidden', currentTab==='reports' || currentTab==='home' || currentTab==='sales');
     const label = currentTab==='roster' ? (rosterPage==='schedule' ? 'Add job' : 'Add promoter') : currentTab==='sales' ? 'Add sales report' : 'Add stock record';
     const button = fab.querySelector('.fab-primary');
     if(button){
