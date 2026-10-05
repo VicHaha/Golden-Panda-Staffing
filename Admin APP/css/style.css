@@ -1607,3 +1607,5 @@ button,input,select,textarea{font-family:inherit;}
 .has-fab-column .job-actions{gap:6px;}
 .has-fab-column .job-actions .icon-btn{width:34px;height:34px;}
 .has-fab-column .job-store{font-size:14px;}
+
+.has-fab-column .btn-block{width:calc(100% - 64px);}
