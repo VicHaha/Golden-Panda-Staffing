@@ -2,12 +2,14 @@
 // Stock locations — the user-editable list behind the location boxes in
 // Stock Management (Store Room, Home Shelf, Standee, Warehouse by default).
 //
-// Quantities live on each sales_reports row as two jsonb maps keyed by
-// location id: location_qty (opening) and closing_location_qty (closing).
-// Removing a location only hides it (active=false) so old rows keep their
-// numbers. This file is identical in the admin and promoter apps; only the
-// admin app shows the "Locations" manager (see canManageStockLocations()
-// in each app's app.js).
+// Locations can apply to every outlet (store_id null) or belong to a single
+// outlet; a shared location can also be hidden for specific outlets
+// (hidden_for). Quantities live on each sales_reports row as two jsonb maps
+// keyed by location id: location_qty (opening) and closing_location_qty
+// (closing). Removing a location only hides it (active=false / hidden_for)
+// so old rows keep their numbers. This file is identical in the admin and
+// promoter apps; only the admin app shows the "Locations" manager (see
+// canManageStockLocations() in each app's app.js).
 // ============================================================
 
 // A SKU is "low" when its closing stock (all locations added up) is below this.
@@ -28,11 +30,25 @@ function scheduledStoreIdsForDate(date){
   return ids;
 }
 
+function normalizeStoreId(storeId){
+  return storeId && storeId !== '__none__' ? storeId : null;
+}
+
 function sortedStockLocations(){
   return [...stockLocations].sort((a,b)=>(a.sort_order-b.sort_order) || String(a.created_at||'').localeCompare(String(b.created_at||'')));
 }
-function activeStockLocations(){
-  return sortedStockLocations().filter(loc=>loc.active !== false);
+
+// Does this location show for the given outlet? With no storeId argument at
+// all (the Excel export) every active location counts.
+function locationAppliesTo(loc, storeId){
+  if(loc.active === false) return false;
+  if(storeId === undefined) return true;
+  const sid = normalizeStoreId(storeId);
+  if(loc.store_id) return loc.store_id === sid;
+  return !(sid && (loc.hidden_for || []).includes(sid));
+}
+function activeStockLocations(storeId){
+  return sortedStockLocations().filter(loc=>locationAppliesTo(loc, storeId));
 }
 
 // field is 'opening' (default) or 'closing'
@@ -43,17 +59,24 @@ function locationMap(row, field){
 function locationQty(row, locationId, field){
   return Number(locationMap(row, field)[locationId] || 0);
 }
-// Total across the active locations only.
+// Total across the locations that apply to the row's outlet.
 function stockTotal(row, field){
-  return activeStockLocations().reduce((sum,loc)=>sum + locationQty(row, loc.id, field), 0);
+  const locations = activeStockLocations(row.store_id || null);
+  return locations.reduce((sum,loc)=>sum + locationQty(row, loc.id, field), 0);
 }
 // Same total, for a bare { locationId: qty } map (e.g. just read from a form).
-function locationMapTotal(map){
-  return activeStockLocations().reduce((sum,loc)=>sum + Number((map||{})[loc.id] || 0), 0);
+function locationMapTotal(map, storeId){
+  return activeStockLocations(storeId === undefined ? null : storeId).reduce((sum,loc)=>sum + Number((map||{})[loc.id] || 0), 0);
 }
-// [{ loc, total }] — one entry per active location, summed over rows.
-function stockLocationTotals(rows, field){
-  return activeStockLocations().map(loc=>({
+// Keeps only the entries for locations that apply to the outlet.
+function locationMapForStore(map, storeId){
+  const out = {};
+  activeStockLocations(storeId === undefined ? null : storeId).forEach(loc=>{ out[loc.id] = Number((map||{})[loc.id] || 0); });
+  return out;
+}
+// [{ loc, total }] — one entry per location of the outlet, summed over its rows.
+function stockLocationTotals(rows, field, storeId){
+  return activeStockLocations(storeId === undefined ? null : storeId).map(loc=>({
     loc,
     total: rows.reduce((sum,row)=>sum + locationQty(row, loc.id, field), 0)
   }));
@@ -63,23 +86,23 @@ function isLowClosing(row){
 }
 
 // Reads the per-location inputs of a form (ids "<prefix><locationId>") into a
-// map. Values for locations that are no longer active are kept as they were.
-function readLocationInputs(prefix, existingMap){
+// map. Values for locations not shown in the form are kept as they were.
+function readLocationInputs(prefix, existingMap, storeId){
   const map = { ...(existingMap || {}) };
-  activeStockLocations().forEach(loc=>{
+  activeStockLocations(storeId).forEach(loc=>{
     const input = document.getElementById(prefix + loc.id);
     map[loc.id] = input ? Math.max(0, parseFloat(input.value) || 0) : Number(map[loc.id] || 0);
   });
   return map;
 }
-function sumLocationInputs(prefix){
-  return activeStockLocations().reduce((sum,loc)=>{
+function sumLocationInputs(prefix, storeId){
+  return activeStockLocations(storeId).reduce((sum,loc)=>{
     const input = document.getElementById(prefix + loc.id);
     return sum + (input ? (parseFloat(input.value) || 0) : 0);
   }, 0);
 }
-function renderLocationInputs(prefix, map, oninput){
-  const locations = activeStockLocations();
+function renderLocationInputs(prefix, map, oninput, storeId){
+  const locations = activeStockLocations(storeId);
   return `<div class="field-row field-row-wrap">${locations.map(loc=>`
     <div class="field"><label for="${prefix}${loc.id}">${esc(loc.name)}</label><input id="${prefix}${loc.id}" type="number" min="0" step="1" value="${map ? Number(map[loc.id]||0) : ''}" placeholder="0" oninput="${oninput}"></div>
   `).join('')}</div>`;
@@ -94,34 +117,75 @@ function renderStockBoxes(totals){
 }
 
 // ---------------- Locations manager (admin app only) ----------------
+// Pick an outlet (or "All outlets") and edit the locations for it:
+//  • All outlets  — the shared locations every outlet starts with
+//  • one outlet   — add locations just for it, and hide shared ones here
+let locationsScope = '__all__';
+
+function locationsScopeStoreId(){ return locationsScope === '__all__' ? null : locationsScope; }
+
+// Locations editable in the current scope, in display order.
+function editableLocationsInScope(){
+  const sid = locationsScopeStoreId();
+  return sortedStockLocations().filter(loc=>loc.active !== false && (sid ? loc.store_id === sid : !loc.store_id));
+}
+
 function renderLocationsManagerHtml(){
-  const locations = activeStockLocations();
+  const sid = locationsScopeStoreId();
+  const editable = editableLocationsInScope();
+  const shared = sid ? activeStockLocations(sid).filter(loc=>!loc.store_id) : [];
+  const hidden = sid ? sortedStockLocations().filter(loc=>loc.active !== false && !loc.store_id && (loc.hidden_for||[]).includes(sid)) : [];
+  const outletName = sid ? ((stores.find(s=>s.id===sid)||{}).name || 'this outlet') : 'all outlets';
   return `
     <div class="stock-summary-head"><div class="modal-title">Stock locations</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="field-hint" style="margin:-6px 0 12px;">These are the boxes shown on every stock card and form, in both apps. Removing one hides it — past records keep their numbers.</div>
+    <div class="field">
+      <label for="locations-scope">Outlet</label>
+      <select id="locations-scope" onchange="setLocationsScope(this.value)">
+        <option value="__all__" ${!sid?'selected':''}>All outlets (shared)</option>
+        ${stores.map(s=>`<option value="${s.id}" ${sid===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+      </select>
+      <div class="field-hint">${sid
+        ? `Locations for ${esc(outletName)}: the shared ones plus any you add here. Past records keep their numbers.`
+        : 'Shared locations appear on every outlet unless hidden for it. Removing one hides it everywhere.'}</div>
+    </div>
     <div class="location-list">
-      ${locations.map((loc,index)=>`
+      ${shared.map(loc=>`
+        <div class="location-row">
+          <div class="location-shared"><span>${esc(loc.name)}</span><small>All outlets</small></div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="hideSharedLocation('${loc.id}')">Hide here</button>
+        </div>`).join('')}
+      ${editable.map((loc,index)=>`
         <div class="location-row">
           <input type="text" value="${esc(loc.name)}" maxlength="40" aria-label="Location name" onchange="renameStockLocation('${loc.id}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
           <button type="button" class="icon-btn" onclick="moveStockLocation('${loc.id}',-1)" aria-label="Move up" ${index===0?'disabled':''}>↑</button>
-          <button type="button" class="icon-btn" onclick="moveStockLocation('${loc.id}',1)" aria-label="Move down" ${index===locations.length-1?'disabled':''}>↓</button>
+          <button type="button" class="icon-btn" onclick="moveStockLocation('${loc.id}',1)" aria-label="Move down" ${index===editable.length-1?'disabled':''}>↓</button>
           <button type="button" class="icon-btn danger" onclick="removeStockLocation('${loc.id}')" aria-label="Remove ${esc(loc.name)}">✕</button>
         </div>`).join('')}
+      ${!shared.length && !editable.length ? '<div class="stock-location-empty">No locations here yet — add one below.</div>' : ''}
     </div>
     <div class="location-row location-add">
-      <input id="new-location-name" type="text" maxlength="40" placeholder="New location, e.g. Car Boot" aria-label="New location name" onkeydown="if(event.key==='Enter'){addStockLocation()}">
+      <input id="new-location-name" type="text" maxlength="40" placeholder="${sid?`New location for ${esc(outletName)}`:'New shared location, e.g. Car Boot'}" aria-label="New location name" onkeydown="if(event.key==='Enter'){addStockLocation()}">
       <button type="button" class="btn btn-primary" onclick="addStockLocation()">Add</button>
     </div>
+    ${hidden.length ? `<div class="location-hidden"><div class="field-hint">Hidden for ${esc(outletName)}</div>${hidden.map(loc=>`
+      <div class="location-row"><div class="location-shared"><span>${esc(loc.name)}</span></div><button type="button" class="btn btn-ghost btn-sm" onclick="restoreSharedLocation('${loc.id}')">Show again</button></div>`).join('')}</div>` : ''}
   `;
 }
 
 function openStockLocationsManager(){
   if(typeof canManageStockLocations === 'function' && !canManageStockLocations()) return;
+  locationsScope = '__all__';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `<div class="modal-sheet" id="locations-sheet">${renderLocationsManagerHtml()}</div>`;
   showModal(overlay);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+function setLocationsScope(value){
+  locationsScope = value;
+  const sheet = document.getElementById('locations-sheet');
+  if(sheet) sheet.innerHTML = renderLocationsManagerHtml();
 }
 
 async function reloadStockLocations(keepFocusId){
@@ -132,19 +196,25 @@ async function reloadStockLocations(keepFocusId){
   render();
 }
 
+// Every location visible in the current scope (what the user sees listed).
+function scopeLocations(){
+  const sid = locationsScopeStoreId();
+  return sid ? activeStockLocations(sid) : sortedStockLocations().filter(loc=>loc.active !== false && !loc.store_id);
+}
+
 function locationNameTaken(name, exceptId){
   const wanted = name.trim().toLowerCase();
-  return activeStockLocations().some(loc=>loc.id !== exceptId && loc.name.trim().toLowerCase() === wanted);
+  return scopeLocations().some(loc=>loc.id !== exceptId && loc.name.trim().toLowerCase() === wanted);
 }
 
 async function addStockLocation(){
   const input = document.getElementById('new-location-name');
   const name = (input ? input.value : '').trim();
   if(!name){ showToast('Type a name for the new location'); return; }
-  if(locationNameTaken(name)){ showToast('That location already exists'); return; }
+  if(locationNameTaken(name)){ showToast('That location already exists here'); return; }
   try{
     const nextOrder = stockLocations.reduce((max,loc)=>Math.max(max, Number(loc.sort_order)||0), 0) + 1;
-    await DB.addStockLocation({ name, sort_order: nextOrder, active: true });
+    await DB.addStockLocation({ name, sort_order: nextOrder, active: true, store_id: locationsScopeStoreId() });
     await reloadStockLocations('new-location-name');
     showToast(`Added ${name}`);
   }catch(e){
@@ -159,7 +229,7 @@ async function renameStockLocation(id, input){
   if(!loc) return;
   if(!name){ input.value = loc.name; showToast('A location needs a name'); return; }
   if(name === loc.name) return;
-  if(locationNameTaken(name, id)){ input.value = loc.name; showToast('That location already exists'); return; }
+  if(locationNameTaken(name, id)){ input.value = loc.name; showToast('That location already exists here'); return; }
   try{
     await DB.updateStockLocation(id, { name });
     await reloadStockLocations();
@@ -172,7 +242,7 @@ async function renameStockLocation(id, input){
 }
 
 async function moveStockLocation(id, direction){
-  const list = activeStockLocations();
+  const list = editableLocationsInScope();
   const index = list.findIndex(l=>l.id===id);
   const other = list[index + direction];
   if(index === -1 || !other) return;
@@ -196,8 +266,9 @@ async function moveStockLocation(id, direction){
 async function removeStockLocation(id){
   const loc = stockLocations.find(l=>l.id===id);
   if(!loc) return;
-  if(activeStockLocations().length <= 1){ showToast('Keep at least one location'); return; }
-  if(!confirm(`Remove "${loc.name}"? It disappears from all stock cards and forms. Past records keep their numbers.`)) return;
+  if(scopeLocations().length <= 1){ showToast('Keep at least one location'); return; }
+  const where = loc.store_id ? 'this outlet' : 'every outlet';
+  if(!confirm(`Remove "${loc.name}"? It disappears from the stock cards and forms of ${where}. Past records keep their numbers.`)) return;
   try{
     await DB.updateStockLocation(id, { active: false });
     await reloadStockLocations();
@@ -205,5 +276,33 @@ async function removeStockLocation(id){
   }catch(e){
     console.error(e);
     showToast('Could not remove — ' + (e.message || 'check your connection'));
+  }
+}
+
+// Hide / restore a SHARED location for just the outlet being edited.
+async function hideSharedLocation(id){
+  const loc = stockLocations.find(l=>l.id===id);
+  const sid = locationsScopeStoreId();
+  if(!loc || !sid) return;
+  if(activeStockLocations(sid).length <= 1){ showToast('Keep at least one location'); return; }
+  try{
+    await DB.updateStockLocation(id, { hidden_for: [...new Set([...(loc.hidden_for||[]), sid])] });
+    await reloadStockLocations();
+    showToast(`${loc.name} hidden for this outlet`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not hide — ' + (e.message || 'check your connection'));
+  }
+}
+async function restoreSharedLocation(id){
+  const loc = stockLocations.find(l=>l.id===id);
+  const sid = locationsScopeStoreId();
+  if(!loc || !sid) return;
+  try{
+    await DB.updateStockLocation(id, { hidden_for: (loc.hidden_for||[]).filter(x=>x!==sid) });
+    await reloadStockLocations();
+  }catch(e){
+    console.error(e);
+    showToast('Could not restore — ' + (e.message || 'check your connection'));
   }
 }

@@ -18,7 +18,8 @@ Supabase → SQL Editor, **before** deploying this version of either app:
 1. `migration_flexible_stock_locations.sql` — editable stock locations
    (copies all existing stock figures across, deletes nothing)
 2. `migration_sales_log.sql` — the history log of +/- taps
-3. `migration_memos.sql` — memo notes (office app only, but run it so
+3. `migration_stock_locations_per_outlet.sql` — per-outlet stock locations
+4. `migration_memos.sql` — memo notes (office app only, but run it so
    the office app's Memo button works)
 
 What changed in this app: same header (logo, "Golden Panda / Retail

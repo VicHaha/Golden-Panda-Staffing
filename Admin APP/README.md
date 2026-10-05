@@ -54,10 +54,13 @@ files **in this order**:
     Section (used by both apps).
 17. `sql/migration_memos.sql` — **Retail Operation redesign.** Creates
     the `memos` table behind the Memo button on Schedule.
+18. `sql/migration_stock_locations_per_outlet.sql` — **Retail Operation
+    redesign.** Lets each outlet have its own stock locations (run it
+    after 15). Existing locations keep applying to every outlet.
 
 All are safe to run again if you're not sure which you've already run.
 
-> **Run 15, 16 and 17 BEFORE deploying this version of either app.**
+> **Run 15 to 18 BEFORE deploying this version of either app.**
 > The apps now read `location_qty` / `closing_location_qty` and the new
 > tables, so an old database makes them fail to load stock.
 

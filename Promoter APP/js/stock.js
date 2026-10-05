@@ -15,6 +15,8 @@ try{ localStorage.removeItem('gp-stock-low-thresholds-v1'); }catch(e){}
 let stockSummaryActiveTab = {};
 let stockSummaryCountMode = {};
 let stockPastOpen = false;
+let stockFormStoreId = null;  // outlet whose locations the open edit form shows
+let addStockStoreId = null;   // same, for the add form
 
 function stockOutletKey(row){ return row.store_id || '__none__'; }
 function isStockManagedItem(row){ return !isFreeItem(row) && !isGiveaway(row.product_name); }
@@ -74,16 +76,28 @@ function lowStockEntries(date){
   return entries;
 }
 
+// Variance = what was counted at closing minus what should be left
+// (opening - sales). 0 means it tallies; negative = short, positive = over.
+function stockVariance(row){
+  return stockTotal(row,'closing') - (stockTotal(row,'opening') - Number(row.sales_qty||0));
+}
+function formatVariance(value){
+  return `${value>0?'+':value<0?'−':'±'}${Math.abs(value)}`;
+}
+
 function renderStockBlock(label, rows, field, showLow){
-  const totals = stockLocationTotals(rows, field);
+  const totals = stockLocationTotals(rows, field, rows.length ? rows[0].store_id || null : null);
   const total = totals.reduce((sum,item)=>sum+item.total,0);
   const lowCount = showLow ? rows.filter(isLowClosing).length : 0;
+  const variance = showLow ? rows.reduce((sum,row)=>sum+stockVariance(row),0) : 0;
+  const mismatched = showLow ? rows.filter(row=>stockVariance(row)!==0).length : 0;
   return `<span class="stock-block ${lowCount?'is-low':''}">
     <span class="stock-block-head">
       <span class="stock-block-label">${label}</span>
       <span class="stock-block-total">${lowCount?`<em class="stock-low-flag" title="${lowCount} SKU${lowCount>1?'s':''} under ${LOW_STOCK_THRESHOLD}">LOW</em>`:''}<b>${total}</b></span>
     </span>
     ${renderStockBoxes(totals)}
+    ${mismatched?`<span class="stock-variance ${variance<0?'short':'over'}">Variance ${formatVariance(variance)} · ${mismatched} SKU${mismatched>1?'s':''} don't tally</span>`:''}
   </span>`;
 }
 
@@ -153,7 +167,7 @@ function setStockSummaryCountMode(stateKey, field){
 }
 
 function stockLocationChips(row, field){
-  const locations = activeStockLocations();
+  const locations = activeStockLocations(row.store_id || null);
   if(!locations.length) return '<span class="stock-location-empty">No stock locations</span>';
   return locations.map(loc=>`<span class="stock-location-chip"><small>${esc(loc.name)}</small><b>${locationQty(row,loc.id,field)}</b></span>`).join('');
 }
@@ -172,8 +186,11 @@ function stockSummaryInnerHtml(outletKey, date){
   const rows = visibleRows.map(row=>{
     const total = stockTotal(row,field);
     const low = field === 'closing' && total < LOW_STOCK_THRESHOLD;
+    const variance = field === 'closing' ? stockVariance(row) : 0;
+    const sold = Number(row.sales_qty||0);
     return `<button type="button" class="stock-summary-sku ${low?'is-low':''}" onclick="openStockLocationForm('${row.id}','${field}',true)">
       <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${total}</b> ${field} ${low?'<em>Low</em>':''}</span></span>
+      ${field==='closing'?`<span class="stock-variance-line ${variance===0?'ok':variance<0?'short':'over'}">${variance===0?'Tallies':`Variance ${formatVariance(variance)}`} <small>opening ${stockTotal(row,'opening')} − sales ${sold} = ${stockTotal(row,'opening')-sold}, counted ${stockTotal(row,'closing')}</small></span>`:''}
       <span class="stock-location-chips">${stockLocationChips(row,field)}</span>
       <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
     </button>`;
@@ -218,6 +235,7 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
   if(!editing){ showToast('Could not find that record'); return; }
   if(!isStockManagedItem(editing)){ showToast('Free items are not tracked in Stock Management'); return; }
   const closing = field === 'closing';
+  stockFormStoreId = editing.store_id || null;
 
   const existing = reuseOverlay ? document.querySelector('.modal-overlay') : null;
   const overlay = existing || document.createElement('div');
@@ -235,7 +253,7 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
         </select>
       </div>
       <div class="stock-section-heading"><h2>${closing?'Closing':'Opening'} stock</h2><span id="sl-total">${stockTotal(editing,field)}</span></div>
-      ${renderLocationInputs('sl-loc-', locationMap(editing,field), 'updateStockLocationHint()')}
+      ${renderLocationInputs('sl-loc-', locationMap(editing,field), 'updateStockLocationHint()', stockFormStoreId)}
       <div class="field-hint" id="sl-location-hint">This ${field} total syncs to Sales.</div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -251,7 +269,7 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
 }
 
 function updateStockLocationHint(){
-  const total = sumLocationInputs('sl-loc-');
+  const total = sumLocationInputs('sl-loc-', stockFormStoreId);
   const display = document.getElementById('sl-total');
   if(display) display.textContent = total;
 }
@@ -261,8 +279,8 @@ async function saveStockLocationForm(id, field='opening'){
   if(!editing){ showToast('Could not find that record'); return; }
   const closing = field === 'closing';
   const store_id = document.getElementById('sl-store').value || null;
-  const map = readLocationInputs('sl-loc-', locationMap(editing,field));
-  const total = locationMapTotal(map);
+  const map = readLocationInputs('sl-loc-', locationMap(editing,field), stockFormStoreId);
+  const total = locationMapTotal(map, stockFormStoreId);
 
   const btn = document.getElementById('stock-location-save-btn');
   btn.disabled = true;
@@ -292,6 +310,7 @@ async function saveStockLocationForm(id, field='opening'){
 // already exists for this exact product + date + store, saving updates it.
 function openAddStockRecordForm(){
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
+  addStockStoreId = defaultStoreId || null;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -318,9 +337,9 @@ function openAddStockRecordForm(){
         </select>
       </div>
       <div class="stock-section-heading"><h2>Opening stock</h2><span id="asr-opening-total">0</span></div>
-      ${renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()')}
+      <div id="asr-open-wrap">${renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
       <div class="stock-section-heading"><h2>Closing stock</h2><span id="asr-closing-total">0</span></div>
-      ${renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()')}
+      <div id="asr-close-wrap">${renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
       <div class="field-hint" id="asr-hint">Opening and closing totals sync to Sales.</div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -335,12 +354,20 @@ function openAddStockRecordForm(){
 function updateAddStockOpeningTotal(){
   const opening = document.getElementById('asr-opening-total');
   const closing = document.getElementById('asr-closing-total');
-  if(opening) opening.textContent = sumLocationInputs('asr-open-');
-  if(closing) closing.textContent = sumLocationInputs('asr-close-');
+  if(opening) opening.textContent = sumLocationInputs('asr-open-', addStockStoreId);
+  if(closing) closing.textContent = sumLocationInputs('asr-close-', addStockStoreId);
+}
+
+// The location boxes depend on the outlet picked in the form.
+function rebuildAddStockInputs(storeId){
+  if(storeId === addStockStoreId) return;
+  addStockStoreId = storeId;
+  document.getElementById('asr-open-wrap').innerHTML = renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()', storeId);
+  document.getElementById('asr-close-wrap').innerHTML = renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', storeId);
 }
 
 function fillAddStockInputs(openingMap, closingMap){
-  activeStockLocations().forEach(loc=>{
+  activeStockLocations(addStockStoreId).forEach(loc=>{
     const open = document.getElementById('asr-open-' + loc.id);
     const close = document.getElementById('asr-close-' + loc.id);
     if(open) open.value = openingMap ? Number(openingMap[loc.id]||0) : '';
@@ -354,6 +381,7 @@ function fillAddStockInputs(openingMap, closingMap){
 // figures carried forward (same store first), otherwise empty.
 function onAddStockProductChange(){
   updateVariationDatalist('asr-product','variation-list');
+  rebuildAddStockInputs(document.getElementById('asr-store').value || null);
   const base = document.getElementById('asr-product').value.trim();
   const variation = document.getElementById('asr-variation').value;
   const productName = composeProductName(base, variation);
@@ -397,10 +425,11 @@ async function saveAddStockRecordForm(){
   if(isGiveaway(product_name)){ showToast('Free items are not tracked in Stock Management'); return; }
 
   const store_id = document.getElementById('asr-store').value || null;
-  const location_qty = readLocationInputs('asr-open-', {});
-  const closing_location_qty = readLocationInputs('asr-close-', {});
-  const openingTotal = locationMapTotal(location_qty);
-  const closingTotal = locationMapTotal(closing_location_qty);
+  addStockStoreId = store_id;
+  const location_qty = readLocationInputs('asr-open-', {}, store_id);
+  const closing_location_qty = readLocationInputs('asr-close-', {}, store_id);
+  const openingTotal = locationMapTotal(location_qty, store_id);
+  const closingTotal = locationMapTotal(closing_location_qty, store_id);
 
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;

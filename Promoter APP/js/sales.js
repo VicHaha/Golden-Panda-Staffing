@@ -276,8 +276,8 @@ async function ensureStockRowsForDate(date){
     // forward untouched until someone edits it; opening and closing both
     // start from it.
     const prior = priorEntries[0] || {};
-    const carriedLocations = { ...locationMap(prior,'closing') };
-    const carryOver = locationMapTotal(carriedLocations);
+    const carriedLocations = locationMapForStore(locationMap(prior,'closing'), scheduledStoreId);
+    const carryOver = locationMapTotal(carriedLocations, scheduledStoreId);
 
     try{
       const created = await DB.addSalesReport({
