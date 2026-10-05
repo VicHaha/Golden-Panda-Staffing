@@ -275,7 +275,7 @@ async function loadInitialData(){
 function tomorrowStr(){
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0,10);
+  return localDateStr(d);
 }
 
 async function refreshTomorrowJob(){
@@ -313,8 +313,8 @@ async function refreshData(){
 async function refreshMyMonthPay(){
   try{
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+    const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth()+1, 0));
     const rows = await DB.getMyPayForMonth(currentPromoterId, monthStart, monthEnd);
     const pay = rows.reduce((s,r)=> s + Number(r.pay||0), 0);
     const commission = rows.reduce((s,r)=> s + Number(r.commission||0), 0);

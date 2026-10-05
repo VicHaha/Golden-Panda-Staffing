@@ -185,7 +185,7 @@ function updateVariationDatalist(productInputId, listId){
 }
 
 function todayStr(){
-  return new Date().toISOString().slice(0,10);
+  return localDateStr();
 }
 
 function scheduledStoreIdForDate(date, promoterId){

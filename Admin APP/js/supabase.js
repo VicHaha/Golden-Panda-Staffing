@@ -273,6 +273,14 @@ const DB = {
     return data;
   },
 
+  async deleteSalesLog(id){
+    const { error } = await sb
+      .from('sales_log')
+      .delete()
+      .eq('id', id);
+    if(error) throw error;
+  },
+
   async addSalesLog(entry){
     const { data, error } = await sb
       .from('sales_log')

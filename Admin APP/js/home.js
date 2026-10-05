@@ -54,9 +54,7 @@ function renderHomeStockRecord(){
   const date = stockActiveDate();
   const low = lowStockEntries(date);
   let body;
-  if(!scheduledStoreIdsForDate(date).size){
-    body = `<p class="home-empty">Not a working day today.</p>`;
-  }else if(!stockDatesDesc().length){
+  if(!stockDatesDesc().length){
     body = `<p class="home-empty">No stock records yet.</p>`;
   }else if(!low.length){
     body = `<p class="home-ok">✓ All stock OK</p>`;
@@ -75,30 +73,36 @@ function renderHomeStockRecord(){
 }
 
 function renderHomeOnDuty(){
-  const today = todayStr();
-  const onDuty = jobs
-    .filter(job=>job.work_date === today && job.promoters)
+  // Everyone scheduled today — Promoter, Assistant and Mascot — by outlet.
+  const dayJobs = jobs
+    .filter(job=>job.work_date === todayStr())
     .sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)) || displayName(a.promoters).localeCompare(displayName(b.promoters)));
-  let body;
-  if(!onDuty.length){
-    body = `<p class="home-empty">Nobody is scheduled today.</p>`;
-  }else{
-    const byStore = new Map();
-    onDuty.forEach(job=>{
-      const name = job.stores ? job.stores.name : 'No outlet set';
-      if(!byStore.has(name)) byStore.set(name, []);
-      byStore.get(name).push(job);
-    });
-    body = [...byStore.keys()].sort((a,b)=>a.localeCompare(b)).map(name=>`
+  const byStore = new Map();
+  dayJobs.forEach(job=>{
+    const name = job.stores ? job.stores.name : 'No outlet set';
+    if(!byStore.has(name)) byStore.set(name, []);
+    byStore.get(name).push(job);
+  });
+  const body = [...byStore.keys()].sort((a,b)=>a.localeCompare(b)).map(name=>`
       <div class="home-outlet">${esc(name)}</div>
-      <ul class="home-list home-duty-list">${byStore.get(name).map(job=>`<li>
-        <span class="home-duty-name">${esc(displayName(job.promoters))}</span>
-        <span class="home-duty-role">${esc(job.position || 'Promoter')}</span>
-        <span class="home-duty-time">${esc(formatShiftRange(job.start_time, job.end_time))}</span>
-      </li>`).join('')}</ul>
+      <ul class="home-list home-duty-list">${byStore.get(name).map(job=>{
+        const role = job.position || 'Promoter';
+        return `<li>
+          <span class="home-duty-name">${job.promoters ? esc(displayName(job.promoters)) : '<em>Not assigned</em>'}</span>
+          <span class="job-position job-position-${esc(role.toLowerCase())}">${esc(role)}</span>
+          <span class="home-duty-time">${esc(formatShiftRange(job.start_time, job.end_time))}</span>
+        </li>`;
+      }).join('')}</ul>
     `).join('');
-  }
   return homeCard('roster','On Duty', body);
+}
+
+function isWorkingDate(date){
+  return jobs.some(job=>job.work_date === date);
+}
+
+function renderNotWorkingCard(label){
+  return `<section class="home-card"><p class="home-empty">${esc(label)} is not a working date.</p></section>`;
 }
 
 function renderHome(){
@@ -120,5 +124,12 @@ function renderHome(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}" aria-label="Month">`}
     </div>`;
 
-  return controls + renderHomeSalesRecord() + renderHomeStockRecord() + renderHomeOnDuty();
+  // Records only show for working dates (days that have jobs on the Schedule).
+  const salesCard = daily && !isWorkingDate(stockExportDate)
+    ? renderNotWorkingCard(stockExportDate === today ? 'Today' : formatDateShort(stockExportDate))
+    : renderHomeSalesRecord();
+  const todayCards = isWorkingDate(today)
+    ? renderHomeStockRecord() + renderHomeOnDuty()
+    : renderNotWorkingCard('Today');
+  return controls + salesCard + todayCards;
 }

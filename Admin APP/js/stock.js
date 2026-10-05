@@ -85,35 +85,35 @@ function formatVariance(value){
   return `${value>0?'+':value<0?'−':'±'}${Math.abs(value)}`;
 }
 
-function renderStockBlock(label, rows, field, showLow){
+function renderStockBlock(label, rows, field, showLow, outletKey, date){
   const totals = stockLocationTotals(rows, field, rows.length ? rows[0].store_id || null : null);
   const total = totals.reduce((sum,item)=>sum+item.total,0);
   const lowCount = showLow ? rows.filter(isLowClosing).length : 0;
   const variance = showLow ? rows.reduce((sum,row)=>sum+stockVariance(row),0) : 0;
   const mismatched = showLow ? rows.filter(row=>stockVariance(row)!==0).length : 0;
-  return `<span class="stock-block ${lowCount?'is-low':''}">
+  return `<button type="button" class="stock-block ${lowCount?'is-low':''}" onclick="openOutletStockSummary('${outletKey}','${date}',false,'${field}')" aria-label="${label} — view and edit">
     <span class="stock-block-head">
       <span class="stock-block-label">${label}</span>
       <span class="stock-block-total">${lowCount?`<em class="stock-low-flag" title="${lowCount} SKU${lowCount>1?'s':''} under ${LOW_STOCK_THRESHOLD}">LOW</em>`:''}<b>${total}</b></span>
     </span>
     ${renderStockBoxes(totals)}
     ${mismatched?`<span class="stock-variance ${variance<0?'short':'over'}">Variance ${formatVariance(variance)} · ${mismatched} SKU${mismatched>1?'s':''} don't tally</span>`:''}
-  </span>`;
+  </button>`;
 }
 
 function renderStockOutletCard(outlet, date){
   const hasLow = outlet.rows.some(isLowClosing);
-  return `<button type="button" class="stock-outlet-card ${hasLow?'has-alert':''}" onclick="openOutletStockSummary('${outlet.key}','${date}')">
+  return `<div class="stock-outlet-card ${hasLow?'has-alert':''}">
     <span class="stock-outlet-top"><strong>${esc(outlet.name)}</strong><small>${date===todayStr()?'Today':formatDateShort(date)} · ${outlet.rows.length} SKUs</small></span>
-    ${renderStockBlock('Opening', outlet.rows, 'opening', false)}
-    ${renderStockBlock('Closing', outlet.rows, 'closing', true)}
-  </button>`;
+    ${renderStockBlock('Opening', outlet.rows, 'opening', false, outlet.key, date)}
+    ${renderStockBlock('Closing', outlet.rows, 'closing', true, outlet.key, date)}
+  </div>`;
 }
 
 function renderStockPastRecords(activeDate){
   const dates = stockDatesDesc().filter(d=>d!==activeDate);
   if(!dates.length) return '';
-  let html = `<button type="button" class="btn btn-ghost stock-history-toggle" aria-expanded="${stockPastOpen}" onclick="toggleStockPast()">Past Records <span aria-hidden="true">${stockPastOpen?'▴':'▾'}</span></button>`;
+  let html = `<button type="button" class="btn btn-ghost btn-block stock-history-toggle" style="margin-top:14px;" aria-expanded="${stockPastOpen}" onclick="toggleStockPast()">${stockPastOpen?'Hide':'Show'} earlier stock records (${dates.length})</button>`;
   if(stockPastOpen){
     html += dates.map(date=>`
       <div class="stock-past-day">
@@ -196,18 +196,17 @@ function stockSummaryInnerHtml(outletKey, date){
     </button>`;
   }).join('');
   return `
-    <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="stock-summary-meta"><span>${formatDateLong(date)} · ${outlet.rows.length} SKUs</span></div>
-    <div class="stock-count-switch">
-      <button type="button" class="${field==='opening'?'active':''}" onclick="setStockSummaryCountMode('${stateKey}','opening')"><span>Opening</span><b>${openingTotal}</b></button>
-      <button type="button" class="${field==='closing'?'active':''}" onclick="setStockSummaryCountMode('${stateKey}','closing')"><span>Closing</span><b>${closingTotal}</b></button>
-    </div>
+    <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)} · ${field==='closing'?'Closing':'Opening'}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
+    <div class="stock-summary-meta"><span>${formatDateLong(date)} · ${outlet.rows.length} SKUs · ${field==='closing'?closingTotal:openingTotal} total</span></div>
     ${renderStockSummaryTabs(stateKey,productGroups,active)}
     <div class="stock-summary-list">${rows}</div>
   `;
 }
 
-function openOutletStockSummary(outletKey, date, reuseOverlay=false){
+// mode ('opening' | 'closing') picks which count the sheet shows and edits;
+// omitted, it keeps whatever the sheet last showed for this outlet and day.
+function openOutletStockSummary(outletKey, date, reuseOverlay=false, mode){
+  if(mode) stockSummaryCountMode[`${outletKey}|${date}`] = mode === 'closing' ? 'closing' : 'opening';
   const html = stockSummaryInnerHtml(outletKey, date);
   if(html === null){ showToast('No stock found for that outlet'); return; }
   const existing = reuseOverlay ? document.querySelector('.modal-overlay') : null;

@@ -269,7 +269,7 @@ function updateVariationDatalist(productInputId, listId){
 }
 
 function todayStr(){
-  return new Date().toISOString().slice(0,10);
+  return localDateStr();
 }
 
 // Default outlet for Sales/Stock comes from the schedule. A promoter-specific

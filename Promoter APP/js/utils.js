@@ -2,6 +2,13 @@
 // Shared helpers
 // ============================================================
 
+// YYYY-MM-DD in THIS device's local time (toISOString would use UTC, which is
+// the wrong day for the first 8 hours of every day in Malaysia).
+function localDateStr(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 function esc(str){
   return (str||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }

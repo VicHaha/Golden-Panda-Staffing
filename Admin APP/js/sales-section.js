@@ -1,12 +1,11 @@
 // ============================================================
 // Sales Section — one table per outlet for the chosen day, SKU | Sales
-// with a − 1 + stepper, free items in a separate "Given out" table, and a
-// history log of every tap (who, what, where) for that day only.
+// with a − 1 + stepper, free items in a separate "Given out" table, and an
+// Undo button that reverses your last tap.
 //
 // Only TODAY can be changed with the stepper; earlier days are viewable
-// but locked (🔒). Every tap also writes a row to sales_log, so the admin
-// app and the promoter app see each other's taps in their history within a
-// moment (see the realtime subscription in app.js).
+// but locked (🔒). Every tap also writes a row to sales_log; that log is
+// what Undo steps back through.
 //
 // This file is identical in the admin and promoter apps. Each app's app.js
 // supplies three small hooks:
@@ -87,35 +86,39 @@ function renderSalesOutlet(group, isToday, canTapRow){
   </section>`;
 }
 
-// A log entry is about a free item if its row says so (falling back to the
-// default giveaway names for rows that have since been deleted).
-function isGivenLogEntry(entry){
-  const row = salesReports.find(r=>
-    r.work_date===entry.work_date
-    && (r.store_id||null)===(entry.store_id||null)
-    && canonicalSkuName(r.product_name)===canonicalSkuName(entry.product_name)
-  );
-  return row ? isFreeItem(row) : isGiveaway(entry.product_name);
+// The last +/- tap made today by THIS person (newest first in salesLog), if any.
+function lastUndoableSalesEntry(){
+  const name = salesActorName(), promoterId = salesActorPromoterId();
+  return salesLog.find(e=>e.work_date === todayStr() && (promoterId ? e.promoter_id === promoterId : (e.admin_name === name && !e.promoter_id))) || null;
 }
 
-function renderSalesHistory(date){
-  const entries = salesLog
-    .filter(e=>e.work_date===date)
-    .sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
-  const items = entries.map(e=>{
-    const store = stores.find(s=>s.id===e.store_id);
-    const at = store ? ` at ${esc(store.name)}` : '';
-    const unit = isGivenLogEntry(e) ? 'given out' : 'sales';
-    const n = Math.abs(Number(e.delta)||0);
-    const what = esc(canonicalSkuName(e.product_name));
-    const text = Number(e.delta) > 0 ? `added ${n} ${unit} to ${what}${at}` : `removed ${n} ${unit} from ${what}${at}`;
-    const time = e.created_at ? new Date(e.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
-    return `<li class="ss-history-item"><span class="ss-name">${esc(e.admin_name || 'Someone')}</span><span class="ss-history-text">${text}</span><time>${time}</time></li>`;
-  }).join('');
-  return `<section class="ss-card">
-    <h2 class="ss-card-title">History <small>${date===todayStr()?'today':formatDateShort(date)}</small></h2>
-    ${items ? `<ul class="ss-history">${items}</ul>` : `<p class="ss-empty">Nothing logged yet — every + and − will show up here.</p>`}
-  </section>`;
+// Undo: reverse the last tap and remove its log entry, so tapping Undo again
+// steps back through your earlier taps one by one.
+async function undoLastSalesChange(){
+  const entry = lastUndoableSalesEntry();
+  if(!entry){ showToast('Nothing to undo'); return; }
+  const row = salesReports.find(r=>
+    r.work_date === entry.work_date
+    && (r.store_id||null) === (entry.store_id||null)
+    && canonicalSkuName(r.product_name) === canonicalSkuName(entry.product_name)
+  );
+  const button = document.getElementById('sales-undo-btn');
+  if(button) button.disabled = true;
+  try{
+    if(row){
+      const next = Math.max(0, Number(row.sales_qty||0) - Number(entry.delta||0));
+      await DB.updateSalesReport(row.id, { sales_qty: next });
+      row.sales_qty = next;
+    }
+    await DB.deleteSalesLog(entry.id);
+    salesLog = salesLog.filter(e=>e.id !== entry.id);
+    render();
+    showToast(`Undid ${Number(entry.delta)>0?'+':'−'}${Math.abs(entry.delta)} · ${canonicalSkuName(entry.product_name)}`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not undo — ' + (e.message || 'check your connection'));
+    if(button) button.disabled = false;
+  }
 }
 
 function renderSalesSection(){
@@ -134,6 +137,7 @@ function renderSalesSection(){
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
         ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':'🔒 '}${formatDateShort(d)}</option>`).join('')}
       </select>
+      ${isToday ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
     </div>`;
   if(!isToday) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
 
@@ -145,8 +149,6 @@ function renderSalesSection(){
   }else{
     html += outlets.map(group=>renderSalesOutlet(group,isToday,canTapRow)).join('');
   }
-
-  html += renderSalesHistory(date);
 
   // Day photos and the day's general notes sit under the log — same
   // components as before, just no longer inside a pop-up.

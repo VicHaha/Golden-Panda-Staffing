@@ -28,8 +28,8 @@ function renderSchedule(){
 
   const today = new Date(); today.setHours(0,0,0,0);
   const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 28);
-  const todayStr = today.toISOString().slice(0,10);
-  const windowEndStr = windowEnd.toISOString().slice(0,10);
+  const todayStr = localDateStr(today);
+  const windowEndStr = localDateStr(windowEnd);
   const now = new Date();
 
   function hasEnded(j){
