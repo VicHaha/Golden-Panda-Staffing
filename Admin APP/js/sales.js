@@ -573,6 +573,10 @@ function openSalesForm(id, reuseOverlay=false){
         </label>
         <div class="field-hint" id="s-free-item-hint"></div>
       </div>
+      <div class="field-row" id="s-free-fields" style="display:none;">
+        <div class="field"><label for="s-opening">Opening</label><input id="s-opening" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
+        <div class="field"><label for="s-closing">Closing</label><input id="s-closing" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
+      </div>
       <div class="field qty-small">
         <label id="s-sales-label" for="s-sales">Sales qty</label>
         <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
@@ -619,9 +623,13 @@ function onFreeItemToggle(){
 }
 
 // The one quantity box is "Sales qty", or "Given out" for free items.
+// Free items record opening, closing and given out right here (they are not
+// in Stock Management). Other products only take a sales quantity — their
+// opening and closing are kept in Stock Management.
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('s-sales-label').textContent = giveaway ? 'Given out' : 'Sales qty';
+  document.getElementById('s-free-fields').style.display = giveaway ? '' : 'none';
 }
 
 async function saveSalesForm(id){
@@ -640,8 +648,8 @@ async function saveSalesForm(id){
   const is_free_item = document.getElementById('s-free-item').checked;
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
   // Opening/closing stock and remarks are edited in Stock Management.
-  const opening_qty = editing ? Number(editing.opening_qty||0) : 0;
-  const closing_qty = editing ? Number(editing.closing_qty||0) : 0;
+  const opening_qty = is_free_item ? (parseFloat(document.getElementById('s-opening').value) || 0) : (editing ? Number(editing.opening_qty||0) : 0);
+  const closing_qty = is_free_item ? (parseFloat(document.getElementById('s-closing').value) || 0) : (editing ? Number(editing.closing_qty||0) : 0);
   const remarks = editing ? (editing.remarks || null) : null;
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that

@@ -74,24 +74,58 @@ function restoreNotesDraft(draft){
   if(saveButton) saveButton.style.display = '';
 }
 
+// Row controls: the − n + stepper (or the plain number when locked).
+function salesRowControl(row, steppable){
+  const qty = Number(row.sales_qty||0);
+  const full = esc(canonicalSkuName(row.product_name));
+  return steppable
+    ? `<span class="sales-qty-adjust ss-stepper">
+        <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',-1)" aria-label="Minus one ${full}">−</button>
+        <b class="sales-table-number">${qty}</b>
+        <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',1)" aria-label="Add one ${full}">+</button>
+      </span>`
+    : `<span class="ss-locked"><b class="sales-table-number">${qty}</b></span>`;
+}
+
+// Sold SKUs, grouped by product: the product name once, then one row per
+// variation —   1L Bio Dishwash | Bidara | − 4 +
+// Free items ("Given out") list name, opening/closing, and the stepper.
 function renderSalesTable(rows, title, isToday, canTapRow){
-  const body = rows.map(row=>{
-    const qty = Number(row.sales_qty||0);
-    const label = esc(canonicalSkuName(row.product_name));
-    const sku = canTapRow
-      ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${row.id}')" aria-label="Edit ${label}">${label}</button>`
-      : `<span class="ss-sku">${label}</span>`;
-    const control = isToday
-      ? `<span class="sales-qty-adjust ss-stepper">
-          <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',-1)" aria-label="Minus one ${esc(canonicalSkuName(row.product_name))}">−</button>
-          <b class="sales-table-number">${qty}</b>
-          <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',1)" aria-label="Add one ${esc(canonicalSkuName(row.product_name))}">+</button>
-        </span>`
-      : `<span class="ss-locked"><b class="sales-table-number">${qty}</b></span>`;
-    return `<div class="ss-row">${sku}${control}</div>`;
-  }).join('');
+  if(title !== 'SKU'){
+    const body = rows.map(row=>{
+      const full = esc(canonicalSkuName(row.product_name));
+      const sku = canTapRow
+        ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${row.id}')" aria-label="Edit ${full}">${full}</button>`
+        : `<span class="ss-sku">${full}</span>`;
+      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell">${sku}<small class="ss-meta">Opening ${Number(row.opening_qty||0)} · Closing ${Number(row.closing_qty||0)}</small></span>${salesRowControl(row, isToday)}</div>`;
+    }).join('');
+    return `<div class="ss-table">
+      <div class="ss-head ss-head-free"><span>${title}</span><span>Qty</span></div>
+      ${body}
+    </div>`;
+  }
+  const groups = [];
+  rows.forEach(row=>{
+    const { base, variation } = parseProductName(canonicalSkuName(row.product_name));
+    let group = groups.find(g=>g.base.toLowerCase() === base.toLowerCase());
+    if(!group){ group = { base, items: [] }; groups.push(group); }
+    group.items.push({ row, variation });
+  });
+  const body = groups.map(group=>group.items.map((item,index)=>{
+    const full = esc(canonicalSkuName(item.row.product_name));
+    const variation = esc(item.variation || '—');
+    const variationCell = canTapRow
+      ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${item.row.id}')" aria-label="Edit ${full}">${variation}</button>`
+      : `<span class="ss-sku">${variation}</span>`;
+    const last = index === group.items.length - 1;
+    return `<div class="ss-row ss-row-grouped ${last?'ss-group-end':''}">
+      <span class="ss-family">${index === 0 ? esc(group.base) : ''}</span>
+      ${variationCell}
+      ${salesRowControl(item.row, isToday)}
+    </div>`;
+  }).join('')).join('');
   return `<div class="ss-table">
-    <div class="ss-head"><span>${title}</span><span>${title==='SKU'?'Sales':'Qty'}</span></div>
+    <div class="ss-head ss-head-grouped"><span>SKU</span><span>Variation</span><span>Sales</span></div>
     ${body}
   </div>`;
 }
