@@ -277,6 +277,31 @@ const DB = {
     if(error) throw error;
   },
 
+  // ---------------- Product photos (one per product type, picture hosted on Cloudinary) ----------------
+  async getProductPhotos(){
+    const { data, error } = await sb
+      .from('product_photos')
+      .select('product_key, product_name, photo_url');
+    if(error) throw error;
+    return data;
+  },
+
+  async setProductPhoto(name, url){
+    const clean = (name || '').trim();
+    const { error } = await sb
+      .from('product_photos')
+      .upsert({ product_key: clean.toLowerCase(), product_name: clean, photo_url: url, updated_at: new Date().toISOString() }, { onConflict: 'product_key' });
+    if(error) throw error;
+  },
+
+  async deleteProductPhoto(name){
+    const { error } = await sb
+      .from('product_photos')
+      .delete()
+      .eq('product_key', (name || '').trim().toLowerCase());
+    if(error) throw error;
+  },
+
   // ---------------- Sales log (history of +/- taps, one day at a time) ----------------
   async getSalesLogForDate(work_date){
     const { data, error } = await sb

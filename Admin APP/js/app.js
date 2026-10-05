@@ -278,6 +278,9 @@ async function refreshData(){
   // The tap log (for Undo) is a nice-to-have: a failure here must not take the whole app down.
   try{ salesLog = await DB.getSalesLogForDate(salesEffectiveViewDate()); }
   catch(e){ console.warn('Could not load sales history (non-fatal):', e); }
+  // Product photos are optional: never let them take the app down.
+  try{ productPhotos = await DB.getProductPhotos(); }
+  catch(e){ console.warn('Could not load product photos (non-fatal):', e); }
   setSyncDot(true);
 }
 
@@ -295,6 +298,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_log' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_locations' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'product_photos' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });

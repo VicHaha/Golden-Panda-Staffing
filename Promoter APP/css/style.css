@@ -1264,3 +1264,8 @@ strong,b{font-weight:600;}
 .section-title{font-size:21px;}
 .panel-head h2{font-size:17px;}
 .modal-title{font-size:20px;}
+
+/* Product photo sits beside the product (type) name */
+.ss-family{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;}
+.ss-family .ss-thumb{margin-left:0;}
+.field label small{font-weight:400;color:var(--ink-faint);}

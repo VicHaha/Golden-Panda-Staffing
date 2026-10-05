@@ -229,6 +229,16 @@ create table if not exists day_feedback (
   updated_at timestamptz not null default now()
 );
 
+-- One photo per product TYPE (e.g. "1L Bio Dishwash"), shared by all its
+-- variations. The picture itself is hosted on Cloudinary; only its link is
+-- kept here. product_key = the product name, lower case.
+create table if not exists product_photos (
+  product_key text primary key,
+  product_name text not null,
+  photo_url text,
+  updated_at timestamptz not null default now()
+);
+
 -- Admin notes (Schedule > Memo).
 create table if not exists memos (
   id uuid primary key default gen_random_uuid(),
@@ -278,7 +288,7 @@ begin
   end loop;
 
   -- public read, signed-in write
-  foreach t in array array['sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations'] loop
+  foreach t in array array['sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "anon full access" on %I', t);
     execute format('drop policy if exists "anyone can read" on %I', t);
@@ -297,7 +307,7 @@ begin
   for r in
     select schemaname, tablename, policyname from pg_policies
     where schemaname = 'public'
-      and tablename in ('sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations')
+      and tablename in ('sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos')
       and policyname not in ('anyone can read', 'signed-in users can write')
   loop
     execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
@@ -395,7 +405,7 @@ declare
   t text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach t in array array['promoters','jobs','stores','sales_reports','sales_log','stock_locations','day_photos','day_feedback','shift_reports'] loop
+    foreach t in array array['promoters','jobs','stores','sales_reports','sales_log','stock_locations','product_photos','day_photos','day_feedback','shift_reports'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

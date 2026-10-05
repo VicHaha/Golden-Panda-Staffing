@@ -75,10 +75,12 @@ function restoreNotesDraft(draft){
   if(saveButton) saveButton.style.display = '';
 }
 
-// Small photo thumbnail for a SKU that has one (tap to enlarge).
-function skuThumb(row){
-  if(!row.photo_url) return '';
-  return `<button type="button" class="ss-thumb" onclick="openPhotoLightbox('${esc(row.photo_url)}','${esc(canonicalSkuName(row.product_name))}')" aria-label="View photo of ${esc(canonicalSkuName(row.product_name))}"><img src="${esc(row.photo_url)}" alt=""></button>`;
+// Small product photo (one per product type), shown beside the product name.
+function productThumb(name){
+  const url = productPhotoFor(name);
+  if(!url) return '';
+  const label = esc(productFamilyName(name));
+  return `<button type="button" class="ss-thumb" onclick="openPhotoLightbox('${esc(url)}','${label}')" aria-label="View photo of ${label}"><img src="${esc(url)}" alt=""></button>`;
 }
 
 // Row controls: the − n + stepper (or the plain number when locked).
@@ -106,7 +108,7 @@ function renderSalesTable(rows, title, isToday, canTapRow){
         : `<span class="ss-sku">${full}</span>`;
       const variance = Number(row.opening_qty||0) - Number(row.closing_qty||0) - Number(row.sales_qty||0);
       const varianceNote = variance !== 0 ? `<small class="ss-meta ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</small>` : '';
-      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell"><span class="ss-var-cell">${sku}${skuThumb(row)}</span>${varianceNote}</span>${salesRowControl(row, isToday)}</div>`;
+      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell"><span class="ss-var-cell">${sku}${productThumb(row.product_name)}</span>${varianceNote}</span>${salesRowControl(row, isToday)}</div>`;
     }).join('');
     return `<div class="ss-table">
       <div class="ss-head ss-head-free"><span>${title}</span><span>Qty</span></div>
@@ -128,8 +130,8 @@ function renderSalesTable(rows, title, isToday, canTapRow){
       : `<span class="ss-sku">${variation}</span>`;
     const last = index === group.items.length - 1;
     return `<div class="ss-row ss-row-grouped ${last?'ss-group-end':''}">
-      <span class="ss-family">${index === 0 ? esc(group.base) : ''}</span>
-      <span class="ss-var-cell">${variationCell}${skuThumb(item.row)}</span>
+      <span class="ss-family">${index === 0 ? `<span class="ss-family-name">${esc(group.base)}</span>${productThumb(item.row.product_name)}` : ''}</span>
+      ${variationCell}
       ${salesRowControl(item.row, isToday)}
     </div>`;
   }).join('')).join('');

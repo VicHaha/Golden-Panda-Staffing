@@ -562,10 +562,15 @@ function openSalesForm(id, reuseOverlay=false){
         </select>
       </div>
       <div class="field-row">
-        <div class="field" style="flex:1;">
-          <label>Product name (full SKU, e.g. 1L Bio Dishwash (Bidara))</label>
-          <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. 1L Bio Dishwash (Bidara)" oninput="onProductNameChange()">
-          <datalist id="product-list">${getSkuSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+        <div class="field" style="flex:1.4;">
+          <label>Product</label>
+          <input id="s-product" list="product-list" value="${editing?esc(isFreeItem(editing)?editing.product_name:parseProductName(editing.product_name).base):''}" placeholder="e.g. 1L Bio Dishwash" oninput="onProductNameChange()" onchange="onProductNameChange()">
+          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+        </div>
+        <div class="field" id="s-variation-field">
+          <label>Variation</label>
+          <input id="s-variation" list="variation-list" value="${editing&&!isFreeItem(editing)?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()" onchange="onProductNameChange()">
+          <datalist id="variation-list">${getVariationSuggestions(editing?parseProductName(editing.product_name).base:'').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
         </div>
       </div>
       <div class="field-hint" style="margin:-8px 0 14px;"></div>
@@ -587,16 +592,15 @@ function openSalesForm(id, reuseOverlay=false){
       </div>
       </div>
       <div class="field">
-        <label>Photo (optional)</label>
+        <label>Product photo (optional) <small>— one photo for all variations</small></label>
         <div class="photo-picker">
-          <img id="sp-preview" class="photo-preview" alt="SKU photo" src="${editing&&editing.photo_url?esc(editing.photo_url):''}" style="${editing&&editing.photo_url?'':'display:none;'}">
-          <div id="sp-empty" class="photo-preview photo-preview-empty" style="${editing&&editing.photo_url?'display:none;':''}"></div>
+          <img id="sp-preview" class="photo-preview" alt="Product photo" src="${editing&&productPhotoFor(editing.product_name)?esc(productPhotoFor(editing.product_name)):''}" style="${editing&&productPhotoFor(editing.product_name)?'':'display:none;'}">
+          <div id="sp-empty" class="photo-preview photo-preview-empty" style="${editing&&productPhotoFor(editing.product_name)?'display:none;':''}"></div>
           <div class="photo-picker-actions">
             <label class="btn btn-ghost btn-sm">Take / choose photo<input type="file" accept="image/*" capture="environment" hidden onchange="onSkuPhotoPicked(this)"></label>
             <button type="button" class="btn btn-ghost btn-sm" onclick="clearSkuPhoto()">Remove</button>
           </div>
         </div>
-        <input type="hidden" id="sp-url" value="${editing&&editing.photo_url?esc(editing.photo_url):''}">
       </div>
       <div class="field-hint" id="s-variance" style="display:none;"></div>
       <div class="modal-actions">
@@ -614,6 +618,7 @@ function openSalesForm(id, reuseOverlay=false){
   // product name field stops overriding their choice.
   salesFormFreeItemTouched = false;
   skuPhotoFile = null;
+  skuPhotoCleared = false;
   salesFormDerivedFieldTouched = false;
   salesFormLastFreeItem = null;
   applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
@@ -622,24 +627,46 @@ function openSalesForm(id, reuseOverlay=false){
 // Tracks whether the person has manually ticked/unticked the "Free item"
 // checkbox in the currently-open form — once true, typing in the product
 // name field no longer overwrites their choice.
+// Product photos: ONE photo per product type (e.g. 1L Bio Dishwash), shared by
+// all its variations, kept in the product_photos table; the picture itself
+// lives on Cloudinary.
+let productPhotos = [];
+function productFamilyName(name){
+  return parseProductName(canonicalSkuName(name)).base;
+}
+function productPhotoFor(name){
+  const key = productFamilyName(name).toLowerCase();
+  const found = productPhotos.find(p=>p.product_key === key);
+  return found ? found.photo_url : null;
+}
+
 // Photo chosen in the open sales form (uploaded to Cloudinary on Save).
 let skuPhotoFile = null;
+let skuPhotoCleared = false;
 function onSkuPhotoPicked(input){
   const file = input.files && input.files[0];
   if(!file) return;
   skuPhotoFile = file;
+  skuPhotoCleared = false;
   const preview = document.getElementById('sp-preview');
   preview.src = URL.createObjectURL(file);
   preview.style.display = '';
   document.getElementById('sp-empty').style.display = 'none';
-  document.getElementById('sp-url').value = '';
   input.value = '';
 }
 function clearSkuPhoto(){
   skuPhotoFile = null;
-  document.getElementById('sp-url').value = '';
+  skuPhotoCleared = true;
   document.getElementById('sp-preview').style.display = 'none';
   document.getElementById('sp-empty').style.display = '';
+}
+// Typing a different product shows that product's existing photo.
+function refreshSkuPhotoPreview(){
+  if(skuPhotoFile || skuPhotoCleared) return;
+  const url = productPhotoFor(document.getElementById('s-product').value);
+  const preview = document.getElementById('sp-preview');
+  if(url){ preview.src = url; preview.style.display = ''; document.getElementById('sp-empty').style.display = 'none'; }
+  else{ preview.style.display = 'none'; document.getElementById('sp-empty').style.display = ''; }
 }
 
 let salesFormFreeItemTouched = false;
@@ -654,6 +681,7 @@ function onProductNameChange(){
     document.getElementById('s-free-item').checked = isGiveaway(document.getElementById('s-product').value);
   }
   applyFreeItemFieldLayout();
+  refreshSkuPhotoPreview();
 }
 
 function onFreeItemToggle(){
@@ -686,6 +714,7 @@ function applyFreeItemFieldLayout(){
   document.getElementById('s-sales-label').textContent = giveaway ? 'Given out' : 'Sales qty';
   // Free items: Opening, Closing and Given out sit side by side in one row.
   document.getElementById('s-free-fields').style.display = giveaway ? 'contents' : 'none';
+  document.getElementById('s-variation-field').style.display = giveaway ? 'none' : '';
   document.getElementById('s-qty-row').classList.toggle('free', giveaway);
   updateFreeVariance();
 }
@@ -701,7 +730,9 @@ async function saveSalesForm(id){
   const promoter_id = editing ? (editing.promoter_id || null) : null;
   const store_id = document.getElementById('s-store').value || null;
   const productBase = document.getElementById('s-product').value.trim();
-  const product_name = canonicalSkuName(productBase);
+  const isFreeForm = document.getElementById('s-free-item').checked;
+  const variation = isFreeForm ? '' : document.getElementById('s-variation').value;
+  const product_name = canonicalSkuName(composeProductName(productBase, variation));
   const is_free_item = document.getElementById('s-free-item').checked;
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
   // Opening/closing stock and remarks are edited in Stock Management.
@@ -711,7 +742,7 @@ async function saveSalesForm(id){
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
-  let photo_url = document.getElementById('sp-url').value || null;
+  const photo_url = editing ? (editing.photo_url || null) : null;
   // Who typed this in — only set for brand-new admin-entered rows (never
   // overwritten on edit, so it always reflects who originally logged it,
   // and never touched for promoter-entered rows, which use promoter_id
@@ -726,10 +757,11 @@ async function saveSalesForm(id){
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
+    let familyPhotoUrl = null;
     if(skuPhotoFile){
       btn.textContent = 'Uploading photo…';
       const compressed = await compressImageFile(skuPhotoFile);
-      photo_url = await uploadPhotoToCloudinary(compressed);
+      familyPhotoUrl = await uploadPhotoToCloudinary(compressed);
     }
     btn.textContent = 'Saving…';
     // Note: this form never touches the per-location quantities
@@ -741,6 +773,15 @@ async function saveSalesForm(id){
       await DB.updateSalesReport(id, payload);
     }else{
       await DB.addSalesReport(payload);
+    }
+    // The photo belongs to the product type, not to this one variation.
+    const family = parseProductName(product_name).base;
+    try{
+      if(familyPhotoUrl) await DB.setProductPhoto(family, familyPhotoUrl);
+      else if(skuPhotoCleared) await DB.deleteProductPhoto(family);
+    }catch(photoError){
+      console.error(photoError);
+      showToast('Saved, but the photo could not be saved');
     }
     await refreshData();
     closeModal();
