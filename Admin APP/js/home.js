@@ -21,10 +21,11 @@ function formatShiftRange(start, end){
   return `${s.text}${s.meridiem}–${e.text}${e.meridiem}`;
 }
 
-function homeCard(tab, tag, body){
-  return `<section class="home-card" role="button" tabindex="0" onclick="switchTab('${tab}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();switchTab('${tab}')}" aria-label="Open ${esc(tag)}">
-    <span class="home-card-tag">${esc(tag)}</span>
-    ${body}
+// A Home section: heading row with a "View" link to the full screen, then the list.
+function homeCard(tab, title, body){
+  return `<section class="panel">
+    <header class="panel-head"><h2>${esc(title)}</h2><button type="button" class="link-btn" onclick="switchTab('${tab}')">View ›</button></header>
+    <div class="panel-body">${body}</div>
   </section>`;
 }
 
@@ -116,9 +117,11 @@ function renderHome(){
 
   const controls = `
     <div class="home-controls">
-      <button class="mode-btn ${daily?'active':''}" id="stock-export-mode-daily">Daily</button>
-      <button class="mode-btn ${!daily?'active':''}" id="stock-export-mode-monthly">Monthly</button>
-      <button class="btn btn-gold home-export" id="stock-export-btn">Export</button>
+      <div class="segmented" role="group" aria-label="Period">
+        <button class="mode-btn ${daily?'active':''}" id="stock-export-mode-daily">Daily</button>
+        <button class="mode-btn ${!daily?'active':''}" id="stock-export-mode-monthly">Monthly</button>
+      </div>
+      <button class="btn btn-ghost home-export" id="stock-export-btn">Export</button>
     </div>
     <div class="month-picker-row">
       ${daily
@@ -126,19 +129,21 @@ function renderHome(){
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}" aria-label="Month">`}
     </div>`;
 
-  // Everything on Home follows the day picked above (Daily) — Sales Record,
+  // Everything on Home follows the day picked above (Daily): Sales Record,
   // Stock Record and On Duty all describe that same day, straight from the
-  // Schedule. In Monthly mode the day-based cards describe today. Records only
-  // show for working dates (days that have jobs on the Schedule).
+  // Schedule. Monthly mode shows just the month's Sales Record.
   const homeDate = daily ? stockExportDate : today;
   const homeLabel = homeDate === today ? 'Today' : formatDateShort(homeDate);
-  // Monthly mode: just the Sales Record card for the month.
   if(!daily) return controls + renderHomeSalesRecord();
-  const salesCard = daily && !isWorkingDate(homeDate)
-    ? renderNotWorkingCard(homeLabel)
-    : renderHomeSalesRecord();
-  const dayCards = isWorkingDate(homeDate)
-    ? renderHomeStockRecord(homeDate) + renderHomeOnDuty(homeDate)
-    : renderNotWorkingCard(homeLabel);
-  return controls + salesCard + dayCards;
+  if(!isWorkingDate(homeDate)) return controls + renderNotWorkingCard(homeLabel);
+
+  const soldUnits = homeSalesRecord().reduce((sum,[,qty])=>sum+qty,0);
+  const lowSkus = lowStockEntries(homeDate).length;
+  const crew = jobs.filter(job=>job.work_date === homeDate && job.promoters).length;
+  const kpis = `<div class="kpi-row kpi-3">
+    <button type="button" class="kpi" onclick="switchTab('sales')"><small>Sold</small><b>${soldUnits}</b></button>
+    <button type="button" class="kpi ${lowSkus?'is-low':''}" onclick="switchTab('stock')"><small>Low stock</small><b>${lowSkus}</b></button>
+    <button type="button" class="kpi" onclick="switchTab('roster')"><small>On duty</small><b>${crew}</b></button>
+  </div>`;
+  return controls + kpis + renderHomeSalesRecord() + renderHomeStockRecord(homeDate) + renderHomeOnDuty(homeDate);
 }

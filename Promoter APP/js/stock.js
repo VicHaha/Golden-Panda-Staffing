@@ -85,29 +85,39 @@ function formatVariance(value){
   return `${value>0?'+':value<0?'−':'±'}${Math.abs(value)}`;
 }
 
-function renderStockBlock(label, rows, field, showLow, outletKey, date){
-  const totals = stockLocationTotals(rows, field, rows.length ? rows[0].store_id || null : null);
-  const total = totals.filter(item=>locationCounts(item.loc)).reduce((sum,item)=>sum+item.total,0);
-  const lowCount = showLow ? rows.filter(isLowClosing).length : 0;
-  const variance = showLow ? rows.reduce((sum,row)=>sum+stockVariance(row),0) : 0;
-  const mismatched = showLow ? rows.filter(row=>stockVariance(row)!==0).length : 0;
-  return `<button type="button" class="stock-block ${lowCount?'is-low':''}" onclick="openOutletStockSummary('${outletKey}','${date}',false,'${field}')" aria-label="${label} — view and edit">
-    <span class="stock-block-head">
-      <span class="stock-block-label">${label}</span>
-      <span class="stock-block-total">${lowCount?`<em class="stock-low-flag" title="${lowCount} SKU${lowCount>1?'s':''} under ${LOW_STOCK_THRESHOLD}">LOW</em>`:''}<b>${total}</b></span>
-    </span>
-    ${renderStockBoxes(totals)}
-    ${mismatched?`<span class="stock-variance ${variance<0?'short':'over'}">Variance ${formatVariance(variance)} · ${mismatched} SKU${mismatched>1?'s':''} don't tally</span>`:''}
-  </button>`;
-}
-
+// One card per outlet: Opening and Closing totals up top (tap one to open just
+// that count), then a plain table of the figures per location.
 function renderStockOutletCard(outlet, date){
-  const hasLow = outlet.rows.some(isLowClosing);
-  return `<div class="stock-outlet-card ${hasLow?'has-alert':''}">
-    <span class="stock-outlet-top"><strong>${esc(outlet.name)}</strong><small>${date===todayStr()?'Today':formatDateShort(date)} · ${outlet.rows.length} SKUs</small></span>
-    ${renderStockBlock('Opening', outlet.rows, 'opening', false, outlet.key, date)}
-    ${renderStockBlock('Closing', outlet.rows, 'closing', true, outlet.key, date)}
-  </div>`;
+  const sid = outlet.rows.length ? outlet.rows[0].store_id || null : null;
+  const openTotals = stockLocationTotals(outlet.rows, 'opening', sid);
+  const closeTotals = stockLocationTotals(outlet.rows, 'closing', sid);
+  const sum = totals => totals.filter(item=>locationCounts(item.loc)).reduce((acc,item)=>acc+item.total,0);
+  const openTotal = sum(openTotals), closeTotal = sum(closeTotals);
+  const lowCount = outlet.rows.filter(isLowClosing).length;
+  const variance = outlet.rows.reduce((acc,row)=>acc+stockVariance(row),0);
+  const mismatched = outlet.rows.filter(row=>stockVariance(row)!==0).length;
+  const action = (date === todayStr() || canEditPastSales()) ? 'Edit' : 'View';
+  const locationRows = openTotals.length
+    ? openTotals.map((item,index)=>`<tr class="${locationCounts(item.loc)?'':'excluded'}">
+        <th scope="row">${esc(item.loc.name)}${locationCounts(item.loc)?'':' <small>not in total</small>'}</th>
+        <td>${item.total}</td><td>${closeTotals[index].total}</td></tr>`).join('')
+    : '<tr><th scope="row" colspan="3">No stock locations yet</th></tr>';
+  return `<section class="panel stock-card">
+    <header class="panel-head"><h2>${esc(outlet.name)}</h2><span class="panel-meta">${date===todayStr()?'Today':formatDateShort(date)} · ${outlet.rows.length} SKUs</span></header>
+    <div class="stock-totals">
+      <button type="button" class="stock-total-btn" onclick="openOutletStockSummary('${outlet.key}','${date}',false,'opening')" aria-label="Opening stock — ${action.toLowerCase()}">
+        <small>Opening</small><b>${openTotal}</b><span>${action} ›</span>
+      </button>
+      <button type="button" class="stock-total-btn ${lowCount?'is-low':''}" onclick="openOutletStockSummary('${outlet.key}','${date}',false,'closing')" aria-label="Closing stock — ${action.toLowerCase()}">
+        <small>Closing ${lowCount?`<em class="stock-low-flag" title="${lowCount} SKU${lowCount>1?'s':''} under ${LOW_STOCK_THRESHOLD}">LOW</em>`:''}</small><b>${closeTotal}</b><span>${action} ›</span>
+      </button>
+    </div>
+    <table class="stock-loc-table">
+      <thead><tr><th>Location</th><th>Opening</th><th>Closing</th></tr></thead>
+      <tbody>${locationRows}</tbody>
+    </table>
+    ${mismatched?`<div class="stock-variance ${variance<0?'short':'over'}">Variance ${formatVariance(variance)} · ${mismatched} SKU${mismatched>1?'s':''} don't tally</div>`:''}
+  </section>`;
 }
 
 function renderStockPastRecords(activeDate){

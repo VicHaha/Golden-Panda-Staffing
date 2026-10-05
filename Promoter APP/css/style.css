@@ -1123,3 +1123,83 @@ strong,b{font-weight:600;}
 
 .field-hint.variance-ok{color:var(--bamboo);font-weight:600;}
 .field-hint.variance-off{color:var(--brick);font-weight:600;}
+
+
+/* ============================================================
+   Layout v6 — cleaner structure, same functions and fields.
+   One pattern everywhere: a page title, then panels (a heading row +
+   plain rows), summary tiles at the top, segmented switches.
+   ============================================================ */
+.content{padding:16px 16px 96px;}
+.section-title{margin:2px 2px 14px;font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--ink);}
+
+/* panels */
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:none;}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px 10px;}
+.panel-head h2{margin:0;font-size:15px;font-weight:700;color:var(--ink);}
+.panel-meta{font-size:12px;color:var(--ink-faint);white-space:nowrap;}
+.panel-body{padding:0 16px 14px;}
+.panel-sub{padding:12px 16px 6px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.link-btn{padding:4px 0 4px 8px;border:none;background:none;color:var(--gold-deep);font:600 13px/1.2 'Inter',sans-serif;cursor:pointer;}
+
+/* summary tiles */
+.kpi-row{display:grid;gap:10px;margin-bottom:14px;}
+.kpi-row.kpi-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+.kpi{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;text-align:left;cursor:pointer;}
+.kpi.static{cursor:default;}
+.kpi small{color:var(--ink-faint);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.kpi b{font-size:24px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;}
+.kpi.is-low{border-color:rgba(164,61,44,.45);background:#fbf1ee;}
+.kpi.is-low b{color:var(--brick);}
+
+/* segmented switches (Daily/Monthly, Schedule/Promoter Details) */
+.segmented{display:flex;flex:1;max-width:260px;padding:3px;border-radius:10px;background:var(--gold-tint);}
+.segmented .mode-btn{flex:1;min-height:38px;border:none;border-radius:8px;background:transparent;color:var(--ink-soft);font-size:13px;font-weight:600;}
+.segmented .mode-btn.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(59,42,22,.14);}
+.period-toggle{display:flex;gap:0;margin-bottom:14px;padding:3px;border-radius:10px;background:var(--gold-tint);}
+.period-btn{flex:1;min-height:38px;border:none;border-radius:8px;background:transparent;color:var(--ink-soft);font-size:13px;font-weight:600;}
+.period-btn.active{background:#fff;color:var(--ink);border:none;box-shadow:0 1px 2px rgba(59,42,22,.14);}
+.home-controls{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.home-controls .btn.home-export{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--gold-deep);}
+.month-picker-row{margin-bottom:14px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:none;}
+.month-picker-row select,.month-picker-row input{min-height:46px;font-size:15px;font-weight:600;}
+
+/* Home lists inside panels */
+.panel-body .home-list li{padding:10px 0;}
+.panel-body .home-outlet{margin:6px 0 0;padding:0;background:none;color:var(--ink-faint);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.panel-body .home-empty,.panel-body .home-ok{margin:0;}
+
+/* Sales Section panels */
+.panel .ss-table{border:none;border-radius:0;box-shadow:none;}
+.panel .ss-head{border-top:1px solid var(--line);}
+.panel.ss-outlet{margin-bottom:14px;}
+.ss-photos > summary{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;list-style:none;}
+.ss-photos > summary::-webkit-details-marker{display:none;}
+.ss-photos > summary::after{content:'›';color:var(--ink-faint);font-size:20px;transform:rotate(90deg);transition:transform .15s;}
+.ss-photos[open] > summary::after{transform:rotate(-90deg);}
+.ss-photos .day-photo-section{margin:0 -16px 8px;}
+.ss-photos .day-feedback-block{margin-top:10px;}
+.ss-date-row{margin-bottom:14px;}
+
+/* Stock cards */
+.stock-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 14px;}
+.stock-total-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;}
+.stock-total-btn small{display:flex;align-items:center;gap:6px;color:var(--ink-faint);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.stock-total-btn b{font-size:26px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;}
+.stock-total-btn span{color:var(--gold-deep);font-size:12px;font-weight:600;}
+.stock-total-btn.is-low{border-color:rgba(164,61,44,.5);background:#fbf1ee;}
+.stock-total-btn:active{background:var(--gold-tint);}
+.stock-loc-table{width:100%;border-collapse:collapse;font-size:13px;}
+.stock-loc-table th,.stock-loc-table td{padding:9px 16px;border-top:1px solid var(--line);}
+.stock-loc-table thead th{background:var(--bg);color:var(--ink-faint);font-size:11px;font-weight:700;letter-spacing:.06em;text-align:right;text-transform:uppercase;}
+.stock-loc-table thead th:first-child,.stock-loc-table tbody th{text-align:left;}
+.stock-loc-table tbody th{font-weight:500;}
+.stock-loc-table td{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;}
+.stock-loc-table tr.excluded th,.stock-loc-table tr.excluded td{color:var(--ink-faint);}
+.stock-loc-table small{color:var(--ink-faint);font-size:11px;font-weight:400;}
+.stock-card .stock-variance{display:block;margin:0;padding:10px 16px;border-top:1px solid var(--line);border-radius:0;font-size:12px;}
+.stock-card .stock-low-flag{font-size:10px;}
+.stock-page-head{margin-bottom:12px;}
+.stock-past-date{margin-top:6px;}
+
+.panel .ss-head-free{display:none;}

@@ -15,7 +15,8 @@
 // ============================================================
 
 let salesViewDate = null; // null = today (so a tab left open overnight rolls over)
-let salesLog = [];        // sales_log rows for the day being viewed, newest first
+let salesLog = [];
+let salesPhotosOpen = false;   // keeps the Photos & notes panel open across redraws        // sales_log rows for the day being viewed, newest first
 
 function salesViewDateValue(){ return salesViewDate || todayStr(); }
 
@@ -134,10 +135,12 @@ function renderSalesOutlet(group, isToday, canTapRow){
   const sorted = [...group.items].sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b));
   const sold = sorted.filter(r=>!isFreeItem(r));
   const given = sorted.filter(r=>isFreeItem(r));
-  return `<section class="ss-outlet">
-    <h2 class="ss-outlet-title">${esc(group.label)}</h2>
+  const soldTotal = sold.reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
+  const givenTotal = given.reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
+  return `<section class="panel ss-outlet">
+    <header class="panel-head"><h2>${esc(group.label)}</h2><span class="panel-meta">${soldTotal} sold${given.length?` · ${givenTotal} given out`:''}</span></header>
     ${sold.length ? renderSalesTable(sold,'SKU',isToday,canTapRow) : ''}
-    ${given.length ? `<div class="ss-given-title">Given out</div>${renderSalesTable(given,'Item',isToday,canTapRow)}` : ''}
+    ${given.length ? `<div class="panel-sub">Given out</div>${renderSalesTable(given,'Item',isToday,canTapRow)}` : ''}
   </section>`;
 }
 
@@ -211,14 +214,24 @@ function renderSalesSection(){
     html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
     return html;
   }else{
+    const soldUnits = rows.filter(r=>!isFreeItem(r)).reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
+    const givenUnits = rows.filter(r=>isFreeItem(r)).reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
+    html += `<div class="kpi-row kpi-3">
+      <div class="kpi static"><small>Sold</small><b>${soldUnits}</b></div>
+      <div class="kpi static"><small>Given out</small><b>${givenUnits}</b></div>
+      <div class="kpi static"><small>Outlets</small><b>${outlets.length}</b></div>
+    </div>`;
     html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');
   }
 
   // Day photos and the day's general notes sit under the tables.
-  html += `<section class="ss-card"><div class="ss-card-title">Photos &amp; notes</div>
-    ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date,isToday) : ''}
-    ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date) : ''}
-  </section>`;
+  html += `<details class="panel ss-photos" ${salesPhotosOpen?'open':''} ontoggle="salesPhotosOpen=this.open">
+    <summary>Photos &amp; notes</summary>
+    <div class="panel-body">
+      ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date,isToday) : ''}
+      ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date) : ''}
+    </div>
+  </details>`;
   return html;
 }
 
