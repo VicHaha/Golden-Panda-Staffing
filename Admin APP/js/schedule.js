@@ -312,9 +312,32 @@ async function saveJobForm(id){
 }
 
 async function deleteJob(id){
-  if(!confirm('Remove this job from the schedule?')) return;
+  const job = jobs.find(j=>j.id === id);
+  // The schedule decides what exists: when the last job at an outlet on a day is
+  // removed, that outlet's records for the day are removed with it.
+  const storeId = job ? jobStoreId(job) : null;
+  const date = job ? job.work_date : null;
+  const wipeOutlet = !!(job && storeId && !jobs.some(j=>j.id !== id && j.work_date === date && jobStoreId(j) === storeId));
+  const wipeDay = !!(job && !jobs.some(j=>j.id !== id && j.work_date === date));
+  const stockRecords = wipeOutlet ? salesReports.filter(r=>r.work_date === date && r.store_id === storeId).length : 0;
+  const shiftRecords = wipeOutlet ? shiftReports.filter(r=>r.work_date === date && r.store_id === storeId).length : 0;
+  const extras = wipeDay ? dayPhotos.filter(p=>p.work_date === date).length + dayFeedback.filter(f=>f.work_date === date).length : 0;
+  let message = 'Remove this job from the schedule?';
+  if(stockRecords || shiftRecords || extras){
+    const outlet = job.stores ? job.stores.name : 'this outlet';
+    const parts = [];
+    if(stockRecords) parts.push(`${stockRecords} stock/sales record${stockRecords>1?'s':''}`);
+    if(shiftRecords) parts.push(`${shiftRecords} shift report${shiftRecords>1?'s':''}`);
+    if(extras) parts.push(`${extras} photo/note${extras>1?'s':''}`);
+    message += `
+
+No one else is scheduled${wipeOutlet?` at ${outlet}`:''} on ${formatDateShort(date)}, so ${parts.join(', ')} for that day will be deleted too. This cannot be undone.`;
+  }
+  if(!confirm(message)) return;
   try{
     await DB.deleteJob(id);
+    if(wipeOutlet) await DB.deleteOutletDayRecords(storeId, date);
+    if(wipeDay) await DB.deleteDayExtras(date);
     await refreshData();
     render();
     showToast('Job removed');

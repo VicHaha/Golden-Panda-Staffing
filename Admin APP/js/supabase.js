@@ -168,6 +168,23 @@ const DB = {
     if(error) throw error;
   },
 
+  // Removing the last job at an outlet on a day also removes that outlet's
+  // records for that day (stock/sales, tap history, shift reports).
+  async deleteOutletDayRecords(storeId, workDate){
+    for(const table of ['sales_reports','sales_log','shift_reports']){
+      const { error } = await sb.from(table).delete().eq('store_id', storeId).eq('work_date', workDate);
+      if(error) throw error;
+    }
+  },
+
+  // ...and when nobody at all is scheduled that day, its photos and notes go too.
+  async deleteDayExtras(workDate){
+    for(const table of ['day_photos','day_feedback']){
+      const { error } = await sb.from(table).delete().eq('work_date', workDate);
+      if(error) throw error;
+    }
+  },
+
   async deleteJob(id){
     const { error } = await sb
       .from('jobs')
