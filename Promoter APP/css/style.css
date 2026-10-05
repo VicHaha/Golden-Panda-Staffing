@@ -1431,3 +1431,8 @@ button,input,select,textarea{font-family:inherit;}
 
 .ss-free-grid{grid-template-columns:minmax(0,1fr) 54px 54px 108px;column-gap:4px;}
 .ss-head-free.ss-free-grid span:nth-child(n+2){font-size:9.5px;letter-spacing:.03em;}
+
+/* Sales numbers: bold, same size as the text beside them */
+.ss-row .sales-table-number,.sales-qty-adjust.ss-stepper .sales-table-number,.ss-locked .sales-table-number,.ss-vrow .sales-table-number{
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;font-weight:700;
+}
