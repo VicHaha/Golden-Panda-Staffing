@@ -31,6 +31,10 @@ function ageRangeLabel(range){
 }
 
 function renderShift(){
+  // Not a working date for this promoter: no records, just the message.
+  if(!scheduledStoreIdsForDate(todayStr()).size){
+    return emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
+  }
   if(shiftReports.length === 0){
     return emptyState('📋','No shift reports yet','Tap + to log engagement numbers for a shift.');
   }
@@ -126,6 +130,7 @@ function toggleShiftDate(date){
 function openShiftForm(id){
   const editing = id ? shiftReports.find(r=>r.id===id) : null;
   const today = todayStr();
+  if(!editing && !scheduledStoreIdsForDate(today).size){ showToast('Today is not a working date — nothing to record'); return; }
   const formDate = editing ? editing.work_date : today;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
