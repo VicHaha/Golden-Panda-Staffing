@@ -140,9 +140,11 @@ function renderHome(){
   const record = homeSalesRecord();
   const soldUnits = record.reduce((sum,[,qty])=>sum+qty,0);
   const outletCount = jobStoreIdsForDate(homeDate).size;
+  // Total SKUs on that day (not just the ones that sold): distinct sellable products across the outlets.
+  const totalSkus = new Set(salesReports.filter(r=>r.work_date === homeDate && !isFreeItem(r)).map(r=>canonicalSkuName(r.product_name))).size;
   const kpis = `<div class="kpi-row kpi-3">
     <div class="kpi static"><small>Sold</small><b>${soldUnits}</b></div>
-    <div class="kpi static"><small>SKUs</small><b>${record.length}</b></div>
+    <div class="kpi static"><small>SKUs</small><b>${totalSkus}</b></div>
     <div class="kpi static"><small>Outlets</small><b>${outletCount}</b></div>
   </div>`;
   return controls + kpis + renderHomeSalesRecord() + renderHomeStockRecord(homeDate) + renderHomeOnDuty(homeDate);

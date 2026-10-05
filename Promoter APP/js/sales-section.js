@@ -220,13 +220,6 @@ function renderSalesSection(){
     html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
     return html;
   }else{
-    const soldUnits = rows.filter(r=>!isFreeItem(r)).reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
-    const skuCount = new Set(rows.filter(r=>!isFreeItem(r) && Number(r.sales_qty||0) > 0).map(r=>canonicalSkuName(r.product_name))).size;
-    html += `<div class="kpi-row kpi-3">
-      <div class="kpi static"><small>Sold</small><b>${soldUnits}</b></div>
-      <div class="kpi static"><small>SKUs</small><b>${skuCount}</b></div>
-      <div class="kpi static"><small>Outlets</small><b>${outlets.length}</b></div>
-    </div>`;
     html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');
   }
 

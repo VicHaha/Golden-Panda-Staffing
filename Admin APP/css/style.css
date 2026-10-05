@@ -1452,3 +1452,6 @@ strong,b{font-weight:600;}
 .photo-preview-empty{background:var(--bg);border:1px dashed var(--line);}
 .photo-picker-actions{display:flex;flex-wrap:wrap;gap:8px;}
 .photo-picker-actions label.btn{cursor:pointer;}
+
+/* Given-out items: no divider lines between them */
+.ss-row.ss-row-free,.ss-row.ss-row-free.ss-group-end{border-bottom:none;}
