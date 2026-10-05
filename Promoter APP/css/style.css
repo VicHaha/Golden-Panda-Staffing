@@ -733,3 +733,9 @@ body{
 .memo-text{overflow-wrap:anywhere;white-space:pre-wrap;font-size:14px;}
 .memo-add-row{align-items:flex-end;}
 .memo-add-row .btn{margin-bottom:16px;}
+
+/* Phone-width column on every screen size: content, nav bar and floating buttons share one width. */
+#root{max-width:460px;}
+.phone{max-width:460px;}
+.tabbar,.fab{max-width:460px;}
+@media (min-width:600px){.content{padding:20px 16px 112px;}.fab{padding:0 20px;}}
