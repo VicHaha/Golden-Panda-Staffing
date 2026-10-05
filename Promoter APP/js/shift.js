@@ -38,7 +38,7 @@ function renderShift(){
     const previous = previousWorkingDate();
     const items = previous ? shiftReports.filter(r=>r.work_date === previous).sort((a,b)=>a.shift.localeCompare(b.shift)) : [];
     if(!items.length) return title + emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
-    return title + `<div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(previous)} (view only).</div>
+    return title + `<div class="ss-prev-date">${formatDateShort(previous)}</div>
       <div class="shift-report-group"><div class="shift-report-body">${renderShiftItems(items, true)}</div></div>`;
   }
   if(shiftReports.length === 0){

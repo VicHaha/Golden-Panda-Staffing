@@ -144,15 +144,15 @@ function renderSalesSection(){
     return `<div class="section-title">Sales Report</div>` + emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
   }
 
-  let html = idle
-    ? `<div class="section-title">Sales Report</div><div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(date)} (view only).</div><div hidden>`
-    : `<div class="section-title">Sales Report</div><div class="ss-date-row">
+  const dateRow = `<div class="ss-date-row">
       <label class="ss-date-label" for="sales-date-select">Date</label>
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
         ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':'🔒 '}${formatDateShort(d)}</option>`).join('')}
       </select>
       ${isToday ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
     </div>`;
+  // Promoter app on a non-working day: just the previous record, with its date.
+  let html = `<div class="section-title">Sales Report</div>` + (idle ? `<div class="ss-prev-date">${formatDateShort(date)}</div>` : dateRow);
   if(!isToday && !idle) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
 
   if(!rows.length){

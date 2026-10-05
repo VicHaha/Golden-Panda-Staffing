@@ -1020,3 +1020,5 @@ button.stock-block:active{background:var(--gold-tint);}
 .ss-date-row #sales-undo-btn{flex:0 0 auto;min-height:44px;}
 
 .stock-history-toggle{display:inline-flex;min-width:0;margin:14px 0 0;}
+
+.ss-prev-date{margin:-4px 2px 12px;color:var(--ink-soft);font-size:13px;font-weight:600;}

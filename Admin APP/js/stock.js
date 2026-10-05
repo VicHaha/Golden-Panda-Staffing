@@ -143,7 +143,7 @@ function renderStockManagement(){
     const previous = isPromoterApp() ? previousWorkingDate() : null;
     const previousOutlets = previous ? outletStocksForDate(previous) : [];
     if(!previousOutlets.length) return html + emptyState('🗓️','Today is not a working date','Stock appears here on days you are scheduled.');
-    return html + `<div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(previous)} (view only).</div>`
+    return html + `<div class="ss-prev-date">${formatDateShort(previous)}</div>`
       + `<div class="stock-outlet-grid">${previousOutlets.map(outlet=>renderStockOutletCard(outlet,previous)).join('')}</div>`;
   }
   if(!outlets.length){
