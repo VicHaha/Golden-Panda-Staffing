@@ -233,9 +233,6 @@ async function startApp(){
       <div class="content" id="content"></div>
       <div class="fab" id="fab">
         <button onclick="openFab()" aria-label="Add">+</button>
-        <button type="button" class="fab-photo hidden" onclick="openProductPhotosSheet()" aria-label="Product photos" title="Product photos">
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>
-        </button>
       </div>
       <div class="tabbar">
         <button class="tab" data-tab="sales" onclick="switchTab('sales')">
@@ -458,8 +455,6 @@ function render(){
   c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSalesSection();
   const fab = document.getElementById('fab');
   if(fab) fab.style.display = (currentTab==='schedule' || currentTab==='sales') ? 'none' : '';
-  const photoButton = document.querySelector('.fab-photo');
-  if(photoButton) photoButton.classList.toggle('hidden', currentTab!=='stock');
 }
 
 // ---------- Service worker (offline shell + installability) ----------
