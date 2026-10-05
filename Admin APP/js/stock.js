@@ -272,6 +272,7 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}','${field}')">Save</button>
       </div>
+      ${(canEditPastSales() || editing.work_date===todayStr()) ? `<button type="button" class="btn btn-danger-ghost btn-block sales-delete-action" onclick="deleteStockSku('${id}')">Delete this SKU</button>` : ''}
     </div>
   `;
   if(!existing){
@@ -285,6 +286,28 @@ function updateStockLocationHint(){
   const total = sumLocationInputs('sl-loc-', stockFormStoreId);
   const display = document.getElementById('sl-total');
   if(display) display.textContent = total;
+}
+
+// Deletes one SKU's record (this outlet, this day): its stock counts and its sales.
+async function deleteStockSku(id){
+  const row = salesReports.find(r=>r.id===id);
+  if(!row) return;
+  if(row.work_date !== todayStr() && !canEditPastSales()){ showToast("Only today's stock can be deleted"); return; }
+  if(!confirm(`Delete ${canonicalSkuName(row.product_name)} at ${stockOutletName(row)} on ${formatDateShort(row.work_date)}?
+
+This removes its stock counts and sales for that day.`)) return;
+  try{
+    await DB.deleteSalesReport(id);
+    await refreshData();
+    render();
+    const key = row.store_id || '__none__';
+    if(stockSummaryInnerHtml(key, row.work_date) !== null) openOutletStockSummary(key, row.work_date, true);
+    else closeModal();
+    showToast(`${canonicalSkuName(row.product_name)} deleted`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not delete — ' + (e.message || 'check your connection'));
+  }
 }
 
 async function saveStockLocationForm(id, field='opening'){
