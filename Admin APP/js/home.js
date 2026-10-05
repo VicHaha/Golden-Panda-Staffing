@@ -109,8 +109,9 @@ function renderHome(){
   // The day picker only offers WORKING dates (days with a job on the Schedule):
   // today if it is one, plus past working dates. Never future or non-working days.
   const dateOptions = [...new Set(jobs.map(job=>job.work_date).filter(date=>date <= today))].sort((a,b)=>b.localeCompare(a));
-  if(!dateOptions.includes(stockExportDate)) stockExportDate = today;
-  const todayWorking = dateOptions.includes(today);
+  // If today isn't a working date (or the chosen day isn't one), show the most
+  // recent working day instead — there is always one previous record to see.
+  if(!dateOptions.includes(stockExportDate)) stockExportDate = dateOptions[0] || today;
   const daily = stockExportMode === 'daily';
 
   const controls = `
@@ -121,7 +122,7 @@ function renderHome(){
     </div>
     <div class="month-picker-row">
       ${daily
-        ? `<select id="stock-date-input" aria-label="Day">${!dateOptions.includes(stockExportDate) || (stockExportDate===today && !todayWorking) ? '<option value="" selected disabled>Pick a working date</option>' : ''}${dateOptions.map(d=>`<option value="${d}" ${d===stockExportDate?'selected':''}>${d===today?'Today · ':''}${formatDateShort(d)}</option>`).join('')}</select>`
+        ? `<select id="stock-date-input" aria-label="Day">${dateOptions.map(d=>`<option value="${d}" ${d===stockExportDate?'selected':''}>${d===today?'Today · ':''}${formatDateShort(d)}</option>`).join('')}</select>`
         : `<input id="stock-month-input" type="month" value="${stockExportMonth}" aria-label="Month">`}
     </div>`;
 

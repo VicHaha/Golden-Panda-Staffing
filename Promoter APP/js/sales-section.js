@@ -19,15 +19,36 @@ let salesLog = [];        // sales_log rows for the day being viewed, newest fir
 
 function salesViewDateValue(){ return salesViewDate || todayStr(); }
 
+// The day the Sales Section actually shows. Normally the day picked (today by
+// default); but when today is not a working date it falls back to the most
+// recent working day, so there is always one previous record to look at.
+function salesEffectiveViewDate(){
+  const date = salesViewDateValue();
+  const today = todayStr();
+  if(date === today && !scheduledStoreIdsForDate(today).size){
+    const previous = previousWorkingDate();
+    if(previous) return previous;
+  }
+  return date;
+}
+
 function salesDateOptions(){
   const today = todayStr();
-  return [...new Set([today, ...salesReports.map(r=>r.work_date)])].sort((a,b)=>b.localeCompare(a));
+  const dates = new Set(salesReports.map(r=>r.work_date));
+  // Admin app: every day with records, plus today when it is a working date.
+  // Promoter app: the days that promoter worked.
+  if(isPromoterApp()){
+    jobs.forEach(job=>{ if(jobCountsForSchedule(job) && job.work_date <= today) dates.add(job.work_date); });
+    return [...dates].filter(d=>scheduledStoreIdsForDate(d).size).sort((a,b)=>b.localeCompare(a));
+  }
+  if(scheduledStoreIdsForDate(today).size) dates.add(today);
+  return [...dates].sort((a,b)=>b.localeCompare(a));
 }
 
 async function setSalesViewDate(value){
   salesViewDate = value === todayStr() ? null : value;
   try{
-    salesLog = await DB.getSalesLogForDate(salesViewDateValue());
+    salesLog = await DB.getSalesLogForDate(salesEffectiveViewDate());
   }catch(e){
     console.warn('Could not load sales history (non-fatal):', e);
     salesLog = [];
@@ -89,7 +110,7 @@ function renderSalesOutlet(group, isToday, canTapRow){
 // The last +/- tap made today by THIS person (newest first in salesLog), if any.
 function lastUndoableSalesEntry(){
   const name = salesActorName(), promoterId = salesActorPromoterId();
-  return salesLog.find(e=>e.work_date === todayStr() && (promoterId ? e.promoter_id === promoterId : (e.admin_name === name && !e.promoter_id))) || null;
+  return salesLog.find(e=>e.work_date === salesEffectiveViewDate() && (promoterId ? e.promoter_id === promoterId : (e.admin_name === name && !e.promoter_id))) || null;
 }
 
 // Undo: reverse the last tap and remove its log entry, so tapping Undo again
@@ -122,24 +143,20 @@ async function undoLastSalesChange(){
 }
 
 function renderSalesSection(){
-  let date = salesViewDateValue();
   const today = todayStr();
-  // Promoter app on a day the promoter isn't working: show their one previous
-  // record instead, view only.
-  let idle = false;
-  if(date === today && isPromoterApp() && !scheduledStoreIdsForDate(today).size){
-    const previous = previousWorkingDate();
-    if(previous){ date = previous; idle = true; }
-  }
+  const date = salesEffectiveViewDate();
   const isToday = date === today;
-  const canTapRow = isToday || canEditPastSales();
+  // Fell back to the previous working day because today isn't one.
+  const idle = !isToday && salesViewDateValue() === today;
+  // Admin app: everything is editable. Promoter app: only today.
+  const canEdit = isToday || canEditPastSales();
   const dates = salesDateOptions();
-  // Today (and the promoter app's own days) only show scheduled outlets; the admin app's earlier days show everything logged.
-  const scheduled = (isToday || idle) ? scheduledStoreIdsForDate(date) : null;
+  // Today (and everything in the promoter app) only shows scheduled outlets; the admin app's earlier days show everything logged.
+  const scheduled = (isToday || isPromoterApp()) ? scheduledStoreIdsForDate(date) : null;
   const rows = salesReports.filter(r=>r.work_date===date && (!scheduled || scheduled.has(r.store_id)));
   const outlets = groupByOutlet(rows).sort((a,b)=>a.label.localeCompare(b.label));
 
-  // Not a working date: no records at all, just the message.
+  // Not a working date and no earlier working day: just the message.
   if(isToday && !scheduled.size){
     return `<div class="section-title">Sales Report</div>` + emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
   }
@@ -147,23 +164,23 @@ function renderSalesSection(){
   const dateRow = `<div class="ss-date-row">
       <label class="ss-date-label" for="sales-date-select">Date</label>
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
-        ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':'🔒 '}${formatDateShort(d)}</option>`).join('')}
+        ${dates.includes(date) ? '' : `<option value="${date}" selected>${formatDateShort(date)}</option>`}
+        ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':(canEditPastSales()?'':'🔒 ')}${formatDateShort(d)}</option>`).join('')}
       </select>
-      ${isToday ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
+      ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
     </div>`;
   // Promoter app on a non-working day: just the previous record, with its date.
-  let html = `<div class="section-title">Sales Report</div>` + (idle ? `<div class="ss-prev-date">${formatDateShort(date)}</div>` : dateRow);
-  if(!isToday && !idle) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
+  let html = `<div class="section-title">Sales Report</div>` + (idle && isPromoterApp() ? `<div class="ss-prev-date">${formatDateShort(date)}</div>` : dateRow);
+  if(!canEdit && !idle) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed.</div>`;
 
   if(!rows.length){
     html += emptyState('🧾', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
     return html;
   }else{
-    html += outlets.map(group=>renderSalesOutlet(group,isToday,canTapRow)).join('');
+    html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');
   }
 
-  // Day photos and the day's general notes sit under the log — same
-  // components as before, just no longer inside a pop-up.
+  // Day photos and the day's general notes sit under the tables.
   html += `<section class="ss-card"><div class="ss-card-title">Photos &amp; notes</div>
     ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date,isToday) : ''}
     ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date) : ''}
@@ -176,7 +193,7 @@ function renderSalesSection(){
 async function adjustSalesQuantity(event, id, delta){
   event.stopPropagation();
   const row = salesReports.find(item=>item.id===id);
-  if(!row || row.work_date !== todayStr()) return;
+  if(!row || (row.work_date !== todayStr() && !canEditPastSales())) return;
   const prev = Number(row.sales_qty||0);
   const next = Math.max(0, prev + delta);
   if(next === prev) return;
@@ -195,7 +212,7 @@ async function adjustSalesQuantity(event, id, delta){
         admin_name: salesActorName(),
         promoter_id: salesActorPromoterId()
       });
-      if(entry.work_date === salesViewDateValue()) salesLog.unshift(entry);
+      if(entry.work_date === salesEffectiveViewDate()) salesLog.unshift(entry);
     }catch(logError){
       console.error(logError);
       showToast('Saved, but the history entry could not be logged');

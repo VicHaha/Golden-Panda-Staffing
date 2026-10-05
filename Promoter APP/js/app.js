@@ -291,20 +291,20 @@ async function refreshTomorrowJob(){
 }
 
 async function refreshData(){
-  const [s, sd, sr, dp, shr, jb, locations, log] = await Promise.all([
+  const [s, sd, sr, dp, shr, jb, locations] = await Promise.all([
     DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports(), DB.getAllJobs(),
-    DB.getStockLocations(),
-    // The history log is a nice-to-have: a failure here must not take the whole app down.
-    DB.getSalesLogForDate(salesViewDateValue()).catch(e=>{ console.warn('Could not load sales history (non-fatal):', e); return salesLog; })
+    DB.getStockLocations()
   ]);
   stores = s;
   stockLocations = locations;
-  salesLog = log;
   scheduledDates = sd;
   salesReports = sr;
   dayPhotos = dp;
   shiftReports = shr;
   jobs = jb;
+  // The tap log (for Undo) is a nice-to-have: a failure here must not take the whole app down.
+  try{ salesLog = await DB.getSalesLogForDate(salesEffectiveViewDate()); }
+  catch(e){ console.warn('Could not load sales history (non-fatal):', e); }
   setSyncDot(true);
   await refreshMyMonthPay();
 }

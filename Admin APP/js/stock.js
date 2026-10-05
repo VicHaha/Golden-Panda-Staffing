@@ -138,13 +138,14 @@ function renderStockManagement(){
       ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">⚙ Locations</button>`:''}
     </div>`;
   if(!scheduledStoreIdsForDate(date).size){
-    // Not a working date: no records, just the message — except the promoter
-    // app, which shows the one previous record (view only).
-    const previous = isPromoterApp() ? previousWorkingDate() : null;
+    // Not a working date: show the one previous working day instead (the
+    // promoter app shows it view only; the admin app keeps everything editable).
+    const previous = previousWorkingDate();
     const previousOutlets = previous ? outletStocksForDate(previous) : [];
     if(!previousOutlets.length) return html + emptyState('🗓️','Today is not a working date','Stock appears here on days you are scheduled.');
-    return html + `<div class="ss-prev-date">${formatDateShort(previous)}</div>`
+    html += `<div class="ss-prev-date">${formatDateShort(previous)}</div>`
       + `<div class="stock-outlet-grid">${previousOutlets.map(outlet=>renderStockOutletCard(outlet,previous)).join('')}</div>`;
+    return isPromoterApp() ? html : html + renderStockPastRecords(previous);
   }
   if(!outlets.length){
     html += emptyState('🏬','No stock records yet today','Tap + to add the first stock record.');

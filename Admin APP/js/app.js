@@ -263,11 +263,9 @@ async function loadInitialData(){
 // Re-fetches promoters, jobs, stores, stock locations, sales reports, the
 // viewed day's sales log, day photos, day feedback, and shift reports.
 async function refreshData(){
-  const [p, j, s, sr, dp, df, shr, locations, log] = await Promise.all([
+  const [p, j, s, sr, dp, df, shr, locations] = await Promise.all([
     DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getDayFeedback(), DB.getShiftReports(),
-    DB.getStockLocations(),
-    // The history log is a nice-to-have: a failure here must not take the whole app down.
-    DB.getSalesLogForDate(salesViewDateValue()).catch(e=>{ console.warn('Could not load sales history (non-fatal):', e); return salesLog; })
+    DB.getStockLocations()
   ]);
   promoters = p;
   jobs = j;
@@ -277,7 +275,9 @@ async function refreshData(){
   dayFeedback = df;
   shiftReports = shr;
   stockLocations = locations;
-  salesLog = log;
+  // The tap log (for Undo) is a nice-to-have: a failure here must not take the whole app down.
+  try{ salesLog = await DB.getSalesLogForDate(salesEffectiveViewDate()); }
+  catch(e){ console.warn('Could not load sales history (non-fatal):', e); }
   setSyncDot(true);
 }
 
