@@ -554,12 +554,9 @@ function openSalesForm(id, reuseOverlay=false){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="form-title-row"><div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
-      <div class="field-hint" style="margin-bottom:12px;">Entered by <b>${esc(currentAdminName || 'Admin')}</b> · ${editing ? `<input type="date" id="s-date" class="date-edit-input" value="${formDate}">` : formatDateLong(formDate)}</div>
-      <div class="field">
-        <label>Store (optional)</label>
-        <select id="s-store">
-          ${storeOptionsHtml(defaultStoreId, !!editing)}
-        </select>
+      <div class="form-meta">
+        <div class="field-hint">Entered by <b>${esc(currentAdminName || 'Admin')}</b></div>
+        <div class="form-meta-row"><span>${editing ? `<input type="date" id="s-date" class="date-edit-input" value="${formDate}">` : formatDateLong(formDate)}</span><label class="inline-edit" title="Change outlet"><select id="s-store" class="date-edit-input" aria-label="Outlet">${storeOptionsHtml(defaultStoreId, !!editing)}</select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4Z"/></svg></label></div>
       </div>
       <div class="field-row">
         <div class="field" style="flex:1.4;">

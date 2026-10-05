@@ -1470,3 +1470,48 @@ strong,b{font-weight:600;}
 .ss-family{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;}
 .ss-family .ss-thumb{margin-left:0;}
 .field label small{font-weight:400;color:var(--ink-faint);}
+
+/* Outlet sits inline beside the date, same dashed-underline pattern */
+.inline-edit{position:relative;display:inline-flex;align-items:center;}
+.inline-edit select.date-edit-input{appearance:none;-webkit-appearance:none;min-height:0;padding:0 18px 0 1px;max-width:180px;text-overflow:ellipsis;}
+.inline-edit svg{position:absolute;right:1px;width:12px;height:12px;color:var(--ink-faint);pointer-events:none;}
+
+.form-meta{margin-bottom:12px;}
+.form-meta .field-hint{margin:0 0 4px;}
+.form-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;color:var(--gold-deep);font-size:13px;font-weight:600;}
+.form-meta .date-edit-input{font:inherit;font-size:13px;font-weight:600;color:var(--gold-deep);background:transparent;border:none;border-bottom:1px dashed var(--ink-faint);border-radius:0;padding:0 1px;min-height:0;height:auto;width:auto;cursor:pointer;box-shadow:none;outline:none;}
+.form-meta .date-edit-input:focus{border-bottom:1px solid var(--gold);}
+.form-meta .inline-edit select.date-edit-input{padding-right:18px;}
+
+/* Product photo goes UNDER the product name, not beside it */
+.ss-family{display:flex;flex-direction:column;align-items:flex-start;gap:6px;flex-wrap:nowrap;}
+.ss-family .ss-thumb{width:36px;height:36px;border-radius:6px;}
+
+/* − n + : one neat, flat control */
+.sales-qty-adjust.ss-stepper,.ss-row-grouped .sales-qty-adjust.ss-stepper{
+  display:grid;grid-template-columns:34px minmax(26px,1fr) 34px;align-items:stretch;gap:0;
+  height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;
+}
+.sales-qty-adjust.ss-stepper button,.ss-row-grouped .sales-qty-adjust.ss-stepper button{
+  width:auto;height:100%;border:none;border-radius:0;background:transparent;box-shadow:none;
+  color:var(--gold-deep);font-size:20px;font-weight:500;line-height:1;
+}
+.sales-qty-adjust.ss-stepper button:first-child{color:var(--ink-faint);border-right:1px solid var(--line);}
+.sales-qty-adjust.ss-stepper button:last-child{border-left:1px solid var(--line);}
+.sales-qty-adjust.ss-stepper button:active{background:var(--gold-tint);transform:none;}
+.sales-qty-adjust.ss-stepper .sales-table-number{display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;}
+.ss-head.ss-head-grouped,.ss-row.ss-row-grouped{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) 108px;}
+.ss-head,.ss-row{grid-template-columns:minmax(0,1fr) 108px;}
+
+/* same flat − n + control for the Given out rows */
+.ss-row .sales-qty-adjust.ss-stepper{display:grid;grid-template-columns:34px minmax(26px,1fr) 34px;gap:0;height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;}
+.ss-row .sales-qty-adjust.ss-stepper button,.ss-row .sales-qty-adjust.ss-stepper button:first-child,.ss-row .sales-qty-adjust.ss-stepper button:last-child{width:auto;height:100%;border:none;border-radius:0;background:transparent;color:var(--gold-deep);font-size:20px;font-weight:500;}
+.ss-row .sales-qty-adjust.ss-stepper button:first-child{color:var(--ink-faint);border-right:1px solid var(--line);}
+.ss-row .sales-qty-adjust.ss-stepper button:last-child{border-left:1px solid var(--line);}
+.ss-row .sales-qty-adjust.ss-stepper button:active{background:var(--gold-tint);}
+
+/* Footer: no indicator bar or fill — the icon of the open section is just bold */
+.tab,.tab.active,.tab-home,.tab-home.active{background:transparent;box-shadow:none;}
+.tab svg{stroke-width:1.6;stroke:var(--ink-faint);fill:none;}
+.tab.active svg,.tab-home.active svg{stroke-width:2.8;stroke:var(--ink);fill:none;}
+.tab.active,.tab-home.active{color:var(--ink);}
