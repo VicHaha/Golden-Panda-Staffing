@@ -199,7 +199,7 @@ function stockSummaryInnerHtml(outletKey, date){
     const sold = Number(row.sales_qty||0);
     return `<${editable?'button type="button"':'div'} class="stock-summary-sku ${low?'is-low':''}" ${editable?`onclick="openStockLocationForm('${row.id}','${field}',true)"`:''}>
       <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${total}</b> ${field} ${low?'<em>Low</em>':''}</span></span>
-      ${field==='closing'?`<span class="stock-variance-line ${variance===0?'ok':variance<0?'short':'over'}">${variance===0?'Tallies':`Variance ${formatVariance(variance)}`} <small>opening ${stockTotal(row,'opening')} − sales ${sold} = ${stockTotal(row,'opening')-sold}, counted ${stockTotal(row,'closing')}</small></span>`:''}
+      ${field==='closing'?`<span class="stock-variance-line ${variance===0?'ok':variance<0?'short':'over'}">Variance ${variance===0?'0':formatVariance(variance)}</span>`:''}
       <span class="stock-location-chips">${stockLocationChips(row,field)}</span>
       <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)}${editable?' · Tap to edit':' · View only'}</span>
     </${editable?'button':'div'}>`;
