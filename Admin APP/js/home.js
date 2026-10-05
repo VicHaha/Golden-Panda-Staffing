@@ -137,13 +137,13 @@ function renderHome(){
   if(!daily) return controls + renderHomeSalesRecord();
   if(!isWorkingDate(homeDate)) return controls + renderNotWorkingCard(homeLabel);
 
-  const soldUnits = homeSalesRecord().reduce((sum,[,qty])=>sum+qty,0);
-  const lowSkus = lowStockEntries(homeDate).length;
-  const crew = jobs.filter(job=>job.work_date === homeDate && job.promoters).length;
+  const record = homeSalesRecord();
+  const soldUnits = record.reduce((sum,[,qty])=>sum+qty,0);
+  const outletCount = jobStoreIdsForDate(homeDate).size;
   const kpis = `<div class="kpi-row kpi-3">
-    <button type="button" class="kpi" onclick="switchTab('sales')"><small>Sold</small><b>${soldUnits}</b></button>
-    <button type="button" class="kpi ${lowSkus?'is-low':''}" onclick="switchTab('stock')"><small>Low stock</small><b>${lowSkus}</b></button>
-    <button type="button" class="kpi" onclick="switchTab('roster')"><small>On duty</small><b>${crew}</b></button>
+    <div class="kpi static"><small>Sold</small><b>${soldUnits}</b></div>
+    <div class="kpi static"><small>SKUs</small><b>${record.length}</b></div>
+    <div class="kpi static"><small>Outlets</small><b>${outletCount}</b></div>
   </div>`;
   return controls + kpis + renderHomeSalesRecord() + renderHomeStockRecord(homeDate) + renderHomeOnDuty(homeDate);
 }

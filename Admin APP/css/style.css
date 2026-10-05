@@ -1404,3 +1404,43 @@ strong,b{font-weight:600;}
 .stock-past-date{margin-top:6px;}
 
 .panel .ss-head-free{display:none;}
+
+/* Summary tiles: small, read-only */
+.kpi-row{gap:8px;margin-bottom:12px;}
+.kpi{padding:6px 10px;border-radius:10px;}
+.kpi small{font-size:10px;}
+.kpi b{font-size:17px;line-height:1.2;}
+.kpi.static{cursor:default;pointer-events:none;}
+.ss-variance-note{color:var(--brick);font-weight:600;}
+
+/* Plain cards: no gradient strip on top */
+.badge::before{display:none;}
+.badge-top{margin-top:0;}
+
+/* Smaller buttons everywhere (Export, Cancel/Save, Add, Show earlier…) */
+:root{--btn-h:38px;}
+.btn{min-height:38px;padding:7px 14px;font-size:13px;border-radius:8px;}
+.btn-sm{min-height:32px;padding:5px 11px;font-size:12px;}
+.modal-actions .btn{min-height:42px;}
+.month-picker-row .btn{min-height:36px;padding:6px 14px;flex:0 0 auto;}
+.home-controls .btn.home-export{min-height:38px;padding:7px 14px;}
+.mode-btn,.period-btn{min-height:36px;font-size:13px;}
+.segmented .mode-btn,.period-btn{min-height:34px;}
+#sales-undo-btn{min-height:38px;padding:7px 14px;}
+.ss-date-row select{min-height:38px;font-size:14px;}
+.btn-block{min-height:38px;}
+
+/* Smaller still: form buttons, steppers, floating button */
+.btn{min-height:36px;padding:6px 13px;}
+.modal-actions .btn{min-height:38px;}
+#sales-undo-btn,.home-controls .btn.home-export{min-height:36px;}
+.sales-qty-adjust.ss-stepper button,.ss-row-grouped .sales-qty-adjust.ss-stepper button{width:34px;height:34px;font-size:18px;border-radius:7px;}
+.sales-qty-adjust.ss-stepper,.ss-row-grouped .sales-qty-adjust.ss-stepper{grid-template-columns:34px minmax(22px,1fr) 34px;gap:4px;}
+.sales-qty-adjust.ss-stepper .sales-table-number{font-size:17px;}
+.ss-head.ss-head-grouped,.ss-row.ss-row-grouped{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr) 112px;}
+.ss-head,.ss-row{grid-template-columns:minmax(0,1fr) 116px;}
+.ss-row,.ss-row.ss-row-grouped{min-height:48px;}
+.ss-family{padding-top:15px;}
+.qty-btn{width:42px;font-size:20px;}
+.fab button{width:46px;height:46px;font-size:22px;border-radius:12px;}
+.fab .fab-memo svg,.fab .fab-calendar svg{width:20px;height:20px;}

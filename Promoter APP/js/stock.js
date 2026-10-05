@@ -85,37 +85,27 @@ function formatVariance(value){
   return `${value>0?'+':value<0?'−':'±'}${Math.abs(value)}`;
 }
 
-// One card per outlet: Opening and Closing totals up top (tap one to open just
-// that count), then a plain table of the figures per location.
+// One card per outlet: just the Opening and Closing totals (tap one to open
+// that count), plus a variance line when SKUs don't tally. Which SKUs are low
+// is shown in the Home "Stock Record" card.
 function renderStockOutletCard(outlet, date){
   const sid = outlet.rows.length ? outlet.rows[0].store_id || null : null;
-  const openTotals = stockLocationTotals(outlet.rows, 'opening', sid);
-  const closeTotals = stockLocationTotals(outlet.rows, 'closing', sid);
   const sum = totals => totals.filter(item=>locationCounts(item.loc)).reduce((acc,item)=>acc+item.total,0);
-  const openTotal = sum(openTotals), closeTotal = sum(closeTotals);
-  const lowCount = outlet.rows.filter(isLowClosing).length;
+  const openTotal = sum(stockLocationTotals(outlet.rows, 'opening', sid));
+  const closeTotal = sum(stockLocationTotals(outlet.rows, 'closing', sid));
   const variance = outlet.rows.reduce((acc,row)=>acc+stockVariance(row),0);
   const mismatched = outlet.rows.filter(row=>stockVariance(row)!==0).length;
   const action = (date === todayStr() || canEditPastSales()) ? 'Edit' : 'View';
-  const locationRows = openTotals.length
-    ? openTotals.map((item,index)=>`<tr class="${locationCounts(item.loc)?'':'excluded'}">
-        <th scope="row">${esc(item.loc.name)}${locationCounts(item.loc)?'':' <small>not in total</small>'}</th>
-        <td>${item.total}</td><td>${closeTotals[index].total}</td></tr>`).join('')
-    : '<tr><th scope="row" colspan="3">No stock locations yet</th></tr>';
   return `<section class="panel stock-card">
     <header class="panel-head"><h2>${esc(outlet.name)}</h2><span class="panel-meta">${date===todayStr()?'Today':formatDateShort(date)} · ${outlet.rows.length} SKUs</span></header>
     <div class="stock-totals">
       <button type="button" class="stock-total-btn" onclick="openOutletStockSummary('${outlet.key}','${date}',false,'opening')" aria-label="Opening stock — ${action.toLowerCase()}">
         <small>Opening</small><b>${openTotal}</b><span>${action} ›</span>
       </button>
-      <button type="button" class="stock-total-btn ${lowCount?'is-low':''}" onclick="openOutletStockSummary('${outlet.key}','${date}',false,'closing')" aria-label="Closing stock — ${action.toLowerCase()}">
-        <small>Closing ${lowCount?`<em class="stock-low-flag" title="${lowCount} SKU${lowCount>1?'s':''} under ${LOW_STOCK_THRESHOLD}">LOW</em>`:''}</small><b>${closeTotal}</b><span>${action} ›</span>
+      <button type="button" class="stock-total-btn" onclick="openOutletStockSummary('${outlet.key}','${date}',false,'closing')" aria-label="Closing stock — ${action.toLowerCase()}">
+        <small>Closing</small><b>${closeTotal}</b><span>${action} ›</span>
       </button>
     </div>
-    <table class="stock-loc-table">
-      <thead><tr><th>Location</th><th>Opening</th><th>Closing</th></tr></thead>
-      <tbody>${locationRows}</tbody>
-    </table>
     ${mismatched?`<div class="stock-variance ${variance<0?'short':'over'}">Variance ${formatVariance(variance)} · ${mismatched} SKU${mismatched>1?'s':''} don't tally</div>`:''}
   </section>`;
 }

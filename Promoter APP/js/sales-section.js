@@ -98,7 +98,9 @@ function renderSalesTable(rows, title, isToday, canTapRow){
       const sku = canTapRow
         ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${row.id}')" aria-label="Edit ${full}">${full}</button>`
         : `<span class="ss-sku">${full}</span>`;
-      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell">${sku}<small class="ss-meta">Opening ${Number(row.opening_qty||0)} · Closing ${Number(row.closing_qty||0)}</small></span>${salesRowControl(row, isToday)}</div>`;
+      const variance = Number(row.opening_qty||0) - Number(row.closing_qty||0) - Number(row.sales_qty||0);
+      const varianceNote = variance !== 0 ? `<small class="ss-meta ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</small>` : '';
+      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell">${sku}${varianceNote}</span>${salesRowControl(row, isToday)}</div>`;
     }).join('');
     return `<div class="ss-table">
       <div class="ss-head ss-head-free"><span>${title}</span><span>Qty</span></div>
@@ -135,10 +137,8 @@ function renderSalesOutlet(group, isToday, canTapRow){
   const sorted = [...group.items].sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b));
   const sold = sorted.filter(r=>!isFreeItem(r));
   const given = sorted.filter(r=>isFreeItem(r));
-  const soldTotal = sold.reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
-  const givenTotal = given.reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
   return `<section class="panel ss-outlet">
-    <header class="panel-head"><h2>${esc(group.label)}</h2><span class="panel-meta">${soldTotal} sold${given.length?` · ${givenTotal} given out`:''}</span></header>
+    <header class="panel-head"><h2>${esc(group.label)}</h2></header>
     ${sold.length ? renderSalesTable(sold,'SKU',isToday,canTapRow) : ''}
     ${given.length ? `<div class="panel-sub">Given out</div>${renderSalesTable(given,'Item',isToday,canTapRow)}` : ''}
   </section>`;
@@ -215,23 +215,23 @@ function renderSalesSection(){
     return html;
   }else{
     const soldUnits = rows.filter(r=>!isFreeItem(r)).reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
-    const givenUnits = rows.filter(r=>isFreeItem(r)).reduce((sum,r)=>sum+Number(r.sales_qty||0),0);
+    const skuCount = new Set(rows.filter(r=>!isFreeItem(r) && Number(r.sales_qty||0) > 0).map(r=>canonicalSkuName(r.product_name))).size;
     html += `<div class="kpi-row kpi-3">
       <div class="kpi static"><small>Sold</small><b>${soldUnits}</b></div>
-      <div class="kpi static"><small>Given out</small><b>${givenUnits}</b></div>
+      <div class="kpi static"><small>SKUs</small><b>${skuCount}</b></div>
       <div class="kpi static"><small>Outlets</small><b>${outlets.length}</b></div>
     </div>`;
     html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');
   }
 
   // Day photos and the day's general notes sit under the tables.
-  html += `<details class="panel ss-photos" ${salesPhotosOpen?'open':''} ontoggle="salesPhotosOpen=this.open">
-    <summary>Photos &amp; notes</summary>
+  html += `<section class="panel ss-photos">
+    <header class="panel-head"><h2>Photos &amp; notes</h2></header>
     <div class="panel-body">
       ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date,isToday) : ''}
       ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date) : ''}
     </div>
-  </details>`;
+  </section>`;
   return html;
 }
 
