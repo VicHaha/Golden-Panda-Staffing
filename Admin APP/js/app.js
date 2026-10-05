@@ -370,8 +370,6 @@ function render(){
   if(!c) return;
   // The Sales Section has an inline notes box — don't wipe a half-typed note
   // when a +/- tap or a live update redraws the screen.
-  // Schedule has three floating buttons down the right edge; leave room so the cards never sit under them.
-  c.classList.toggle('has-fab-column', currentTab==='roster');
   const notesDraft = currentTab==='sales' ? captureNotesDraft() : null;
   if(currentTab==='home') c.innerHTML = renderHome();
   else if(currentTab==='roster') c.innerHTML = renderRosterSection();

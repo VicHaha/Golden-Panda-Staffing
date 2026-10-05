@@ -1599,13 +1599,3 @@ button,input,select,textarea{font-family:inherit;}
 .pp-name{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere;}
 .pp-busy{color:var(--ink-faint);font-size:12px;}
 .pp-row .btn{cursor:pointer;}
-
-/* Schedule: cards stop short of the floating buttons on the right */
-.has-fab-column .job-card,.has-fab-column .badge{margin-right:64px;}
-.has-fab-column .job-card{padding:10px 12px;gap:10px;}
-.has-fab-column .job-date{width:54px;margin:-10px 0 -10px -12px;}
-.has-fab-column .job-actions{gap:6px;}
-.has-fab-column .job-actions .icon-btn{width:34px;height:34px;}
-.has-fab-column .job-store{font-size:14px;}
-
-.has-fab-column .btn-block{width:calc(100% - 64px);}
