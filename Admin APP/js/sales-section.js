@@ -155,7 +155,7 @@ function renderSalesOutlet(group, isToday, canTapRow){
   return `<section class="panel ss-outlet">
     <header class="panel-head"><h2>${esc(group.label)}</h2></header>
     ${sold.length ? renderSalesTable(sold,'SKU',isToday,canTapRow) : ''}
-    ${given.length ? `<div class="panel-sub">Given out</div>${renderSalesTable(given,'Item',isToday,canTapRow)}` : ''}
+    ${given.length ? renderSalesTable(given,'Item',isToday,canTapRow) : ''}
   </section>`;
 }
 
