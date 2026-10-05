@@ -29,6 +29,9 @@ function scheduledStoreIdsForDate(date){
     const id = job.store_id || (job.stores && job.stores.id);
     if(id) ids.add(id);
   });
+  // Admin app: records added or kept by hand count too, so nothing the admin
+  // can edit is ever hidden. (The promoter app only follows its own shifts.)
+  if(!isPromoterApp()) salesReports.forEach(row=>{ if(row.work_date === date && row.store_id) ids.add(row.store_id); });
   return ids;
 }
 

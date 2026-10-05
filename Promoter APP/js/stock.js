@@ -321,8 +321,14 @@ async function saveStockLocationForm(id, field='opening'){
 // than only editing rows that were auto-seeded. Product name and Store reuse
 // the same suggestion list and outlet list as the Sales Section. If a record
 // already exists for this exact product + date + store, saving updates it.
+// Date the Add form is for: the admin picks any date; everyone else records for today.
+function addStockDate(){
+  const input = document.getElementById('asr-date');
+  return canEditPastSales() && input && input.value ? input.value : todayStr();
+}
+
 function openAddStockRecordForm(){
-  if(!scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
+  if(!canEditPastSales() && !scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
   addStockStoreId = defaultStoreId || null;
   skuPhotoFile = null;
@@ -332,7 +338,9 @@ function openAddStockRecordForm(){
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="form-title-row"><div class="modal-title">Add stock record</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
-      <div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>
+      ${canEditPastSales()
+        ? `<div class="field"><label for="asr-date">Date</label><input id="asr-date" type="date" value="${todayStr()}" onchange="onAddStockProductChange()"></div>`
+        : `<div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>`}
       <div class="field-row">
         <div class="field" style="flex:1.6;">
           <label>Product name</label>
@@ -348,7 +356,7 @@ function openAddStockRecordForm(){
       <div class="field">
         <label>Store</label>
         <select id="asr-store" onchange="onAddStockProductChange()">
-          ${storeOptionsHtml(defaultStoreId, false)}
+          ${storeOptionsHtml(defaultStoreId, canEditPastSales())}
         </select>
       </div>
       <div class="stock-section-heading"><h2>Opening stock</h2><span id="asr-opening-total">0</span></div>
@@ -425,18 +433,19 @@ function onAddStockProductChange(){
     return;
   }
   const storeId = document.getElementById('asr-store').value || null;
+  const formDate = addStockDate();
   const existing = salesReports.find(row=>
-    row.work_date===todayStr()
+    row.work_date===formDate
     && (row.store_id||null)===storeId
     && canonicalSkuName(row.product_name)===canonicalSkuName(productName)
   );
   if(existing){
     fillAddStockInputs(locationMap(existing,'opening'), locationMap(existing,'closing'), existing.remarks);
-    hint.textContent = "Today's record already exists — saving will update its counts, not add another row.";
+    hint.textContent = `${formDate===todayStr()?"Today's":'That day\'s'} record already exists — saving will update its counts, not add another row.`;
     return;
   }
   const priorEntries = salesReports
-    .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName))
+    .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName) && r.work_date < formDate)
     .sort((a,b) => b.work_date.localeCompare(a.work_date));
   // Only this outlet's own history — never another outlet's counts.
   const prior = priorEntries.find(r=>(r.store_id||null)===storeId);
@@ -451,7 +460,7 @@ function onAddStockProductChange(){
 }
 
 async function saveAddStockRecordForm(){
-  const work_date = todayStr();
+  const work_date = addStockDate();
   const productBase = document.getElementById('asr-product').value.trim();
   const variation = document.getElementById('asr-variation').value;
   const product_name = composeProductName(productBase, variation);
