@@ -586,6 +586,18 @@ function openSalesForm(id, reuseOverlay=false){
         <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.sales_qty:''}" placeholder="0">
       </div>
       </div>
+      <div class="field">
+        <label>Photo (optional)</label>
+        <div class="photo-picker">
+          <img id="sp-preview" class="photo-preview" alt="SKU photo" src="${editing&&editing.photo_url?esc(editing.photo_url):''}" style="${editing&&editing.photo_url?'':'display:none;'}">
+          <div id="sp-empty" class="photo-preview photo-preview-empty" style="${editing&&editing.photo_url?'display:none;':''}"></div>
+          <div class="photo-picker-actions">
+            <label class="btn btn-ghost btn-sm">Take / choose photo<input type="file" accept="image/*" capture="environment" hidden onchange="onSkuPhotoPicked(this)"></label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="clearSkuPhoto()">Remove</button>
+          </div>
+        </div>
+        <input type="hidden" id="sp-url" value="${editing&&editing.photo_url?esc(editing.photo_url):''}">
+      </div>
       <div class="field-hint" id="s-variance" style="display:none;"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -601,6 +613,7 @@ function openSalesForm(id, reuseOverlay=false){
   // Once the person has hand-toggled the checkbox, typing further in the
   // product name field stops overriding their choice.
   salesFormFreeItemTouched = false;
+  skuPhotoFile = null;
   salesFormDerivedFieldTouched = false;
   salesFormLastFreeItem = null;
   applyFreeItemFieldLayout(); // set the right field layout immediately, e.g. when editing a giveaway item
@@ -609,6 +622,26 @@ function openSalesForm(id, reuseOverlay=false){
 // Tracks whether the person has manually ticked/unticked the "Free item"
 // checkbox in the currently-open form — once true, typing in the product
 // name field no longer overwrites their choice.
+// Photo chosen in the open sales form (uploaded to Cloudinary on Save).
+let skuPhotoFile = null;
+function onSkuPhotoPicked(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  skuPhotoFile = file;
+  const preview = document.getElementById('sp-preview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = '';
+  document.getElementById('sp-empty').style.display = 'none';
+  document.getElementById('sp-url').value = '';
+  input.value = '';
+}
+function clearSkuPhoto(){
+  skuPhotoFile = null;
+  document.getElementById('sp-url').value = '';
+  document.getElementById('sp-preview').style.display = 'none';
+  document.getElementById('sp-empty').style.display = '';
+}
+
 let salesFormFreeItemTouched = false;
 let salesFormDerivedFieldTouched = false;
 let salesFormLastFreeItem = null;
@@ -678,7 +711,7 @@ async function saveSalesForm(id){
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
-  const photo_url = editing ? (editing.photo_url || null) : null;
+  let photo_url = document.getElementById('sp-url').value || null;
   // Who typed this in — only set for brand-new admin-entered rows (never
   // overwritten on edit, so it always reflects who originally logged it,
   // and never touched for promoter-entered rows, which use promoter_id
@@ -693,6 +726,11 @@ async function saveSalesForm(id){
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
   try{
+    if(skuPhotoFile){
+      btn.textContent = 'Uploading photo…';
+      const compressed = await compressImageFile(skuPhotoFile);
+      photo_url = await uploadPhotoToCloudinary(compressed);
+    }
     btn.textContent = 'Saving…';
     // Note: this form never touches the per-location quantities
     // (location_qty / closing_location_qty) — those live in the separate Stock
