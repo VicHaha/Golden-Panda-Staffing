@@ -83,6 +83,15 @@ document.addEventListener('keydown', e=>{
   if(e.key === 'Escape' && document.querySelector('.modal-overlay')) closeModal();
 });
 
+// Tapping into a quantity box selects what's there, so the next digits
+// replace it — much quicker than deleting first when keying in a rush.
+document.addEventListener('focusin', e=>{
+  const t = e.target;
+  if(t instanceof HTMLInputElement && t.type === 'number' && t.id !== 'calculator-display'){
+    setTimeout(()=>{ try{ t.select(); }catch(err){} }, 0);
+  }
+});
+
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;

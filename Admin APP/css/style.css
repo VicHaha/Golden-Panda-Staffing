@@ -1034,3 +1034,103 @@ button.stock-block:active{background:var(--gold-tint);}
 /* Sales form: one small quantity box */
 .field.qty-small{max-width:140px;}
 .field.qty-small input{text-align:center;font-weight:700;}
+
+/* ============================================================
+   Theme v2 — cream / sand / honey-yellow / tan palette
+   #F6F2EC  #F2E0C4  #F4D48D  #F1C64E  #C4A37E
+   Built for fast, accurate keying during busy hours: big tap
+   targets, big numbers, high-contrast text, clear + / − buttons.
+   ============================================================ */
+:root{
+  --bg:#F6F2EC;
+  --surface:#FFFFFF;
+  --ink:#3B2A16;
+  --ink-soft:#6A5539;
+  --ink-faint:#85704F;
+  --gold:#F1C64E;          /* honey yellow: highlights, + buttons, active states */
+  --gold-deep:#7A5630;     /* deep tan-brown: primary buttons, headings, links */
+  --gold-tint:#F2E0C4;     /* sand: soft fills */
+  --sun:#F1C64E;
+  --sun-soft:#F4E7C2;
+  --line:#E7D9C0;
+  --focus:rgba(241,198,78,.55);
+  --shadow:0 1px 2px rgba(122,86,48,.06),0 6px 18px rgba(122,86,48,.08);
+}
+body{background:var(--bg);color:var(--ink);}
+
+/* Header + nav */
+.app-header{background:#fff;border-bottom:3px solid var(--sun);}
+.brand-text h1{color:var(--gold-deep);}
+.tabbar{background:#fff;border-top:3px solid var(--sun);}
+.tab{color:var(--ink-faint);}
+.tab.active{color:var(--gold-deep);}
+.tab.active svg{fill:var(--sun);stroke:var(--gold-deep);}
+.tab-home.active{background:var(--sun);color:var(--ink);}
+.tab-home.active svg{fill:none;stroke:var(--ink);}
+
+/* Buttons: brown = primary, honey = go, sand = neutral */
+.btn{min-height:48px;border-radius:12px;font-size:14.5px;}
+.btn-primary,.btn-gold,.mode-btn.active,.stock-tab.active{background:var(--gold-deep);border-color:var(--gold-deep);color:#fff;}
+.btn.home-export{background:var(--sun);border-color:var(--sun);color:var(--ink);}
+.btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);}
+.mode-btn{min-height:48px;border-radius:12px;}
+.fab button{width:60px;height:60px;background:var(--gold-deep);box-shadow:0 8px 20px rgba(122,86,48,.32);}
+.fab .fab-memo{background:#fff;color:var(--gold-deep);}
+.fab .fab-calendar{background:var(--sun);color:var(--ink);}
+
+/* Titles and cards */
+.section-title{color:var(--gold-deep);font-size:18px;}
+.home-card,.ss-card,.ss-table,.stock-outlet-card,.job-card,.stat-card,.report-row,.month-picker-row{background:#fff;border:1px solid var(--line);border-radius:16px;}
+.home-card-tag{background:var(--sun);color:var(--ink);}
+.home-outlet{background:var(--sun-soft);color:var(--ink);}
+.job-card.tomorrow-schedule-job{background:var(--sun-soft);border:2px solid var(--sun);}
+.tomorrow-highlight-pill{background:var(--gold-deep);color:#fff;}
+
+/* ----- Sales Section: built for fast tapping ----- */
+.ss-date-row select{min-height:52px;font-size:15px;border-radius:12px;}
+.ss-outlet-title{font-size:17px;color:var(--gold-deep);}
+.ss-head{background:var(--gold-tint);color:var(--ink-soft);}
+.ss-head,.ss-row{grid-template-columns:minmax(0,1fr) 156px;padding:0 14px;}
+.ss-row{min-height:68px;}
+.ss-sku{font-size:15px;}
+.sales-qty-adjust.ss-stepper{grid-template-columns:46px minmax(30px,1fr) 46px;gap:6px;}
+.sales-qty-adjust.ss-stepper button{width:46px;height:46px;border-radius:12px;font-size:24px;font-weight:700;border:none;touch-action:manipulation;}
+.sales-qty-adjust.ss-stepper button:first-child{background:var(--gold-tint);color:var(--gold-deep);}      /* − sand */
+.sales-qty-adjust.ss-stepper button:last-child{background:var(--sun);color:var(--ink);}                   /* + honey */
+.sales-qty-adjust.ss-stepper button:active{transform:scale(.94);}
+.sales-qty-adjust.ss-stepper .sales-table-number{font-size:22px;font-weight:800;color:var(--ink);}
+.ss-locked .sales-table-number{font-size:20px;font-weight:800;}
+#sales-undo-btn{min-height:52px;}
+
+/* ----- Stock cards: big, readable numbers ----- */
+.stock-outlet-top strong{font-size:17px;color:var(--ink);}
+.stock-block{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px;}
+.stock-block-label{font-size:14px;color:var(--gold-deep);}
+.stock-block-total b{font-size:26px;color:var(--ink);}
+.stock-boxes{gap:8px;}
+.stock-box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 4px;}
+.stock-box b{font-size:20px;color:var(--ink);}
+.stock-box small{font-size:11px;color:var(--ink-soft);}
+.stock-box.excluded{background:transparent;border:1px dashed var(--tan,#C4A37E);}
+.stock-low-flag{background:var(--brick);color:#fff;}
+.stock-summary-sku{border-radius:14px;}
+.stock-location-chip{background:var(--bg);border-radius:10px;}
+.stock-location-chip b{font-size:16px;}
+
+/* ----- Forms: big fields, big steppers ----- */
+.modal-sheet{border-radius:22px 22px 0 0;}
+.modal-title{color:var(--gold-deep);}
+.field label{font-size:13px;color:var(--ink-soft);}
+.field input,.field select,.field textarea{min-height:54px;font-size:18px;border-radius:12px;background:#fff;border:1.5px solid var(--line);}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--sun);outline:3px solid var(--focus);}
+.field input[type="number"]{font-weight:700;text-align:center;}
+.field.qty-small{max-width:170px;}
+.qty-btn{width:58px;font-size:26px;}
+.qty-btn.qty-plus{background:var(--sun);color:var(--ink);}
+.qty-btn.qty-minus{background:var(--gold-tint);color:var(--gold-deep);}
+.qty-stepper input{font-size:20px;}
+.modal-actions .btn{min-height:54px;}
+.toast{background:var(--gold-deep);font-size:14px;padding:12px 20px;}
+
+/* Focus clarity for keyboard / switch users */
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--sun);outline-offset:2px;}
