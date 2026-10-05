@@ -121,6 +121,21 @@ create table if not exists stock_locations (
 alter table stock_locations add column if not exists store_id uuid references stores(id) on delete cascade;
 alter table stock_locations add column if not exists hidden_for uuid[] not null default '{}';
 
+-- counts_in_total: does this location's stock count toward the opening/closing
+-- totals? New column defaults to yes; the first time it is added, the shared
+-- Warehouse location is switched off (Warehouse is shown but not totalled).
+-- Changeable per location in the app (Stock Management > Locations).
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'stock_locations' and column_name = 'counts_in_total'
+  ) then
+    alter table stock_locations add column counts_in_total boolean not null default true;
+    update stock_locations set counts_in_total = false where lower(btrim(name)) = 'warehouse';
+  end if;
+end $$;
+
 -- ---------------------------------------------------------
 -- Sales & stock: one row per OUTLET + DATE + SKU
 -- ---------------------------------------------------------
@@ -299,8 +314,8 @@ insert into settings (company_name, workspace_code)
 select 'Golden Panda', 'DEFAULT'
 where not exists (select 1 from settings);
 
-insert into stock_locations (name, sort_order)
-select v.name, v.ord
+insert into stock_locations (name, sort_order, counts_in_total)
+select v.name, v.ord, (v.name <> 'Warehouse')
 from (values ('Store Room', 1), ('Home Shelf', 2), ('Standee', 3), ('Warehouse', 4)) as v(name, ord)
 where not exists (select 1 from stock_locations);
 

@@ -76,6 +76,12 @@ function normalizeStoreId(storeId){
   return storeId && storeId !== '__none__' ? storeId : null;
 }
 
+// Does this location's quantity count toward the opening/closing totals?
+// (Warehouse is shown but kept out of the totals.) Defaults to yes.
+function locationCounts(loc){
+  return loc.counts_in_total !== false;
+}
+
 function sortedStockLocations(){
   return [...stockLocations].sort((a,b)=>(a.sort_order-b.sort_order) || String(a.created_at||'').localeCompare(String(b.created_at||'')));
 }
@@ -103,12 +109,12 @@ function locationQty(row, locationId, field){
 }
 // Total across the locations that apply to the row's outlet.
 function stockTotal(row, field){
-  const locations = activeStockLocations(row.store_id || null);
+  const locations = activeStockLocations(row.store_id || null).filter(locationCounts);
   return locations.reduce((sum,loc)=>sum + locationQty(row, loc.id, field), 0);
 }
 // Same total, for a bare { locationId: qty } map (e.g. just read from a form).
 function locationMapTotal(map, storeId){
-  return activeStockLocations(storeId === undefined ? null : storeId).reduce((sum,loc)=>sum + Number((map||{})[loc.id] || 0), 0);
+  return activeStockLocations(storeId === undefined ? null : storeId).filter(locationCounts).reduce((sum,loc)=>sum + Number((map||{})[loc.id] || 0), 0);
 }
 // Keeps only the entries for locations that apply to the outlet.
 function locationMapForStore(map, storeId){
@@ -138,7 +144,7 @@ function readLocationInputs(prefix, existingMap, storeId){
   return map;
 }
 function sumLocationInputs(prefix, storeId){
-  return activeStockLocations(storeId).reduce((sum,loc)=>{
+  return activeStockLocations(storeId).filter(locationCounts).reduce((sum,loc)=>{
     const input = document.getElementById(prefix + loc.id);
     return sum + (input ? (parseFloat(input.value) || 0) : 0);
   }, 0);
@@ -146,7 +152,7 @@ function sumLocationInputs(prefix, storeId){
 function renderLocationInputs(prefix, map, oninput, storeId){
   const locations = activeStockLocations(storeId);
   return `<div class="field-row field-row-wrap">${locations.map(loc=>`
-    <div class="field"><label for="${prefix}${loc.id}">${esc(loc.name)}</label><input id="${prefix}${loc.id}" type="number" min="0" step="1" value="${map ? Number(map[loc.id]||0) : ''}" placeholder="0" oninput="${oninput}"></div>
+    <div class="field"><label for="${prefix}${loc.id}">${esc(loc.name)}${locationCounts(loc)?'':' <small>(not in total)</small>'}</label><input id="${prefix}${loc.id}" type="number" min="0" step="1" value="${map ? Number(map[loc.id]||0) : ''}" placeholder="0" oninput="${oninput}"></div>
   `).join('')}</div>`;
 }
 
@@ -154,7 +160,7 @@ function renderLocationInputs(prefix, map, oninput, storeId){
 function renderStockBoxes(totals){
   if(!totals.length) return '<div class="stock-location-empty">No stock locations yet</div>';
   return `<div class="stock-boxes">${totals.map(item=>`
-    <span class="stock-box"><small title="${esc(item.loc.name)}">${esc(item.loc.name)}</small><b>${item.total}</b></span>
+    <span class="stock-box ${locationCounts(item.loc)?'':'excluded'}" ${locationCounts(item.loc)?'':'title="Not counted in the total"'}><small title="${esc(item.loc.name)}">${esc(item.loc.name)}</small><b>${item.total}</b></span>
   `).join('')}</div>`;
 }
 
@@ -199,6 +205,7 @@ function renderLocationsManagerHtml(){
       ${editable.map((loc,index)=>`
         <div class="location-row">
           <input type="text" value="${esc(loc.name)}" maxlength="40" aria-label="Location name" onchange="renameStockLocation('${loc.id}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
+          <label class="location-count" title="Add this location's stock to the opening/closing totals"><input type="checkbox" ${locationCounts(loc)?'checked':''} onchange="setLocationCounts('${loc.id}',this.checked)"><span>Total</span></label>
           <button type="button" class="icon-btn" onclick="moveStockLocation('${loc.id}',-1)" aria-label="Move up" ${index===0?'disabled':''}>↑</button>
           <button type="button" class="icon-btn" onclick="moveStockLocation('${loc.id}',1)" aria-label="Move down" ${index===editable.length-1?'disabled':''}>↓</button>
           <button type="button" class="icon-btn danger" onclick="removeStockLocation('${loc.id}')" aria-label="Remove ${esc(loc.name)}">✕</button>
@@ -280,6 +287,18 @@ async function renameStockLocation(id, input){
     console.error(e);
     input.value = loc.name;
     showToast('Could not rename — ' + (e.message || 'check your connection'));
+  }
+}
+
+async function setLocationCounts(id, counts){
+  try{
+    await DB.updateStockLocation(id, { counts_in_total: !!counts });
+    await reloadStockLocations();
+    showToast(counts ? 'Counts in the total' : 'No longer counts in the total');
+  }catch(e){
+    console.error(e);
+    showToast('Could not change — ' + (e.message || 'check your connection'));
+    await reloadStockLocations().catch(()=>{});
   }
 }
 

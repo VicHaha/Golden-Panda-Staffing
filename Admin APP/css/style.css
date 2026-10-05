@@ -1022,3 +1022,11 @@ button.stock-block:active{background:var(--gold-tint);}
 .stock-history-toggle{display:inline-flex;min-width:0;margin:14px 0 0;}
 
 .ss-prev-date{margin:-4px 2px 12px;color:var(--ink-soft);font-size:13px;font-weight:600;}
+
+/* Locations that don't count toward the totals (e.g. Warehouse) */
+.stock-box.excluded{background:transparent;border:1px dashed var(--line);}
+.stock-box.excluded b{color:var(--ink-soft);}
+.stock-location-chip.excluded{opacity:.75;border:1px dashed var(--line);}
+.location-count{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--ink-soft);white-space:nowrap;cursor:pointer;}
+.location-count input{width:16px;height:16px;accent-color:var(--gold);}
+.field label small{font-weight:500;color:var(--ink-faint);}

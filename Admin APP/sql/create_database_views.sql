@@ -59,6 +59,7 @@ select
   l.id           as location_id,
   l.name         as location_name,
   l.active       as location_active,
+  l.counts_in_total as location_counts,
   coalesce((sr.location_qty         ->> l.id::text)::numeric, 0) as opening_qty,
   coalesce((sr.closing_location_qty ->> l.id::text)::numeric, 0) as closing_qty
 from sales_reports sr
@@ -80,12 +81,12 @@ select
   sr.product_name,
   coalesce(sr.is_free_item, false)        as is_free_item,
   sr.sales_qty,
-  coalesce(sum(c.opening_qty) filter (where c.location_active), 0) as opening_total,
-  coalesce(sum(c.closing_qty) filter (where c.location_active), 0) as closing_total,
-  coalesce(sum(c.closing_qty) filter (where c.location_active), 0)
-    - (coalesce(sum(c.opening_qty) filter (where c.location_active), 0) - sr.sales_qty) as variance,
+  coalesce(sum(c.opening_qty) filter (where c.location_active and c.location_counts), 0) as opening_total,
+  coalesce(sum(c.closing_qty) filter (where c.location_active and c.location_counts), 0) as closing_total,
+  coalesce(sum(c.closing_qty) filter (where c.location_active and c.location_counts), 0)
+    - (coalesce(sum(c.opening_qty) filter (where c.location_active and c.location_counts), 0) - sr.sales_qty) as variance,
   (not coalesce(sr.is_free_item, false)
-    and coalesce(sum(c.closing_qty) filter (where c.location_active), 0) < 10)          as is_low
+    and coalesce(sum(c.closing_qty) filter (where c.location_active and c.location_counts), 0) < 10)          as is_low
 from sales_reports sr
 left join stores st on st.id = sr.store_id
 left join v_stock_counts c on c.sales_report_id = sr.id

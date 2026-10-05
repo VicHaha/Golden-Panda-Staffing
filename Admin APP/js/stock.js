@@ -87,7 +87,7 @@ function formatVariance(value){
 
 function renderStockBlock(label, rows, field, showLow, outletKey, date){
   const totals = stockLocationTotals(rows, field, rows.length ? rows[0].store_id || null : null);
-  const total = totals.reduce((sum,item)=>sum+item.total,0);
+  const total = totals.filter(item=>locationCounts(item.loc)).reduce((sum,item)=>sum+item.total,0);
   const lowCount = showLow ? rows.filter(isLowClosing).length : 0;
   const variance = showLow ? rows.reduce((sum,row)=>sum+stockVariance(row),0) : 0;
   const mismatched = showLow ? rows.filter(row=>stockVariance(row)!==0).length : 0;
@@ -177,7 +177,7 @@ function setStockSummaryCountMode(stateKey, field){
 function stockLocationChips(row, field){
   const locations = activeStockLocations(row.store_id || null);
   if(!locations.length) return '<span class="stock-location-empty">No stock locations</span>';
-  return locations.map(loc=>`<span class="stock-location-chip"><small>${esc(loc.name)}</small><b>${locationQty(row,loc.id,field)}</b></span>`).join('');
+  return locations.map(loc=>`<span class="stock-location-chip ${locationCounts(loc)?'':'excluded'}"><small>${esc(loc.name)}${locationCounts(loc)?'':' (not in total)'}</small><b>${locationQty(row,loc.id,field)}</b></span>`).join('');
 }
 
 function stockSummaryInnerHtml(outletKey, date){
