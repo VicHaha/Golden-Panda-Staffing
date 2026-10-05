@@ -108,10 +108,13 @@ function renderSalesTable(rows, title, isToday, canTapRow){
         : `<span class="ss-sku">${full}</span>`;
       const variance = Number(row.opening_qty||0) - Number(row.closing_qty||0) - Number(row.sales_qty||0);
       const varianceNote = variance !== 0 ? `<small class="ss-meta ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</small>` : '';
-      return `<div class="ss-row ss-row-free ss-group-end"><span class="ss-name-cell"><span class="ss-var-cell">${sku}${productThumb(row.product_name)}</span>${varianceNote}</span>${salesRowControl(row, isToday)}</div>`;
+      return `<div class="ss-row ss-row-free ss-free-grid"><span class="ss-name-cell"><span class="ss-var-cell">${sku}${productThumb(row.product_name)}</span>${varianceNote}</span>
+        <span class="ss-free-num">${Number(row.opening_qty||0)}</span>
+        <span class="ss-free-num">${Number(row.closing_qty||0)}</span>
+        ${salesRowControl(row, isToday)}</div>`;
     }).join('');
     return `<div class="ss-table">
-      <div class="ss-head ss-head-free"><span>${title}</span><span>Qty</span></div>
+      <div class="ss-head ss-head-free ss-free-grid"><span>${title}</span><span>Opening</span><span>Closing</span><span>Given out</span></div>
       ${body}
     </div>`;
   }
@@ -122,19 +125,23 @@ function renderSalesTable(rows, title, isToday, canTapRow){
     if(!group){ group = { base, items: [] }; groups.push(group); }
     group.items.push({ row, variation });
   });
-  const body = groups.map(group=>group.items.map((item,index)=>{
-    const full = esc(canonicalSkuName(item.row.product_name));
-    const variation = esc(item.variation || '—');
-    const variationCell = canTapRow
-      ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${item.row.id}')" aria-label="Edit ${full}">${variation}</button>`
-      : `<span class="ss-sku">${variation}</span>`;
-    const last = index === group.items.length - 1;
-    return `<div class="ss-row ss-row-grouped ${last?'ss-group-end':''}">
-      <span class="ss-family">${index === 0 ? `<span class="ss-family-name">${esc(group.base)}</span>${productThumb(item.row.product_name)}` : ''}</span>
-      ${variationCell}
-      ${salesRowControl(item.row, isToday)}
+  // One block per product: the name (and photo) on the left, and a tight stack of
+  // variation rows on the right. The rows keep their own height, whatever the
+  // size of the photo.
+  const body = groups.map(group=>{
+    const variationRows = group.items.map(item=>{
+      const full = esc(canonicalSkuName(item.row.product_name));
+      const variation = esc(item.variation || '—');
+      const variationCell = canTapRow
+        ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${item.row.id}')" aria-label="Edit ${full}">${variation}</button>`
+        : `<span class="ss-sku">${variation}</span>`;
+      return `<div class="ss-vrow">${variationCell}${salesRowControl(item.row, isToday)}</div>`;
+    }).join('');
+    return `<div class="ss-group">
+      <span class="ss-family"><span class="ss-family-name">${esc(group.base)}</span>${productThumb(group.items[0].row.product_name)}</span>
+      <div class="ss-variations">${variationRows}</div>
     </div>`;
-  }).join('')).join('');
+  }).join('');
   return `<div class="ss-table">
     <div class="ss-head ss-head-grouped"><span>SKU</span><span>Variation</span><span>Sales</span></div>
     ${body}

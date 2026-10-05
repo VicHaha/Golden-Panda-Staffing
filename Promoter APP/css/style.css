@@ -1413,3 +1413,21 @@ button,input,select,textarea{font-family:inherit;}
 .ss-family{padding-top:9px;padding-bottom:6px;}
 .ss-sku-btn{padding:4px 0;}
 .ss-head{min-height:30px;}
+
+/* Sales table groups: product (name + photo) | stack of variation rows */
+.ss-group{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr) 108px;column-gap:8px;padding:6px 12px;border-bottom:1px solid var(--line);}
+.ss-group:last-child{border-bottom:none;}
+.ss-group .ss-family{grid-column:1;align-self:start;padding:8px 0 4px;}
+.ss-variations{grid-column:2 / span 2;display:grid;grid-auto-rows:38px;}
+.ss-vrow{display:grid;grid-template-columns:minmax(0,1fr) 108px;column-gap:8px;align-items:center;}
+.ss-vrow .ss-sku{font-size:14px;font-weight:500;}
+
+/* Given out:  item | opening | closing | given out (− n +) */
+.panel .ss-head-free{display:grid;}
+.ss-free-grid{grid-template-columns:minmax(0,1fr) 46px 46px 108px;column-gap:6px;}
+.ss-head-free.ss-free-grid span:nth-child(n+2){text-align:center;font-size:10px;}
+.ss-free-num{text-align:center;font-size:14px;font-weight:600;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.ss-row.ss-free-grid{border-bottom:none;}
+
+.ss-free-grid{grid-template-columns:minmax(0,1fr) 54px 54px 108px;column-gap:4px;}
+.ss-head-free.ss-free-grid span:nth-child(n+2){font-size:9.5px;letter-spacing:.03em;}
