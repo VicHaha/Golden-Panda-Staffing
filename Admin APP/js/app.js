@@ -9,7 +9,7 @@ let salesReports = [];
 let dayPhotos = [];
 let dayFeedback = [];
 let shiftReports = [];
-let currentTab = 'sales';
+let currentTab = 'home';
 let reportMonth = new Date().toISOString().slice(0,7);
 let realtimeChannel = null;
 
@@ -22,6 +22,13 @@ let currentAdminName = localStorage.getItem('gp_admin_name') || null;
 function stockRecordAttribution(){
   return { promoter_id:null, logged_by_admin_name:currentAdminName };
 }
+
+// Hooks used by the shared sales/stock modules (js/sales-section.js,
+// js/locations.js). The promoter app defines its own versions.
+function salesActorName(){ return currentAdminName || 'Admin'; }
+function salesActorPromoterId(){ return null; }
+function canEditPastSales(){ return true; }
+function canManageStockLocations(){ return true; }
 
 function boot(){
   const root = document.getElementById('root');
@@ -184,38 +191,46 @@ function renderApp(){
     <div class="phone">
       <div class="app-header">
         <div class="brand-row">
-          <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
+          <img class="brand-mark" src="${APP_LOGO_SRC}" alt="Golden Panda logo">
           <div class="brand-text">
             <h1>Golden Panda</h1>
-            <p>Roadshow Staffing</p>
+            <p>Retail Operation</p>
           </div>
-          <span class="sync-status" title="Connection status"><span class="sync-dot off" id="sync-dot"></span><span class="sync-label" id="sync-label">Syncing</span></span>
-          <button type="button" class="identity-chip" onclick="logOutAdmin()" title="Log out ${esc(currentAdminName)}">${esc(currentAdminName)}</button>
+          <button type="button" class="identity-chip" id="identity-chip" onclick="logOutAdmin()" title="Log out ${esc(currentAdminName)}">
+            <span class="sync-dot off" id="sync-dot" role="img" aria-label="Connection status"></span>
+            <span class="identity-name">${esc(currentAdminName)}</span>
+          </button>
         </div>
       </div>
       <main class="content" id="content"><div class="loading-state" role="status"><span class="loading-spinner" aria-hidden="true"></span>Loading your workspace…</div></main>
       <div class="fab" id="fab">
+        <button type="button" class="fab-memo hidden" onclick="openMemoSection()" aria-label="Open memo notes" title="Memo">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/></svg>
+        </button>
         <button type="button" class="fab-primary" onclick="openFab()" aria-label="Add job">+</button>
         <button type="button" class="fab-calendar hidden" onclick="openWorkDateForm()" aria-label="Add working date without promoter" title="Add working date without promoter">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
         </button>
       </div>
       <nav class="tabbar" aria-label="Main navigation">
-        <button type="button" class="tab" data-tab="roster" onclick="switchTab('roster')">
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-          Schedule
-        </button>
         <button type="button" class="tab" data-tab="sales" onclick="switchTab('sales')">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          Sales
+          <span>Sales Section</span>
         </button>
         <button type="button" class="tab" data-tab="stock" onclick="switchTab('stock')">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
-          Stock
+          <span>Stock Management</span>
+        </button>
+        <button type="button" class="tab tab-home" data-tab="home" onclick="switchTab('home')" aria-label="Home">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+        </button>
+        <button type="button" class="tab" data-tab="roster" onclick="switchTab('roster')">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+          <span>Schedule</span>
         </button>
         <button type="button" class="tab" data-tab="reports" onclick="switchTab('reports')">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
-          Payout
+          <span>Payout</span>
         </button>
       </nav>
     </div>
@@ -227,6 +242,7 @@ async function loadInitialData(){
   try{
     await DB.purgeOldJobs().catch(e=>console.warn('Purge old jobs failed (non-fatal):', e));
     await DB.purgeOldSalesReports().catch(e=>console.warn('Purge old sales reports failed (non-fatal):', e));
+    await DB.purgeOldSalesLog().catch(e=>console.warn('Purge old sales log failed (non-fatal):', e));
     await DB.purgeOldDayPhotos().catch(e=>console.warn('Purge old day photos failed (non-fatal):', e));
     await DB.purgeOldDayFeedback().catch(e=>console.warn('Purge old day feedback failed (non-fatal):', e));
     await refreshData();
@@ -241,12 +257,18 @@ async function loadInitialData(){
     setSyncDot(false);
     showToast('Could not connect to Supabase — check your internet connection');
   }
-  switchTab(openTappedScheduleReminder() ? 'roster' : 'sales');
+  switchTab(openTappedScheduleReminder() ? 'roster' : 'home');
 }
 
-// Re-fetches promoters, jobs, stores, sales reports, day photos, day feedback, and shift reports from Supabase.
+// Re-fetches promoters, jobs, stores, stock locations, sales reports, the
+// viewed day's sales log, day photos, day feedback, and shift reports.
 async function refreshData(){
-  const [p, j, s, sr, dp, df, shr] = await Promise.all([DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getDayFeedback(), DB.getShiftReports()]);
+  const [p, j, s, sr, dp, df, shr, locations, log] = await Promise.all([
+    DB.getPromoters(), DB.getJobs(), DB.getStores(), DB.getSalesReports(), DB.getDayPhotos(), DB.getDayFeedback(), DB.getShiftReports(),
+    DB.getStockLocations(),
+    // The history log is a nice-to-have: a failure here must not take the whole app down.
+    DB.getSalesLogForDate(salesViewDateValue()).catch(e=>{ console.warn('Could not load sales history (non-fatal):', e); return salesLog; })
+  ]);
   promoters = p;
   jobs = j;
   stores = s;
@@ -254,6 +276,8 @@ async function refreshData(){
   dayPhotos = dp;
   dayFeedback = df;
   shiftReports = shr;
+  stockLocations = locations;
+  salesLog = log;
   setSyncDot(true);
 }
 
@@ -269,6 +293,8 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_feedback' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_log' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_locations' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });
@@ -283,6 +309,7 @@ async function handleRemoteChange(){
     render();
   }catch(e){
     console.error(e);
+    setSyncDot(false);
   }
 }
 
@@ -309,7 +336,7 @@ function openFab(){
   }
   else if(currentTab==='sales') openSalesForm();
   else if(currentTab==='stock') openAddStockRecordForm();
-  else showToast('Switch to Schedule, Sales, or Stock to add');
+  else showToast('Switch to Schedule, Sales Section, or Stock Management to add');
 }
 
 function render(){
@@ -320,29 +347,34 @@ function render(){
   });
   const c = document.getElementById('content');
   if(!c) return;
-  if(currentTab==='roster') c.innerHTML = renderRosterSection();
-  else if(currentTab==='sales') c.innerHTML = renderSales();
+  // The Sales Section has an inline notes box — don't wipe a half-typed note
+  // when a +/- tap or a live update redraws the screen.
+  const notesDraft = currentTab==='sales' ? captureNotesDraft() : null;
+  if(currentTab==='home') c.innerHTML = renderHome();
+  else if(currentTab==='roster') c.innerHTML = renderRosterSection();
+  else if(currentTab==='sales') c.innerHTML = renderSalesSection();
   else if(currentTab==='stock') c.innerHTML = renderStockManagement();
   else c.innerHTML = renderReports();
   if(currentTab==='reports') wireReportControls();
   else if(currentTab==='roster') wireRosterSectionControls();
-  else if(currentTab==='sales') wireStockExportControls();
+  else if(currentTab==='home') wireStockExportControls();
+  else if(currentTab==='sales') restoreNotesDraft(notesDraft);
 
-  // No "+" action makes sense on Payout — hide the FAB there. Stock
-  // Management's FAB adds a new stock-location record (see
-  // openAddStockRecordForm in js/stock.js); it's separate from the
-  // Sales tab's own "+", which adds a Sales record instead.
+  // No "+" action makes sense on Home or Payout — hide the FAB there. The
+  // memo button only appears on Schedule, above the "+".
   const fab = document.getElementById('fab');
   if(fab){
-    fab.classList.toggle('hidden', currentTab==='reports');
+    fab.classList.toggle('hidden', currentTab==='reports' || currentTab==='home');
     const label = currentTab==='roster' ? (rosterPage==='schedule' ? 'Add job' : 'Add promoter') : currentTab==='sales' ? 'Add sales report' : 'Add stock record';
-    const button = fab.querySelector('button');
+    const button = fab.querySelector('.fab-primary');
     if(button){
       button.setAttribute('aria-label',label);
       button.title = label;
     }
     const calendarButton = fab.querySelector('.fab-calendar');
     if(calendarButton) calendarButton.classList.toggle('hidden', !(currentTab==='roster' && rosterPage==='schedule'));
+    const memoButton = fab.querySelector('.fab-memo');
+    if(memoButton) memoButton.classList.toggle('hidden', currentTab!=='roster');
   }
 }
 

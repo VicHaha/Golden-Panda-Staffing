@@ -78,10 +78,32 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
+// Square logo shown top-left in the header of both apps. To use a dedicated
+// logo, add it as assets/logo.png and change this one line (and add the
+// file to SHELL_FILES in service-worker.js).
+const APP_LOGO_SRC = 'assets/icon-192.png';
+
+// The little light inside the name chip in the header: green = connected to
+// Supabase, red = not connected.
 function setSyncDot(ok){
   const dot = document.getElementById('sync-dot');
-  if(dot) dot.classList.toggle('off', !ok);
+  if(dot){
+    dot.classList.toggle('off', !ok);
+    dot.setAttribute('aria-label', ok ? 'Connected to Supabase' : 'Not connected to Supabase');
+    dot.title = ok ? 'Connected to Supabase' : 'Not connected to Supabase';
+  }
 }
+
+// Going offline should turn the light red straight away (the realtime
+// channel only notices after a heartbeat), and coming back online
+// re-fetches so the light and the screen catch up.
+window.addEventListener('offline', ()=>setSyncDot(false));
+window.addEventListener('online', ()=>{
+  if(!document.getElementById('sync-dot') || typeof refreshData !== 'function') return;
+  refreshData()
+    .then(()=>{ if(typeof render === 'function' && !document.querySelector('.modal-overlay')) render(); })
+    .catch(()=>setSyncDot(false));
+});
 
 // Increments/decrements a number input by 1, clamped to its min attribute
 // (defaults to 0), then fires the input's own 'input' event so any existing

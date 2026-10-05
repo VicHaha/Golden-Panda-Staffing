@@ -43,8 +43,23 @@ files **in this order**:
     for one general feedback field per working date, shown at the
     bottom of each date's record on the Sales tab (see "What's new in
     this version" below).
+15. `sql/migration_flexible_stock_locations.sql` — **Retail Operation
+    redesign.** Creates the editable `stock_locations` list (seeded with
+    Store Room, Home Shelf, Standee, Warehouse) and adds two jsonb
+    columns to `sales_reports` (`location_qty`, `closing_location_qty`).
+    **Copies every existing stock figure across — nothing is deleted**;
+    the old columns stay in place untouched.
+16. `sql/migration_sales_log.sql` — **Retail Operation redesign.**
+    Creates `sales_log`, the history of every +/- tap in the Sales
+    Section (used by both apps).
+17. `sql/migration_memos.sql` — **Retail Operation redesign.** Creates
+    the `memos` table behind the Memo button on Schedule.
 
 All are safe to run again if you're not sure which you've already run.
+
+> **Run 15, 16 and 17 BEFORE deploying this version of either app.**
+> The apps now read `location_qty` / `closing_location_qty` and the new
+> tables, so an old database makes them fail to load stock.
 
 ### One-time cleanup: remove "PG Mall" from the store list
 
@@ -93,7 +108,51 @@ photos completely separate from your database quota.
 Until this is set up, everything else works fine — only the photo
 upload button will show an error if tapped.
 
-### What's new in this version
+### What's new in the Retail Operation redesign
+
+Navigation is now **Sales Section · Stock Management · Home · Schedule ·
+Payout**, and the app opens on **Home**.
+
+- **Header (every screen)** — logo, "Golden Panda / Retail Operation",
+  and your name in a chip with a connection light: green = connected to
+  Supabase, red = not connected (it also goes red the moment the device
+  goes offline). Tap the chip to log out. The logo is currently
+  `assets/icon-192.png`; to use a dedicated `logo.png`, drop it in
+  `assets/`, change `APP_LOGO_SRC` in `js/utils.js` and add the file to
+  `SHELL_FILES` in `service-worker.js`.
+- **Home** (`js/home.js`) — Daily | Monthly toggle with the same pickers
+  as before, and **Export** (the unchanged Excel export, moved here from
+  the old Sales tab). Below: **Sales Record** (SKUs with sales in the
+  chosen period, best seller first, free items excluded), **Stock
+  Record** (SKUs whose closing stock is under 10, grouped by outlet, or
+  "All stock OK") and **On Duty** (everyone scheduled today, by outlet,
+  with role and shift time). Each card opens its section.
+- **Sales Section** (`js/sales-section.js`) — one SKU | Sales table per
+  outlet with a **− n +** stepper, free items in a separate "Given out"
+  table, and a **History** log for that day ("Victoria added 1 sales to
+  … at W Mart"). Every tap writes to `sales_log`, including taps from
+  the promoter app. Only today can be changed with the stepper; earlier
+  days are viewable and marked 🔒 (admins can still tap a SKU name on an
+  earlier day to correct that record in the edit form). "+" opens the
+  existing add-sales form. Day photos and the day's notes now sit under
+  the history instead of in a pop-up.
+- **Stock Management** (`js/stock.js`, `js/locations.js`) — one card per
+  outlet with **Opening** and **Closing** blocks of location boxes, and
+  a red **LOW** flag when any SKU's closing is under 10 (fixed rule; the
+  old per-outlet alert setting is gone). Tap a card for the per-SKU
+  sheet and editing, **Past Records** expands earlier days, **⚙
+  Locations** lets you add / rename / reorder / remove locations (admin
+  app only — removing hides a location, past records keep their
+  numbers). Warehouse is now an ordinary location, so it counts in the
+  totals and its closing figure carries forward like the others.
+- **Schedule** — unchanged, plus a **Memo** button above the "+" (notes
+  with an optional date, newest first).
+- **Payout** — unchanged.
+- **Excel export** — same sheets; the "Raw Stock Data" sheet now has one
+  column per stock location and "Total Stock" includes every location
+  (previously it excluded Warehouse).
+
+### Earlier changes
 
 - **Excel export rebuilt — now 6 focused sheets** — the Export .xlsx
   button (Sales tab) no longer produces the old raw-plus-summary sheet

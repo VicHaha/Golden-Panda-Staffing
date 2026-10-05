@@ -10,6 +10,27 @@ vice versa. Two different links, one shared database.
 
 ## Setup
 
+### 0. Retail Operation redesign — extra migrations (required for this version)
+
+Run these three from the **main office app's** `sql/` folder, once, in
+Supabase → SQL Editor, **before** deploying this version of either app:
+
+1. `migration_flexible_stock_locations.sql` — editable stock locations
+   (copies all existing stock figures across, deletes nothing)
+2. `migration_sales_log.sql` — the history log of +/- taps
+3. `migration_memos.sql` — memo notes (office app only, but run it so
+   the office app's Memo button works)
+
+What changed in this app: same header (logo, "Golden Panda / Retail
+Operation", your name with a green/red Supabase connection light),
+bottom nav **Sales Section · Stock Management · Shift Report ·
+Schedule**, the new per-outlet Sales Section with − n + steppers and
+today's history log, and the new Stock Management outlet cards (Opening
+/ Closing boxes, LOW flag, Past Records). Every + / − tap is logged with
+your name and shows up in the office app's history within a moment, and
+the other way round. Stock locations are managed from the office app and
+appear here automatically (read-only).
+
 ### 1. Run the SQL migrations (if you haven't already)
 
 These are the same migrations from the main app — if you've already run

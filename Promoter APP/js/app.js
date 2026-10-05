@@ -20,6 +20,13 @@ function stockRecordAttribution(){
   return { promoter_id:currentPromoterId };
 }
 
+// Hooks used by the shared sales/stock modules (js/sales-section.js,
+// js/locations.js). The admin app defines its own versions.
+function salesActorName(){ return currentPromoterName || 'Promoter'; }
+function salesActorPromoterId(){ return currentPromoterId; }
+function canEditPastSales(){ return false; }
+function canManageStockLocations(){ return false; }
+
 function boot(){
   const root = document.getElementById('root');
 
@@ -209,13 +216,15 @@ async function startApp(){
     <div class="phone">
       <div class="app-header">
         <div class="brand-row">
-          <img class="brand-mark" src="assets/icon-192.png" alt="Golden Panda logo">
+          <img class="brand-mark" src="${APP_LOGO_SRC}" alt="Golden Panda logo">
           <div class="brand-text">
             <h1>Golden Panda</h1>
-            <p>Field Reports</p>
+            <p>Retail Operation</p>
           </div>
-          <div class="sync-dot off" id="sync-dot" title="Syncing"></div>
-          <div class="identity-chip" onclick="logOut()">${esc(currentPromoterName)}</div>
+          <button type="button" class="identity-chip" id="identity-chip" onclick="logOut()" title="Log out ${esc(currentPromoterName)}">
+            <span class="sync-dot off" id="sync-dot" role="img" aria-label="Connection status"></span>
+            <span class="identity-name">${esc(currentPromoterName)}</span>
+          </button>
         </div>
       </div>
       <div id="shift-reminder"></div>
@@ -224,19 +233,19 @@ async function startApp(){
       <div class="tabbar">
         <button class="tab" data-tab="sales" onclick="switchTab('sales')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8L12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          Sales
+          <span>Sales Section</span>
         </button>
         <button class="tab" data-tab="stock" onclick="switchTab('stock')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16v13H4z"/><path d="M2 4h20v3H2zM9 11h6"/></svg>
-          Stock
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="1.5"/><path d="M3 7l3.5-4h11L21 7"/><path d="M9 12h6"/></svg>
+          <span>Stock Management</span>
         </button>
         <button class="tab" data-tab="shift" onclick="switchTab('shift')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3h6v3H9z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 12h6M9 16h4"/></svg>
-          Shift Report
+          <span>Shift Report</span>
         </button>
         <button class="tab" data-tab="schedule" onclick="switchTab('schedule')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-          Schedule
+          <span>Schedule</span>
         </button>
       </div>
     </div>
@@ -280,8 +289,15 @@ async function refreshTomorrowJob(){
 }
 
 async function refreshData(){
-  const [s, sd, sr, dp, shr, jb] = await Promise.all([DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports(), DB.getAllJobs()]);
+  const [s, sd, sr, dp, shr, jb, locations, log] = await Promise.all([
+    DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports(), DB.getAllJobs(),
+    DB.getStockLocations(),
+    // The history log is a nice-to-have: a failure here must not take the whole app down.
+    DB.getSalesLogForDate(salesViewDateValue()).catch(e=>{ console.warn('Could not load sales history (non-fatal):', e); return salesLog; })
+  ]);
   stores = s;
+  stockLocations = locations;
+  salesLog = log;
   scheduledDates = sd;
   salesReports = sr;
   dayPhotos = dp;
@@ -317,6 +333,8 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_log' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_locations' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteJobChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
@@ -330,6 +348,7 @@ async function handleRemoteChange(){
     render();
   }catch(e){
     console.error(e);
+    setSyncDot(false);
   }
 }
 
@@ -419,7 +438,7 @@ function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
-  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSales();
+  c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSalesSection();
   const fab = document.getElementById('fab');
   if(fab) fab.style.display = currentTab==='schedule' ? 'none' : '';
 }

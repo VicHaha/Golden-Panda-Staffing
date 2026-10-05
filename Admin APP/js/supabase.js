@@ -181,7 +181,7 @@ const DB = {
       .from('sales_reports')
       .select(`
         id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, created_at, updated_at,
-        store_room_qty, home_shelf_qty, standee_qty, closing_store_room_qty, closing_home_shelf_qty, closing_standee_qty, warehouse_qty, logged_by_admin_name, customer_feedback,
+        location_qty, closing_location_qty, logged_by_admin_name, customer_feedback,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
@@ -230,6 +230,96 @@ const DB = {
       .from('sales_reports')
       .delete()
       .lt('work_date', cutoffStr);
+    if(error) throw error;
+  },
+
+  // ---------------- Stock locations (the editable list behind the stock boxes) ----------------
+  async getStockLocations(){
+    const { data, error } = await sb
+      .from('stock_locations')
+      .select('*')
+      .order('sort_order')
+      .order('created_at');
+    if(error) throw error;
+    return data;
+  },
+
+  async addStockLocation(location){
+    const { data, error } = await sb
+      .from('stock_locations')
+      .insert(location)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async updateStockLocation(id, changes){
+    const { error } = await sb
+      .from('stock_locations')
+      .update(changes)
+      .eq('id', id);
+    if(error) throw error;
+  },
+
+  // ---------------- Sales log (history of +/- taps, one day at a time) ----------------
+  async getSalesLogForDate(work_date){
+    const { data, error } = await sb
+      .from('sales_log')
+      .select('id, work_date, store_id, product_name, delta, admin_name, promoter_id, created_at')
+      .eq('work_date', work_date)
+      .order('created_at', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  async addSalesLog(entry){
+    const { data, error } = await sb
+      .from('sales_log')
+      .insert(entry)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  // Same 3-month cutoff as purgeOldSalesReports.
+  async purgeOldSalesLog(){
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const { error } = await sb
+      .from('sales_log')
+      .delete()
+      .lt('work_date', cutoffStr);
+    if(error) throw error;
+  },
+
+  // ---------------- Memos (admin-only notes, newest first) ----------------
+  async getMemos(){
+    const { data, error } = await sb
+      .from('memos')
+      .select('id, note_date, text, created_by, created_at')
+      .order('created_at', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  async addMemo(memo){
+    const { data, error } = await sb
+      .from('memos')
+      .insert(memo)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  },
+
+  async deleteMemo(id){
+    const { error } = await sb
+      .from('memos')
+      .delete()
+      .eq('id', id);
     if(error) throw error;
   },
 

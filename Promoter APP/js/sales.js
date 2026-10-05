@@ -1,10 +1,10 @@
 // ============================================================
-// Sales & Stock — grouped-by-date view. Any logged-in promoter can
+// Sales data helpers — SKU naming/grouping, auto-seeding of each working
+// day's rows, the add/edit sales form and day photos. The Sales Section
+// screen itself lives in js/sales-section.js. Any logged-in promoter can
 // edit/delete TODAY's entries (regardless of who logged them); past
 // dates are locked for promoters and only editable from the office app.
 // ============================================================
-
-let salesShowPast = false;
 
 // Fixed default SKU list. Keep this order in the app; do not alphabetize it.
 const PRODUCT_SUGGESTIONS = [
@@ -139,35 +139,11 @@ function activeProductTab(stateKey, groups, state){
   return groups.length ? groups[0].key : null;
 }
 
-// Which tab is showing per date — defaults to the first category that
-// actually has products for that date, falling back to 'bottle'.
-let salesActiveTab = {};
-function activeStockTab(date, grouped){
-  const current = salesActiveTab[date];
-  if(current && grouped[current] && grouped[current].length) return current;
-  const firstNonEmpty = STOCK_CATEGORIES.find(c => grouped[c.key].length);
-  return firstNonEmpty ? firstNonEmpty.key : 'bottle';
-}
-function setStockTab(date, key){
-  salesActiveTab[date] = key;
-  refreshSalesSummary(date);
-}
-function renderStockTabs(date, grouped, active){
-  return `<div class="stock-tabs">${STOCK_CATEGORIES.map(c=>{
-    const count = grouped[c.key].length;
-    return `<button class="stock-tab ${active===c.key?'active':''}" onclick="setStockTab('${date}','${c.key}')">${c.label}${count?` <span class="stock-tab-count">${count}</span>`:''}</button>`;
-  }).join('')}</div>`;
-}
-
-// ---------------- Outlet tabs ----------------
+// ---------------- Outlet grouping ----------------
 // A single working date can end up with reports from more than one
-// outlet/store (e.g. a promoter covers two malls in one day). When that
-// happens, split the date's records into a row of outlet tabs — inserted
-// right below the date's header — so each outlet's products/stock tabs
-// are viewed one at a time instead of all mixed together. A date with
-// only one outlet (the common case) skips the tabs entirely and shows
-// exactly as before. Rows with no store selected are grouped under a
-// single "Unspecified" tab, keeping their original relative order.
+// outlet/store (e.g. a promoter covers two malls in one day). The Sales
+// Section shows one table per outlet. Rows with no store selected are
+// grouped under a single "Unspecified" outlet.
 function groupByOutlet(items){
   const groups = [];
   const byKey = {};
@@ -180,25 +156,6 @@ function groupByOutlet(items){
     byKey[key].items.push(i);
   });
   return groups;
-}
-
-// Which outlet tab is showing per date — defaults to the first outlet
-// that has records, falling back to whichever comes first if the
-// previously-active outlet's records are gone (e.g. all deleted/edited).
-let salesActiveOutletTab = {};
-function activeOutletTab(date, groups){
-  const current = salesActiveOutletTab[date];
-  if(current && groups.some(g => g.key === current)) return current;
-  return groups.length ? groups[0].key : null;
-}
-function setOutletTab(date, key){
-  salesActiveOutletTab[date] = key;
-  refreshSalesSummary(date);
-}
-function renderOutletTabs(date, groups, active){
-  return `<div class="stock-tabs outlet-tabs">${groups.map(g=>`
-    <button class="stock-tab ${active===g.key?'active':''}" onclick="setOutletTab('${date}','${g.key}')">${esc(g.label)}${g.items.length?` <span class="stock-tab-count">${g.items.length}</span>`:''}</button>
-  `).join('')}</div>`;
 }
 
 function getProductSuggestions(){
@@ -315,16 +272,12 @@ async function ensureStockRowsForDate(date){
     const priorEntries = salesReports
       .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(product) && r.work_date < date)
       .sort((a,b) => b.work_date.localeCompare(a.work_date));
-    const carryOver = priorEntries.length ? Number(priorEntries[0].closing_qty||0) : 0;
-    // Warehouse stock (admin-only field, not shown in this app's form) is
-    // a running total, not a daily transaction — carry the last known
-    // figure forward untouched so it stays correct no matter which app
-    // ends up creating the next date's row.
-    const warehouseCarryOver = priorEntries.length ? Number(priorEntries[0].warehouse_qty||0) : 0;
+    // Every location (Warehouse included) carries its last closing figure
+    // forward untouched until someone edits it; opening and closing both
+    // start from it.
     const prior = priorEntries[0] || {};
-    const storeRoomCarryOver = Number(prior.closing_store_room_qty||0);
-    const homeShelfCarryOver = Number(prior.closing_home_shelf_qty||0);
-    const standeeCarryOver = Number(prior.closing_standee_qty||0);
+    const carriedLocations = { ...locationMap(prior,'closing') };
+    const carryOver = locationMapTotal(carriedLocations);
 
     try{
       const created = await DB.addSalesReport({
@@ -338,13 +291,8 @@ async function ensureStockRowsForDate(date){
         remarks: null,
         photo_url: null,
         is_free_item: giveaway,
-        store_room_qty: storeRoomCarryOver,
-        home_shelf_qty: homeShelfCarryOver,
-        standee_qty: standeeCarryOver,
-        closing_store_room_qty: storeRoomCarryOver,
-        closing_home_shelf_qty: homeShelfCarryOver,
-        closing_standee_qty: standeeCarryOver,
-        warehouse_qty: warehouseCarryOver
+        location_qty: { ...carriedLocations },
+        closing_location_qty: { ...carriedLocations }
       });
       // Keep the local cache current so a later target date processed in
       // this same run carries over from the row we just created.
@@ -364,179 +312,10 @@ async function carryClosingToNextEvent(productName, workDate, closingQty, locati
   for(const row of nextRows){
     const untouched = Number(row.sales_qty||0) === 0 && Number(row.closing_qty||0) === Number(row.opening_qty||0);
     const update = { opening_qty:Number(closingQty||0) };
-    if(locations) Object.assign(update, {
-      store_room_qty:locations.storeRoom,
-      home_shelf_qty:locations.homeShelf,
-      standee_qty:locations.standee
-    });
+    if(locations) update.location_qty = { ...locations };
     if(untouched) update.closing_qty = Number(closingQty||0);
-    if(untouched && locations) Object.assign(update, {
-      closing_store_room_qty:locations.storeRoom,
-      closing_home_shelf_qty:locations.homeShelf,
-      closing_standee_qty:locations.standee
-    });
+    if(untouched && locations) update.closing_location_qty = { ...locations };
     await DB.updateSalesReport(row.id, update);
-  }
-}
-
-function renderSales(){
-  if(salesReports.length===0 && dayPhotos.length===0){
-    return emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
-  }
-
-  const byDate = {};
-  salesReports.forEach(r=>{
-    if(!byDate[r.work_date]) byDate[r.work_date] = [];
-    byDate[r.work_date].push(r);
-  });
-  dayPhotos.forEach(dp=>{
-    if(!byDate[dp.work_date]) byDate[dp.work_date] = [];
-  });
-  const allDates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
-  const today = todayStr();
-
-  const hiddenDates = allDates.slice(1);
-  const visibleDates = salesShowPast ? allDates : allDates.slice(0,1);
-
-  let html = `<div class="section-title">Sales &amp; stock reports <span class="count-pill">${allDates.length} date${allDates.length>1?'s':''}</span></div>`;
-
-  if(visibleDates.length === 0){
-    html += emptyState('📦','No sales reports yet','Tap + to log opening stock, sales, and closing stock for today.');
-  }else{
-    html += `<div class="sales-date-grid">${visibleDates.map(date=>{
-      const items = byDate[date];
-      const totalSales = items.filter(i=>!isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
-      const totalGiven = items.filter(i=>isFreeItem(i)).reduce((s,i)=>s + Number(i.sales_qty||0), 0);
-      const totalCustomers = shiftReports.filter(report=>report.work_date===date).reduce((sum,report)=>sum+Number(report.engaged||0),0);
-      const conversionRate = totalCustomers ? Math.round((totalSales/totalCustomers)*100) : 0;
-      const locations = [...new Set(items.map(item=>item.stores&&item.stores.name).filter(Boolean))];
-      const isToday = date === today;
-      return `<button type="button" class="sales-date-card" onclick="openSalesDateSummary('${date}')">
-        <span class="sales-date-card-top"><span><strong>${formatDateLong(date)}</strong><span class="sales-date-location">${esc(locations.join(', ') || 'Location not specified')}</span>${isToday?'<small>Today</small>':'<small class="badge-locked">🔒 Locked</small>'}</span><span class="sales-date-total"><b>${totalSales}</b><small>sold</small></span></span>
-        <span class="sales-date-metrics"><span><small>SKUs</small><b>${items.length}</b></span><span><small>Conversion</small><b>${conversionRate}%</b></span></span>
-      </button>`;
-    }).join('')}</div>`;
-  }
-
-  if(hiddenDates.length){
-    html += `<button class="btn btn-ghost btn-block" style="margin-top:14px;" onclick="toggleSalesShowPast()">${salesShowPast?'Hide':'Show'} earlier sales records (${hiddenDates.length})</button>`;
-  }
-
-  return html;
-}
-
-function toggleSalesShowPast(){
-  salesShowPast = !salesShowPast;
-  render();
-}
-
-// ---------------- Sales date summary modal ----------------
-// Tapping a date card opens the full breakdown here. Switching the
-// outlet/stock-category tabs while it's open calls refreshSalesSummary()
-// below, which only replaces this sheet's own contents — the overlay and
-// sheet elements themselves are never removed/recreated, so there's no
-// backdrop flash or re-triggered open animation when flipping tabs.
-function buildSalesSummaryInner(date){
-  const items = salesReports.filter(row=>row.work_date===date);
-  const isToday = date === todayStr();
-  const totalSales = items.filter(item=>!isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
-  const totalGiven = items.filter(item=>isFreeItem(item)).reduce((sum,item)=>sum+Number(item.sales_qty||0),0);
-  const storeNames = [...new Set(items.filter(item=>item.stores).map(item=>item.stores.name))];
-
-  // Split by outlet first (only rendered as tabs when a date actually has
-  // more than one outlet) — the product-category tabs below then work on
-  // just that outlet's records.
-  const outletGroups = groupByOutlet(items);
-  const showOutletTabs = outletGroups.length > 1;
-  const activeOutletKey = showOutletTabs ? activeOutletTab(date, outletGroups) : null;
-  const scopedItems = showOutletTabs ? outletGroups.find(g=>g.key===activeOutletKey).items : items;
-
-  const grouped = groupByStockCategory(scopedItems);
-  const active = activeStockTab(date, grouped);
-  const activeItems = grouped[active];
-  const hasAnyProducts = grouped.bottle.length || grouped.refill.length || grouped.free.length;
-
-  return `
-    <div class="stock-summary-head"><div class="modal-title">${formatDateLong(date)}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    <div class="sales-summary-meta">${items.length} product${items.length>1?'s':''}${storeNames.length?' · '+esc(storeNames.join(', ')):''} · ${totalSales} sold${totalGiven?` · ${totalGiven} given away`:''}${!isToday?' · Only today can be edited':''}</div>
-    ${renderDayPhotoRow(date, isToday)}
-    ${showOutletTabs ? renderOutletTabs(date, outletGroups, activeOutletKey) : ''}
-    ${hasAnyProducts ? renderStockTabs(date, grouped, active) : ''}
-    ${activeItems.length ? renderSalesItems(activeItems, isToday, active==='free') : `<div class="stock-tab-empty">No products in this group yet.</div>`}
-  `;
-}
-
-function openSalesDateSummary(date){
-  const items = salesReports.filter(row=>row.work_date===date);
-  const hasPhotos = dayPhotos.some(dp=>dp.work_date===date);
-  if(!items.length && !hasPhotos){ showToast('No sales record found for that date'); return; }
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-sheet sales-summary-sheet" id="sales-summary-sheet">${buildSalesSummaryInner(date)}</div>`;
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
-}
-
-// Refreshes only the sales summary sheet's own contents in place — used
-// by tab switches inside the modal so they don't flicker (see above).
-function refreshSalesSummary(date){
-  const sheet = document.getElementById('sales-summary-sheet');
-  if(sheet) sheet.innerHTML = buildSalesSummaryInner(date);
-}
-
-// `compact` is used for the Free tab — giveaways don't need the full
-// open/sold/close breakdown, just how many went out, so the list stays
-// quick to scan while keying in samples/coupons/etc.
-function renderSalesItems(items, isToday, compact){
-  const loggers = [...new Set(items.map(loggedByLabel))];
-  const commonLogger = loggers.length === 1 ? loggers[0] : null;
-  const rows = items.map(i=>{
-    const giveaway = isFreeItem(i);
-    const opening = Number(i.opening_qty||0), sales = Number(i.sales_qty||0), closing = Number(i.closing_qty||0);
-    const variance = closing - (opening - sales);
-    return `
-      <div class="sales-table-row ${isToday?'sales-table-row-editable':''}" ${isToday?`role="button" tabindex="0" onclick="closeModal();openSalesForm('${i.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeModal();openSalesForm('${i.id}')}" aria-label="Edit ${esc(displayProductName(i))}"`:''}>
-        <div class="sales-table-sku">
-          <strong>${esc(displayProductName(i))}</strong>
-          ${!commonLogger ? `<small>${esc(loggedByLabel(i))}</small>` : ''}
-          ${variance !== 0 ? `<span class="sales-variance ${variance<0?'short':'over'}">${variance>0?'+':''}${variance}</span>` : ''}
-          ${i.remarks ? `<div class="sales-item-remarks">${esc(i.remarks)}</div>` : ''}
-        </div>
-        <b class="sales-table-number">${opening}</b>
-        ${isToday?`<span class="sales-qty-adjust" onclick="event.stopPropagation()">
-          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',-1,'${i.work_date}')" aria-label="Minus one ${giveaway?'given':'sold'}">−</button>
-          <b class="sales-table-number">${sales}</b>
-          <button type="button" onclick="adjustSalesQuantity(event,'${i.id}',1,'${i.work_date}')" aria-label="Add one ${giveaway?'given':'sold'}">+</button>
-        </span>`:`<b class="sales-table-number">${sales}</b>`}
-        <b class="sales-table-number">${closing}</b>
-      </div>
-    `;
-  }).join('');
-  return `<div class="sales-table">
-    <div class="sales-table-head"><span>SKU</span><span>Opening</span><span>${compact?'Given':'Sold'}</span><span>Closing</span></div>
-    ${rows}
-    ${commonLogger ? `<div class="sales-table-footer">Logged by ${esc(commonLogger)}</div>` : ''}
-  </div>`;
-}
-
-async function adjustSalesQuantity(event,id,delta,date){
-  event.stopPropagation();
-  const row = salesReports.find(item=>item.id===id);
-  if(!row || row.work_date!==todayStr()) return;
-  const next = Math.max(0,Number(row.sales_qty||0)+delta);
-  if(next===Number(row.sales_qty||0)) return;
-  const control = event.currentTarget.closest('.sales-qty-adjust');
-  const buttons = control ? [...control.querySelectorAll('button')] : [];
-  buttons.forEach(button=>button.disabled=true);
-  try{
-    await DB.updateSalesReport(id,{sales_qty:next});
-    await refreshData();
-    refreshSalesSummary(date);
-    showToast(`${isFreeItem(row)?'Given':'Sold'} updated to ${next}`);
-  }catch(e){
-    console.error(e);
-    showToast('Could not update quantity — ' + (e.message || 'check your connection'));
-    buttons.forEach(button=>button.disabled=false);
   }
 }
 
@@ -565,15 +344,17 @@ function renderDayPhotoRow(date, isToday){
   return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}${addThumb}</div></div>`;
 }
 
-function openSalesForm(id){
+function openSalesForm(id, reuseOverlay=false){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
   const today = todayStr();
   if(editing && editing.work_date !== today){
     showToast("Only today's reports can be edited"); return;
   }
   const defaultStoreId = editing ? editing.store_id : scheduledStoreIdForDate(today,currentPromoterId);
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
+  const existing = reuseOverlay ? document.querySelector('.modal-overlay') : null;
+  const overlay = existing || document.createElement('div');
+  if(existing) overlay.classList.add('sales-modal-reuse');
+  if(!existing) overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="form-title-row"><div class="modal-title">${editing ? 'Edit stock report' : 'Add stock report'}</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
@@ -641,8 +422,10 @@ function openSalesForm(id){
       ${editing ? `<button type="button" class="btn btn-danger-ghost btn-block sales-delete-action" onclick="deleteSalesReport('${editing.id}')">Delete this record</button>` : ''}
     </div>
   `;
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  if(!existing){
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  }
   salesFormFreeItemTouched = false;
   salesFormDerivedFieldTouched = false;
   salesFormLastFreeItem = null;
@@ -745,8 +528,9 @@ async function saveSalesForm(id){
     await carryClosingToNextEvent(product_name, work_date, closing_qty);
     await refreshData();
     closeModal();
+    salesViewDate = null; // promoters only ever save into today
+    salesLog = await DB.getSalesLogForDate(salesViewDateValue()).catch(()=>salesLog);
     render();
-    openSalesDateSummary(work_date);
     showToast('Stock report saved');
   }catch(e){
     console.error(e);

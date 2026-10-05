@@ -143,8 +143,8 @@ const DB = {
     const { data, error } = await sb
       .from('sales_reports')
       .select(`
-        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item,
-        store_room_qty, home_shelf_qty, standee_qty, closing_store_room_qty, closing_home_shelf_qty, closing_standee_qty, warehouse_qty,
+        id, work_date, store_id, promoter_id, product_name, opening_qty, sales_qty, closing_qty, remarks, photo_url, is_free_item, created_at, updated_at,
+        location_qty, closing_location_qty,
         stores ( id, name ),
         promoters ( id, full_name, nickname )
       `)
@@ -177,6 +177,38 @@ const DB = {
       .delete()
       .eq('id', id);
     if(error) throw error;
+  },
+
+  // ---------------- Stock locations (read-only here — managed from the office app) ----------------
+  async getStockLocations(){
+    const { data, error } = await sb
+      .from('stock_locations')
+      .select('*')
+      .order('sort_order')
+      .order('created_at');
+    if(error) throw error;
+    return data;
+  },
+
+  // ---------------- Sales log (history of +/- taps, one day at a time) ----------------
+  async getSalesLogForDate(work_date){
+    const { data, error } = await sb
+      .from('sales_log')
+      .select('id, work_date, store_id, product_name, delta, admin_name, promoter_id, created_at')
+      .eq('work_date', work_date)
+      .order('created_at', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  async addSalesLog(entry){
+    const { data, error } = await sb
+      .from('sales_log')
+      .insert(entry)
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
   },
 
   // ---------------- Day photos (unlimited per working date) ----------------
