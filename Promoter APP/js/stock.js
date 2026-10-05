@@ -137,10 +137,12 @@ function renderStockManagement(){
       <div class="section-title">Stock Management</div>
       ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">⚙ Locations</button>`:''}
     </div>`;
+  if(!scheduledStoreIdsForDate(date).size){
+    // Not a working date: no records at all (Past Records included), just the message.
+    return html + emptyState('🗓️','Today is not a working date','Stock appears here on days you are scheduled.');
+  }
   if(!outlets.length){
-    html += scheduledStoreIdsForDate(date).size
-      ? emptyState('🏬','No stock records yet today','Tap + to add the first stock record.')
-      : emptyState('🗓️','Not a working day today','Stock cards appear here on days you are scheduled.');
+    html += emptyState('🏬','No stock records yet today','Tap + to add the first stock record.');
   }else{
     html += `<div class="stock-outlet-grid">${outlets.map(outlet=>renderStockOutletCard(outlet,date)).join('')}</div>`;
   }
