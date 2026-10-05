@@ -208,6 +208,9 @@ function renderApp(){
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/></svg>
         </button>
         <button type="button" class="fab-primary" onclick="openFab()" aria-label="Add job">+</button>
+        <button type="button" class="fab-photo hidden" onclick="openProductPhotosSheet()" aria-label="Product photos" title="Product photos">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>
+        </button>
         <button type="button" class="fab-calendar hidden" onclick="openWorkDateForm()" aria-label="Add working date without promoter" title="Add working date without promoter">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
         </button>
@@ -367,6 +370,8 @@ function render(){
   if(!c) return;
   // The Sales Section has an inline notes box — don't wipe a half-typed note
   // when a +/- tap or a live update redraws the screen.
+  // Schedule has three floating buttons down the right edge; leave room so the cards never sit under them.
+  c.classList.toggle('has-fab-column', currentTab==='roster');
   const notesDraft = currentTab==='sales' ? captureNotesDraft() : null;
   if(currentTab==='home') c.innerHTML = renderHome();
   else if(currentTab==='roster') c.innerHTML = renderRosterSection();
@@ -391,6 +396,8 @@ function render(){
     }
     const calendarButton = fab.querySelector('.fab-calendar');
     if(calendarButton) calendarButton.classList.toggle('hidden', !(currentTab==='roster' && rosterPage==='schedule'));
+    const photoButton = fab.querySelector('.fab-photo');
+    if(photoButton) photoButton.classList.toggle('hidden', currentTab!=='stock');
     const memoButton = fab.querySelector('.fab-memo');
     if(memoButton) memoButton.classList.toggle('hidden', currentTab!=='roster');
   }

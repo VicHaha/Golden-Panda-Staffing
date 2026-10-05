@@ -331,8 +331,6 @@ function openAddStockRecordForm(){
   if(!canEditPastSales() && !scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
   addStockStoreId = defaultStoreId || null;
-  skuPhotoFile = null;
-  skuPhotoCleared = false;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -367,17 +365,6 @@ function openAddStockRecordForm(){
       <div class="field">
         <label for="asr-remarks">Remarks (optional)</label>
         <input id="asr-remarks" placeholder="e.g. 2 units damaged">
-      </div>
-      <div class="field">
-        <label>Product photo (optional) <small>— one photo for all variations</small></label>
-        <div class="photo-picker">
-          <img id="sp-preview" class="photo-preview" alt="Product photo" style="display:none;">
-          <div id="sp-empty" class="photo-preview photo-preview-empty"></div>
-          <div class="photo-picker-actions">
-            <label class="btn btn-ghost btn-sm">Take / choose photo<input type="file" accept="image/*" capture="environment" hidden onchange="onSkuPhotoPicked(this)"></label>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="clearSkuPhoto()">Remove</button>
-          </div>
-        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -421,7 +408,6 @@ function fillAddStockInputs(openingMap, closingMap, remarks){
 // figures carried forward (same store first), otherwise empty.
 function onAddStockProductChange(){
   updateVariationDatalist('asr-product','variation-list');
-  refreshSkuPhotoPreview('asr-product');
   rebuildAddStockInputs(document.getElementById('asr-store').value || null);
   const base = document.getElementById('asr-product').value.trim();
   const variation = document.getElementById('asr-variation').value;
@@ -479,12 +465,6 @@ async function saveAddStockRecordForm(){
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;
   try{
-    let familyPhotoUrl = null;
-    if(skuPhotoFile){
-      btn.textContent = 'Uploading photo…';
-      const compressed = await compressImageFile(skuPhotoFile);
-      familyPhotoUrl = await uploadPhotoToCloudinary(compressed);
-    }
     btn.textContent = 'Saving…';
     const existing = salesReports.find(row=>
       row.work_date===work_date
@@ -502,15 +482,6 @@ async function saveAddStockRecordForm(){
       });
     }
     await carryClosingToNextEvent(product_name,work_date,closingTotal,closing_location_qty,store_id);
-    // The photo belongs to the product type (e.g. 1L Bio Dishwash), not to one variation.
-    try{
-      const family = parseProductName(product_name).base;
-      if(familyPhotoUrl) await DB.setProductPhoto(family, familyPhotoUrl);
-      else if(skuPhotoCleared) await DB.deleteProductPhoto(family);
-    }catch(photoError){
-      console.error(photoError);
-      showToast('Saved, but the photo could not be saved');
-    }
     await refreshData();
     render();
     openOutletStockSummary(store_id || '__none__',work_date,true);
@@ -521,4 +492,83 @@ async function saveAddStockRecordForm(){
     btn.disabled = false;
     btn.textContent = 'Save';
   }
+}
+
+// ---------------- Product photos (camera button under the "+") ----------------
+// One photo per product type (e.g. 1L Bio Dishwash), shared by all its
+// variations. Pick the picture here; it uploads to Cloudinary and shows beside
+// the product name in the Sales Report.
+function productPhotoFamilies(){
+  const names = new Set();
+  PRODUCT_SUGGESTIONS.forEach(name=>names.add(productFamilyName(name)));
+  salesReports.forEach(row=>{ if(row.product_name) names.add(productFamilyName(row.product_name)); });
+  return [...names].sort((a,b)=>{
+    const ai = PRODUCT_SUGGESTIONS.findIndex(n=>productFamilyName(n)===a);
+    const bi = PRODUCT_SUGGESTIONS.findIndex(n=>productFamilyName(n)===b);
+    return (ai<0?999:ai)-(bi<0?999:bi) || a.localeCompare(b);
+  });
+}
+
+function productPhotosSheetHtml(busyFamily){
+  const rows = productPhotoFamilies().map(family=>{
+    const url = productPhotoFor(family);
+    const busy = busyFamily === family;
+    return `<div class="pp-row" data-family="${esc(family)}">
+      <span class="pp-thumb">${url?`<img src="${esc(url)}" alt="">`:''}</span>
+      <span class="pp-name">${esc(family)}</span>
+      ${busy ? '<span class="pp-busy">Uploading…</span>' : `
+        <label class="btn btn-ghost btn-sm">${url?'Change':'Add photo'}<input type="file" accept="image/*" hidden onchange="uploadProductPhoto(this)"></label>
+        ${url?'<button type="button" class="btn btn-ghost btn-sm" onclick="removeProductPhoto(this)">Remove</button>':''}`}
+    </div>`;
+  }).join('');
+  return `
+    <div class="stock-summary-head"><div class="modal-title">Product photos</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
+    <div class="field-hint" style="margin:-6px 0 8px;">One photo per product — it is shared by all its variations and shows in the Sales Report.</div>
+    ${rows}`;
+}
+
+function openProductPhotosSheet(){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-sheet" id="product-photos-sheet">${productPhotosSheetHtml()}</div>`;
+  showModal(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+}
+
+function refreshProductPhotosSheet(busyFamily){
+  const sheet = document.getElementById('product-photos-sheet');
+  if(sheet) sheet.innerHTML = productPhotosSheetHtml(busyFamily);
+}
+
+async function uploadProductPhoto(input){
+  const file = input.files && input.files[0];
+  const family = input.closest('.pp-row').dataset.family;
+  if(!file) return;
+  refreshProductPhotosSheet(family);
+  try{
+    const compressed = await compressImageFile(file);
+    const url = await uploadPhotoToCloudinary(compressed);
+    await DB.setProductPhoto(family, url);
+    productPhotos = await DB.getProductPhotos();
+    showToast(`Photo saved for ${family}`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not save the photo — ' + (e.message || 'check your connection'));
+  }
+  refreshProductPhotosSheet();
+  render();
+}
+
+async function removeProductPhoto(button){
+  const family = button.closest('.pp-row').dataset.family;
+  try{
+    await DB.deleteProductPhoto(family);
+    productPhotos = await DB.getProductPhotos();
+    showToast(`Photo removed for ${family}`);
+  }catch(e){
+    console.error(e);
+    showToast('Could not remove — ' + (e.message || 'check your connection'));
+  }
+  refreshProductPhotosSheet();
+  render();
 }

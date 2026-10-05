@@ -1384,3 +1384,17 @@ button,input,select,textarea{font-family:inherit;}
 .ss-row .sales-table-number,.sales-qty-adjust.ss-stepper .sales-table-number,.ss-locked .sales-table-number{
   font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-weight:600;font-size:17px;letter-spacing:0;
 }
+
+/* Camera button under the "+" (Stock Management) */
+.fab{flex-direction:column;align-items:flex-end;gap:10px;}
+.fab .fab-photo{background:#fff;color:var(--gold-deep);border:1px solid var(--line);}
+.fab .fab-photo svg{width:20px;height:20px;}
+.fab .fab-photo.hidden{display:none;}
+
+/* Product photos sheet */
+.pp-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);}
+.pp-thumb{flex:0 0 auto;width:46px;height:46px;overflow:hidden;border:1px dashed var(--line);border-radius:8px;background:var(--bg);}
+.pp-thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+.pp-name{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere;}
+.pp-busy{color:var(--ink-faint);font-size:12px;}
+.pp-row .btn{cursor:pointer;}

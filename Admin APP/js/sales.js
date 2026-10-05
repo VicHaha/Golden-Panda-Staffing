@@ -624,37 +624,6 @@ function productPhotoFor(name){
   return found ? found.photo_url : null;
 }
 
-// Photo chosen in the open stock form (uploaded to Cloudinary on Save).
-let skuPhotoFile = null;
-let skuPhotoCleared = false;
-function onSkuPhotoPicked(input){
-  const file = input.files && input.files[0];
-  if(!file) return;
-  skuPhotoFile = file;
-  skuPhotoCleared = false;
-  const preview = document.getElementById('sp-preview');
-  preview.src = URL.createObjectURL(file);
-  preview.style.display = '';
-  document.getElementById('sp-empty').style.display = 'none';
-  input.value = '';
-}
-function clearSkuPhoto(){
-  skuPhotoFile = null;
-  skuPhotoCleared = true;
-  document.getElementById('sp-preview').style.display = 'none';
-  document.getElementById('sp-empty').style.display = '';
-}
-// Typing a different product shows that product's existing photo.
-function refreshSkuPhotoPreview(inputId){
-  if(skuPhotoFile || skuPhotoCleared) return;
-  const input = document.getElementById(inputId || 's-product');
-  if(!input || !document.getElementById('sp-preview')) return;
-  const url = productPhotoFor(input.value);
-  const preview = document.getElementById('sp-preview');
-  if(url){ preview.src = url; preview.style.display = ''; document.getElementById('sp-empty').style.display = 'none'; }
-  else{ preview.style.display = 'none'; document.getElementById('sp-empty').style.display = ''; }
-}
-
 let salesFormFreeItemTouched = false;
 let salesFormDerivedFieldTouched = false;
 let salesFormLastFreeItem = null;
