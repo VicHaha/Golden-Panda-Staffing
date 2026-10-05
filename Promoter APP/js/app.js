@@ -26,6 +26,8 @@ function salesActorName(){ return currentPromoterName || 'Promoter'; }
 function salesActorPromoterId(){ return currentPromoterId; }
 function canEditPastSales(){ return false; }
 function canManageStockLocations(){ return false; }
+// Sales Section / Stock Management only appear on days THIS promoter is working.
+function jobCountsForSchedule(job){ return job.promoter_id === currentPromoterId; }
 
 function boot(){
   const root = document.getElementById('root');
@@ -363,7 +365,13 @@ async function handleRemoteJobChange(){
   }
   await refreshTomorrowJob();
   await refreshMyMonthPay();
-  if(currentTab === 'schedule') render();
+  // The Schedule changed: bring stock rows in line with it.
+  try{
+    if(await syncStockWithSchedule()) await refreshData();
+  }catch(e){
+    console.warn('Stock sync failed (non-fatal):', e);
+  }
+  render();
 }
 
 // ---------- "Shift tomorrow" reminder banner ----------

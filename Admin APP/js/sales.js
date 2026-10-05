@@ -292,10 +292,13 @@ async function linkUnassignedSalesRecordsToJob(date, storeId){
   }
 }
 
+// Rows with no outlet get one only when exactly one outlet is scheduled that
+// day — with several outlets it would be a guess.
 async function linkAllScheduledLocations(){
   const dates = [...new Set(salesReports.filter(r=>!r.store_id).map(r=>r.work_date))];
   for(const date of dates){
-    await linkUnassignedSalesRecordsToJob(date,scheduledStoreIdForDate(date));
+    const ids = jobStoreIdsForDate(date);
+    if(ids.size === 1) await linkUnassignedSalesRecordsToJob(date,[...ids][0]);
   }
 }
 
@@ -325,102 +328,130 @@ function combinedLoggedDatesDesc(){
   return [...set].sort((a,b)=> b.localeCompare(a));
 }
 
-// Auto-creates stock rows for the next working date on the schedule that
-// has actually arrived — not simply every calendar day — carrying opening
-// stock forward from that product's most recent prior closing count.
-// e.g. if the last stock records are from last Sunday and the next
-// scheduled roadshow day is next Saturday, rows only get created for
-// Saturday (once Saturday has arrived), skipping the days in between
-// that were never on the schedule. Safe to call every load — it only
-// inserts what's missing, and catches up one working date at a time.
-async function ensureTodaysStockRows(){
-  const today = todayStr();
+// ---------- Per-outlet stock rows ----------
+// Every outlet keeps its OWN stock: its own SKU list, its own locations and
+// its own counts for each of ITS working dates. Rows are only created for an
+// outlet on a date it has a job, and opening stock is carried forward from
+// THAT outlet's previous working date — never from another outlet's counts.
 
-  // Every working date on the schedule that has already arrived, earliest first.
-  const scheduledAsc = [...new Set(jobs.map(j => j.work_date))]
-    .filter(d => d <= today)
-    .sort();
-  if(scheduledAsc.length === 0) return;
+function storeRows(storeId){
+  return salesReports.filter(r=>(r.store_id||null) === (storeId||null));
+}
 
-  const stockDates = new Set(salesReports.map(r => r.work_date));
-  const lastStockDate = stockDates.size ? [...stockDates].sort().pop() : null;
+// The outlet's rows from its most recent working date before `date`.
+function previousRowsForStore(storeId, date){
+  const rows = storeRows(storeId).filter(r=>r.work_date < date);
+  if(!rows.length) return [];
+  const last = rows.reduce((max,r)=>r.work_date > max ? r.work_date : max, '');
+  return rows.filter(r=>r.work_date === last);
+}
 
-  // Only bring stock forward into scheduled dates that come after the
-  // most recent date already carrying stock records (or every arrived
-  // scheduled date, if no stock has ever been logged yet).
-  const targets = lastStockDate
-    ? scheduledAsc.filter(d => d > lastStockDate)
-    : scheduledAsc;
-
-  for(const date of targets){
-    await ensureStockRowsForDate(date);
+// Brings stock/sales rows in line with the Schedule (jobs table): every outlet
+// with a job today gets its rows right away. Runs on load, when a job is saved
+// in the office app, and whenever the jobs table changes anywhere. Returns
+// true if it created or changed any rows.
+let stockSyncRunning = false;
+async function syncStockWithSchedule(){
+  if(stockSyncRunning) return false;
+  stockSyncRunning = true;
+  try{
+    salesReports = await DB.getSalesReports(); // fresh copy, so two devices don't both seed
+    const before = salesReports.length;
+    await linkAllScheduledLocations();
+    await ensureTodaysStockRows();
+    return salesReports.length !== before;
+  }finally{
+    stockSyncRunning = false;
   }
 }
 
-// Creates any missing product rows for one specific working date, carrying
-// opening stock over from that product's most recent prior closing count.
-// Gift Set/Flyer/Small Samples/Coupons are auto-seeded as free items by
-// default (is_free_item stays editable per row afterwards from the stock
-// report form) — but they carry opening stock forward exactly like any
-// other product. The actual quantity given out remains user-editable.
-async function ensureStockRowsForDate(date){
-  const scheduledStoreId = scheduledStoreIdForDate(date);
-  await linkUnassignedSalesRecordsToJob(date, scheduledStoreId);
-  const existingProducts = new Set(salesReports.filter(r => r.work_date === date).map(r => canonicalSkuName(r.product_name)));
-  const missing = PRODUCT_SUGGESTIONS.filter(p => !existingProducts.has(canonicalSkuName(p)));
-  if(missing.length === 0) return;
+// Creates today's rows (and catches up any missed working dates) for every
+// outlet that has a job. An outlet with no stock history yet starts from today
+// only; one with history carries on from its last recorded working date.
+// Safe to call every load — it only inserts what's missing.
+async function ensureTodaysStockRows(){
+  const today = todayStr();
+  const pairs = new Map();
+  jobs.forEach(job=>{
+    const storeId = jobStoreId(job);
+    if(storeId && job.work_date <= today) pairs.set(`${job.work_date}|${storeId}`, { date: job.work_date, storeId });
+  });
+  const ordered = [...pairs.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  for(const { date, storeId } of ordered){
+    const lastDate = storeRows(storeId).reduce((max,r)=>r.work_date > max ? r.work_date : max, '');
+    if(lastDate ? date <= lastDate : date !== today) continue;
+    await ensureStockRowsForStore(date, storeId);
+  }
+}
 
-  for(const product of missing){
-    const giveaway = isGiveaway(product);
-    const priorEntries = salesReports
-      .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(product) && r.work_date < date)
-      .sort((a,b) => b.work_date.localeCompare(a.work_date));
-    // Every location (Warehouse included) carries its last closing figure
-    // forward untouched until someone edits it; opening and closing both
-    // start from it.
-    const prior = priorEntries[0] || {};
-    const carriedLocations = locationMapForStore(locationMap(prior,'closing'), scheduledStoreId);
-    const carryOver = locationMapTotal(carriedLocations, scheduledStoreId);
-
+// Creates the missing SKU rows for one outlet on one working date. The SKU
+// list is the one this outlet used on its previous working date (a brand-new
+// outlet starts from the default list); each SKU's opening and closing figures
+// per location start from that outlet's last closing count. Gift Set / Sample
+// Set / Flyer / Coupon default to free items (editable per row).
+async function ensureStockRowsForStore(date, storeId){
+  const existing = new Set(storeRows(storeId).filter(r=>r.work_date === date).map(r=>canonicalSkuName(r.product_name)));
+  const prior = previousRowsForStore(storeId, date);
+  const plan = [];
+  if(prior.length){
+    const seen = new Set();
+    prior.forEach(row=>{
+      const key = canonicalSkuName(row.product_name);
+      if(seen.has(key)) return;
+      seen.add(key);
+      plan.push({ name: row.product_name, free: isFreeItem(row), source: row });
+    });
+  }else{
+    PRODUCT_SUGGESTIONS.forEach(name=>plan.push({ name, free: isGiveaway(name), source: null }));
+  }
+  for(const item of plan){
+    if(existing.has(canonicalSkuName(item.name))) continue;
+    const carried = item.source ? locationMapForStore(locationMap(item.source,'closing'), storeId) : {};
+    const total = locationMapTotal(carried, storeId);
     try{
       const created = await DB.addSalesReport({
         work_date: date,
-        store_id: scheduledStoreId,
+        store_id: storeId,
         promoter_id: null,
-        product_name: product,
-        opening_qty: carryOver,
+        product_name: item.name,
+        opening_qty: total,
         sales_qty: 0,
-        closing_qty: carryOver,
+        closing_qty: total,
         remarks: null,
         photo_url: null,
-        is_free_item: giveaway,
-        location_qty: { ...carriedLocations },
-        closing_location_qty: { ...carriedLocations }
+        is_free_item: item.free,
+        location_qty: { ...carried },
+        closing_location_qty: { ...carried }
       });
-      // Keep the local cache current so a later target date processed in
-      // this same run carries over from the row we just created.
+      // Keep the local cache current so later dates processed in this run
+      // carry forward from the row we just created.
       salesReports.push(created);
     }catch(e){
-      console.warn('Could not auto-create row for', product, 'on', date, e);
+      console.warn('Could not auto-create row for', item.name, 'on', date, e);
     }
   }
 }
 
-// Keeps an already-created next event in sync when the previous event's
-// closing count is edited. Untouched auto-seeded rows move both opening
-// and closing together; rows with activity keep their closing count.
-async function carryClosingToNextEvent(productName, workDate, closingQty, locations=null){
-  const nextDate = [...new Set([...jobs.map(j=>j.work_date), ...salesReports.map(r=>r.work_date)])].filter(d=>d>workDate).sort()[0];
+// When an outlet's closing count is edited, keep that SAME outlet's next
+// working date in sync. Untouched auto-seeded rows move opening and closing
+// together; rows with activity keep their closing count.
+async function carryClosingToNextEvent(productName, workDate, closingQty, locations=null, storeId=null){
+  const sid = storeId || null;
+  const dates = new Set();
+  salesReports.forEach(r=>{ if((r.store_id||null) === sid && r.work_date > workDate) dates.add(r.work_date); });
+  jobs.forEach(j=>{ if((jobStoreId(j)||null) === sid && j.work_date > workDate) dates.add(j.work_date); });
+  const nextDate = [...dates].sort()[0];
   if(!nextDate) return;
   const nextRows = salesReports.filter(r=>
-    r.work_date === nextDate && canonicalSkuName(r.product_name) === canonicalSkuName(productName)
+    r.work_date === nextDate && (r.store_id||null) === sid && canonicalSkuName(r.product_name) === canonicalSkuName(productName)
   );
+  const carried = locations ? locationMapForStore(locations, sid) : null;
   for(const row of nextRows){
     const untouched = Number(row.sales_qty||0) === 0 && Number(row.closing_qty||0) === Number(row.opening_qty||0);
     const update = { opening_qty:Number(closingQty||0) };
-    if(locations) update.location_qty = { ...locations };
+    if(carried) update.location_qty = { ...carried };
     if(untouched) update.closing_qty = Number(closingQty||0);
-    if(untouched && locations) update.closing_location_qty = { ...locations };
+    if(untouched && carried) update.closing_location_qty = { ...carried };
     await DB.updateSalesReport(row.id, update);
   }
 }
@@ -499,6 +530,7 @@ async function saveDayFeedback(date){
 
 function openSalesForm(id, reuseOverlay=false){
   const editing = id ? salesReports.find(r=>r.id===id) : null;
+  if(!editing && !scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
   // Matches the promoter app's form exactly: no Logged-by field, and no
   // Date field either for brand-new rows (those always land on today —
   // auto-seeded rows already cover past dates). Editing an existing row
@@ -518,8 +550,7 @@ function openSalesForm(id, reuseOverlay=false){
       <div class="field">
         <label>Store (optional)</label>
         <select id="s-store">
-          <option value="">— Not specified —</option>
-          ${stores.map(s=>`<option value="${s.id}" ${defaultStoreId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+          ${storeOptionsHtml(defaultStoreId, !!editing)}
         </select>
       </div>
       <div class="field-row">
@@ -675,6 +706,7 @@ async function saveSalesForm(id){
   if(!productBase){
     showToast('Product name is required'); return;
   }
+  if(!editing && !store_id){ showToast('Choose the outlet'); return; }
 
   const btn = document.getElementById('sales-save-btn');
   btn.disabled = true;
@@ -690,7 +722,7 @@ async function saveSalesForm(id){
     }else{
       await DB.addSalesReport(payload);
     }
-    await carryClosingToNextEvent(product_name, work_date, closing_qty);
+    await carryClosingToNextEvent(product_name, work_date, closing_qty, null, store_id);
     await refreshData();
     closeModal();
     salesViewDate = work_date === todayStr() ? null : work_date;

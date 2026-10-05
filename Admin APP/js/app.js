@@ -287,7 +287,7 @@ function subscribeRealtime(){
   realtimeChannel = sb
     .channel('gp-staffing-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promoters' }, handleRemoteChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteJobChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
@@ -298,6 +298,20 @@ function subscribeRealtime(){
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });
+}
+
+// A change to the Schedule (from any device) also brings stock rows in line.
+async function handleRemoteJobChange(){
+  await handleRemoteChange();
+  if(document.querySelector('.modal-overlay')) return;
+  try{
+    if(await syncStockWithSchedule()){
+      await refreshData();
+      render();
+    }
+  }catch(e){
+    console.warn('Stock sync failed (non-fatal):', e);
+  }
 }
 
 async function handleRemoteChange(){

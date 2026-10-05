@@ -10,49 +10,24 @@ vice versa. Two different links, one shared database.
 
 ## Setup
 
-### 0. Retail Operation redesign — extra migrations (required for this version)
+### 0. Database (shared with the office app)
 
-Run these three from the **main office app's** `sql/` folder, once, in
-Supabase → SQL Editor, **before** deploying this version of either app:
-
-1. `migration_flexible_stock_locations.sql` — editable stock locations
-   (copies all existing stock figures across, deletes nothing)
-2. `migration_sales_log.sql` — the history log of +/- taps
-3. `migration_stock_locations_per_outlet.sql` — per-outlet stock locations
-4. `migration_memos.sql` — memo notes (office app only, but run it so
-   the office app's Memo button works)
+Both apps use the same Supabase project. The whole database is created by
+`sql/create_database_tables.sql` in the **main office app's** folder (plus
+the optional `create_database_views.sql` next to it). Run the tables file
+once, in Supabase → SQL Editor, **before** deploying this version of
+either app — it is safe on an existing database and never deletes or
+rewrites records.
 
 What changed in this app: same header (logo, "Golden Panda / Retail
 Operation", your name with a green/red Supabase connection light),
 bottom nav **Sales Section · Stock Management · Shift Report ·
-Schedule**, the new per-outlet Sales Section with − n + steppers and
-today's history log, and the new Stock Management outlet cards (Opening
-/ Closing boxes, LOW flag, Past Records). Every + / − tap is logged with
-your name and shows up in the office app's history within a moment, and
-the other way round. Stock locations are managed from the office app and
-appear here automatically (read-only).
-
-### 1. Run the SQL migrations (if you haven't already)
-
-These are the same migrations from the main app — if you've already run
-them there, skip to the ones you haven't:
-
-In Supabase → SQL Editor, run, in order:
-1. `sql/migration_sales_reports.sql` (from the main app's folder)
-2. `sql/migration_sales_promoter.sql` (from the main app's folder)
-3. `sql/migration_auth_lockdown.sql` — requires a signed-in session to
-   add/edit/delete sales reports. Reading still works for anyone with
-   the link, same as before.
-4. `sql/migration_sales_photo.sql` — adds a `photo_url` column for the
-   new photo attachment feature.
-5. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
-   overall photo per working date, separate from each product's own row.
-6. `sql/migration_shift_report_age_range.sql` — adds the customer age
-   range field to shift reports.
-7. `sql/migration_admin_login.sql` (from the main app's folder) — wires
-   up admin login in the office app; doesn't change anything in this
-   app directly, but needs to be run once against the same Supabase
-   project.
+Schedule**, the new per-outlet Sales Section with − n + steppers and an
+Undo button, and the new Stock Management outlet cards (Opening /
+Closing boxes, LOW flag, variance, Past Records). Sales and stock only
+appear on days you are scheduled, for the outlet you are working. Stock
+locations are managed from the office app and appear here automatically
+(read-only).
 
 ### 2. Create the office account (required — the office app needs this)
 

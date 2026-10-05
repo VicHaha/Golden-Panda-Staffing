@@ -219,7 +219,8 @@ async function saveWorkDateForm(id){
     const payload = { promoter_id:null, position:'Promoter', store_id:store.id, work_date, start_time, end_time, pay:0, commission:0 };
     if(id) await DB.updateJob(id,payload);
     else await DB.addJob(payload);
-    await linkUnassignedSalesRecordsToJob(work_date,store.id);
+    await refreshData();
+    await syncStockWithSchedule().catch(e=>console.warn('Stock sync failed (non-fatal):', e));
     await refreshData();
     closeModal();
     render();
@@ -297,7 +298,8 @@ async function saveJobForm(id){
     }else{
       await DB.addJob(payload);
     }
-    await linkUnassignedSalesRecordsToJob(work_date, store.id);
+    await refreshData();
+    await syncStockWithSchedule().catch(e=>console.warn('Stock sync failed (non-fatal):', e));
     await refreshData();
     closeModal();
     render();

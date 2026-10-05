@@ -289,7 +289,7 @@ async function saveStockLocationForm(id, field='opening'){
     if(closing) Object.assign(payload,{ closing_location_qty:map, closing_qty:total });
     else Object.assign(payload,{ location_qty:map, opening_qty:total });
     await DB.updateSalesReport(id, payload);
-    if(closing) await carryClosingToNextEvent(editing.product_name,editing.work_date,total,map);
+    if(closing) await carryClosingToNextEvent(editing.product_name,editing.work_date,total,map,store_id);
     await refreshData();
     render();
     openOutletStockSummary(store_id || '__none__',editing.work_date,true);
@@ -308,6 +308,7 @@ async function saveStockLocationForm(id, field='opening'){
 // the same suggestion list and outlet list as the Sales Section. If a record
 // already exists for this exact product + date + store, saving updates it.
 function openAddStockRecordForm(){
+  if(!scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
   const defaultStoreId = scheduledStoreIdForDate(todayStr());
   addStockStoreId = defaultStoreId || null;
   const overlay = document.createElement('div');
@@ -331,8 +332,7 @@ function openAddStockRecordForm(){
       <div class="field">
         <label>Store</label>
         <select id="asr-store" onchange="onAddStockProductChange()">
-          <option value="">— Not specified —</option>
-          ${stores.map(s=>`<option value="${s.id}" ${defaultStoreId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+          ${storeOptionsHtml(defaultStoreId, false)}
         </select>
       </div>
       <div class="stock-section-heading"><h2>Opening stock</h2><span id="asr-opening-total">0</span></div>
@@ -404,7 +404,8 @@ function onAddStockProductChange(){
   const priorEntries = salesReports
     .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName))
     .sort((a,b) => b.work_date.localeCompare(a.work_date));
-  const prior = priorEntries.find(r=>(r.store_id||null)===storeId) || priorEntries[0];
+  // Only this outlet's own history — never another outlet's counts.
+  const prior = priorEntries.find(r=>(r.store_id||null)===storeId);
   if(prior){
     const carried = locationMap(prior,'closing');
     fillAddStockInputs(carried, carried);
@@ -424,6 +425,7 @@ async function saveAddStockRecordForm(){
   if(isGiveaway(product_name)){ showToast('Free items are not tracked in Stock Management'); return; }
 
   const store_id = document.getElementById('asr-store').value || null;
+  if(!store_id){ showToast('Choose the outlet'); return; }
   addStockStoreId = store_id;
   const location_qty = readLocationInputs('asr-open-', {}, store_id);
   const closing_location_qty = readLocationInputs('asr-close-', {}, store_id);
@@ -449,7 +451,7 @@ async function saveAddStockRecordForm(){
         location_qty, closing_location_qty
       });
     }
-    await carryClosingToNextEvent(product_name,work_date,closingTotal,closing_location_qty);
+    await carryClosingToNextEvent(product_name,work_date,closingTotal,closing_location_qty,store_id);
     await refreshData();
     render();
     openOutletStockSummary(store_id || '__none__',work_date,true);

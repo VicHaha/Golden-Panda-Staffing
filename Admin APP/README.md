@@ -6,63 +6,24 @@ should not need to touch that file.
 
 ## What to do next, in order
 
-### 1. Run the SQL in Supabase (if you haven't already)
+### 1. Run the SQL in Supabase
 
-Go to your Supabase project → **SQL Editor** → New query, and run these
-files **in this order**:
+The whole database now lives in **two files** in `sql/` (they replace the
+old schema / seed / rls / migration files). In your Supabase project →
+**SQL Editor** → New query:
 
-1. `sql/schema.sql` — creates the tables (promoters, stores, jobs, settings)
-2. `sql/seed.sql` — adds your starting stores (de Market, Isetan, W Mart)
-3. `sql/rls.sql` — turns on Row Level Security with open access for now
-4. `sql/migration_position.sql` — adds the promoter role field (Promoter /
-   Assistant / Mascot) to each job
-5. `sql/migration_sales_reports.sql` — creates the new `sales_reports`
-   table used by the Stock tab
-6. `sql/migration_sales_promoter.sql` — attributes each stock report to
-   the promoter who logged it
-7. `sql/migration_auth_lockdown.sql` — requires a signed-in session to
-   write sales reports (this is what powers password login in the
-   separate promoter-facing stock report app)
-8. `sql/migration_sales_photo.sql` — adds a `photo_url` column so stock
-   reports can carry an attached photo (hosted on Cloudinary, not
-   Supabase — see step 3 below)
-9. `sql/migration_day_photos.sql` — creates a `day_photos` table for one
-   overall photo per working date (separate from each product's own
-   stock row — see "Day photo row" below)
-10. `sql/migration_day_photos_multi.sql` — allows unlimited day photos
-    per date instead of just one
-11. `sql/migration_promoter_active.sql` — normalizes the `active` column
-    used by the new promoter hide/show feature
-12. `sql/migration_admin_auth_rls.sql` — **optional**, run only after
-    step 2 below (real login) is set up. Locks down promoters/stores/
-    jobs/settings to signed-in users only, same as sales_reports
-    already is.
-13. `sql/migration_sales_customer_feedback.sql` — **superseded, skip on
-    a fresh database** — see step 14.
-14. `sql/migration_day_feedback.sql` — creates a `day_feedback` table
-    for one general feedback field per working date, shown at the
-    bottom of each date's record on the Sales tab (see "What's new in
-    this version" below).
-15. `sql/migration_flexible_stock_locations.sql` — **Retail Operation
-    redesign.** Creates the editable `stock_locations` list (seeded with
-    Store Room, Home Shelf, Standee, Warehouse) and adds two jsonb
-    columns to `sales_reports` (`location_qty`, `closing_location_qty`).
-    **Copies every existing stock figure across — nothing is deleted**;
-    the old columns stay in place untouched.
-16. `sql/migration_sales_log.sql` — **Retail Operation redesign.**
-    Creates `sales_log`, the history of every +/- tap in the Sales
-    Section (used by both apps).
-17. `sql/migration_memos.sql` — **Retail Operation redesign.** Creates
-    the `memos` table behind the Memo button on Schedule.
-18. `sql/migration_stock_locations_per_outlet.sql` — **Retail Operation
-    redesign.** Lets each outlet have its own stock locations (run it
-    after 15). Existing locations keep applying to every outlet.
+1. `sql/create_database_tables.sql` — every table, column, index, policy
+   and the starter data (stores, stock locations). **Safe on your existing
+   database too:** it only adds what is missing and never deletes or
+   rewrites any existing record. Run it BEFORE deploying this version of
+   either app.
+2. `sql/create_database_views.sql` — *optional* reporting views
+   (`v_roster`, `v_stock_counts`, `v_sku_day_stock`, `v_outlet_day_stock`)
+   and diagnostic views that list messy rows to review
+   (`v_check_duplicate_sales_rows`, `v_check_rows_without_outlet`,
+   `v_check_rows_without_job`). Read-only; run it any time.
 
-All are safe to run again if you're not sure which you've already run.
-
-> **Run 15 to 18 BEFORE deploying this version of either app.**
-> The apps now read `location_qty` / `closing_location_qty` and the new
-> tables, so an old database makes them fail to load stock.
+Both are safe to run again.
 
 ### One-time cleanup: remove "PG Mall" from the store list
 

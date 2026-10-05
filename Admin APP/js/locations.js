@@ -24,10 +24,33 @@ function scheduledStoreIdsForDate(date){
   const ids = new Set();
   jobs.forEach(job=>{
     if(job.work_date !== date) return;
+    // The promoter app only counts the signed-in promoter's own shifts.
+    if(typeof jobCountsForSchedule === 'function' && !jobCountsForSchedule(job)) return;
     const id = job.store_id || (job.stores && job.stores.id);
     if(id) ids.add(id);
   });
   return ids;
+}
+
+// The outlet a job is at (the promoter app's job query nests it under stores).
+function jobStoreId(job){
+  return job.store_id || (job.stores && job.stores.id) || null;
+}
+// Every outlet with a job on `date`, whoever is working it.
+function jobStoreIdsForDate(date){
+  const ids = new Set();
+  jobs.forEach(job=>{ const id = jobStoreId(job); if(job.work_date === date && id) ids.add(id); });
+  return ids;
+}
+
+// <option>s for a Store dropdown. New records can only go to outlets that are
+// scheduled today (the Schedule decides where stock and sales are recorded);
+// editing an existing record still offers every outlet.
+function storeOptionsHtml(selectedId, editing){
+  const scheduled = scheduledStoreIdsForDate(todayStr());
+  const list = editing ? stores : stores.filter(s=>scheduled.has(s.id));
+  return (editing ? '<option value="">— Not specified —</option>' : '')
+    + list.map(s=>`<option value="${s.id}" ${selectedId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
 }
 
 function normalizeStoreId(storeId){
