@@ -573,37 +573,10 @@ function openSalesForm(id, reuseOverlay=false){
         </label>
         <div class="field-hint" id="s-free-item-hint"></div>
       </div>
-      <div class="field"><label>Opening stock</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-opening',-1)" aria-label="Decrease opening stock">−</button>
-          <input id="s-opening" type="number" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0" oninput="syncSalesQuantities('opening')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-opening',1)" aria-label="Increase opening stock">+</button>
-        </div>
+      <div class="field qty-small">
+        <label id="s-sales-label" for="s-sales">Sales qty</label>
+        <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
       </div>
-      <div class="field" id="sales-field"><label id="s-sales-label">Sales qty</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-sales',-1)" aria-label="Decrease sales qty">−</button>
-          <input id="s-sales" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('sales')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-sales',1)" aria-label="Increase sales qty">+</button>
-        </div>
-      </div>
-      <div class="field"><label>Closing stock</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-closing',-1)" aria-label="Decrease closing stock">−</button>
-          <input id="s-closing" type="number" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0" oninput="syncSalesQuantities('closing')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-closing',1)" aria-label="Increase closing stock">+</button>
-        </div>
-      </div>
-      <div class="field" id="given-out-field" style="display:none;">
-        <label>Given out</label>
-        <div class="qty-stepper">
-          <button type="button" class="qty-btn qty-minus" onclick="stepQty('s-given-out',-1)" aria-label="Decrease given out quantity">−</button>
-          <input id="s-given-out" type="number" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0" oninput="syncSalesQuantities('given')">
-          <button type="button" class="qty-btn qty-plus" onclick="stepQty('s-given-out',1)" aria-label="Increase given out quantity">+</button>
-        </div>
-        <div class="field-hint">Enter the quantity actually distributed.</div>
-      </div>
-      <div class="field"><label>Remarks (optional)</label><input id="s-remarks" value="${editing?esc(editing.remarks||''):''}" placeholder="e.g. 2 units damaged"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
@@ -633,46 +606,22 @@ let salesFormLastFreeItem = null;
 // Re-guesses the "Free item" checkbox from the product name as you type —
 // but only until the person manually touches the checkbox themselves.
 function onProductNameChange(){
-  updateVariationDatalist('s-product','variation-list');
+  if(typeof updateVariationDatalist === 'function') updateVariationDatalist('s-product','variation-list');
   if(!salesFormFreeItemTouched){
     document.getElementById('s-free-item').checked = isGiveaway(document.getElementById('s-product').value);
   }
-  applyFreeItemFieldLayout(true);
+  applyFreeItemFieldLayout();
 }
 
 function onFreeItemToggle(){
   salesFormFreeItemTouched = true;
-  applyFreeItemFieldLayout(true);
+  applyFreeItemFieldLayout();
 }
 
-// Free rows derive Given out from Opening - Closing. Regular rows derive
-// Closing from Opening - Sales. A hand-edited derived field stays intact.
-function syncSalesQuantities(source){
+// The one quantity box is "Sales qty", or "Given out" for free items.
+function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
-  if((giveaway && source==='given') || (!giveaway && source==='closing')){
-    salesFormDerivedFieldTouched = true;
-    return;
-  }
-  if(salesFormDerivedFieldTouched) return;
-  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
-  if(giveaway){
-    const closing = parseFloat(document.getElementById('s-closing').value) || 0;
-    document.getElementById('s-given-out').value = Math.max(0, opening-closing);
-  }else{
-    const sold = parseFloat(document.getElementById('s-sales').value) || 0;
-    document.getElementById('s-closing').value = Math.max(0, opening-sold);
-  }
-}
-
-function applyFreeItemFieldLayout(recalculate=false){
-  const giveaway = document.getElementById('s-free-item').checked;
-  document.getElementById('sales-field').style.display = giveaway ? 'none' : '';
-  document.getElementById('given-out-field').style.display = giveaway ? '' : 'none';
-  if(recalculate && giveaway !== salesFormLastFreeItem){
-    salesFormDerivedFieldTouched = false;
-    syncSalesQuantities('mode');
-  }
-  salesFormLastFreeItem = giveaway;
+  document.getElementById('s-sales-label').textContent = giveaway ? 'Given out' : 'Sales qty';
 }
 
 async function saveSalesForm(id){
@@ -689,10 +638,11 @@ async function saveSalesForm(id){
   const variation = document.getElementById('s-variation').value;
   const product_name = composeProductName(productBase, variation);
   const is_free_item = document.getElementById('s-free-item').checked;
-  const opening_qty = parseFloat(document.getElementById('s-opening').value) || 0;
-  const closing_qty = parseFloat(document.getElementById('s-closing').value) || 0;
-  const sales_qty = is_free_item ? (parseFloat(document.getElementById('s-given-out').value) || 0) : (parseFloat(document.getElementById('s-sales').value) || 0);
-  const remarks = document.getElementById('s-remarks').value.trim();
+  const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
+  // Opening/closing stock and remarks are edited in Stock Management.
+  const opening_qty = editing ? Number(editing.opening_qty||0) : 0;
+  const closing_qty = editing ? Number(editing.closing_qty||0) : 0;
+  const remarks = editing ? (editing.remarks || null) : null;
   // Photos are no longer captured per product — see the "Day photo" row
   // for one overall photo per working date. Editing an older row that
   // still has a legacy photo_url leaves it untouched.
@@ -722,7 +672,6 @@ async function saveSalesForm(id){
     }else{
       await DB.addSalesReport(payload);
     }
-    await carryClosingToNextEvent(product_name, work_date, closing_qty, null, store_id);
     await refreshData();
     closeModal();
     salesViewDate = work_date === todayStr() ? null : work_date;

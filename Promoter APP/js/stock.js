@@ -264,6 +264,10 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
       <div class="stock-section-heading"><h2>${closing?'Closing':'Opening'} stock</h2><span id="sl-total">${stockTotal(editing,field)}</span></div>
       ${renderLocationInputs('sl-loc-', locationMap(editing,field), 'updateStockLocationHint()', stockFormStoreId)}
       <div class="field-hint" id="sl-location-hint">This ${field} total syncs to Sales.</div>
+      <div class="field">
+        <label for="sl-remarks">Remarks (optional)</label>
+        <input id="sl-remarks" value="${esc(editing.remarks||'')}" placeholder="e.g. 2 units damaged">
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="stock-location-save-btn" onclick="saveStockLocationForm('${id}','${field}')">Save</button>
@@ -295,7 +299,7 @@ async function saveStockLocationForm(id, field='opening'){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { store_id };
+    const payload = { store_id, remarks: document.getElementById('sl-remarks').value.trim() || null };
     if(closing) Object.assign(payload,{ closing_location_qty:map, closing_qty:total });
     else Object.assign(payload,{ location_qty:map, opening_qty:total });
     await DB.updateSalesReport(id, payload);
@@ -350,6 +354,10 @@ function openAddStockRecordForm(){
       <div class="stock-section-heading"><h2>Closing stock</h2><span id="asr-closing-total">0</span></div>
       <div id="asr-close-wrap">${renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
       <div class="field-hint" id="asr-hint">Opening and closing totals sync to Sales.</div>
+      <div class="field">
+        <label for="asr-remarks">Remarks (optional)</label>
+        <input id="asr-remarks" placeholder="e.g. 2 units damaged">
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="add-stock-record-save-btn" onclick="saveAddStockRecordForm()">Save</button>
@@ -375,7 +383,9 @@ function rebuildAddStockInputs(storeId){
   document.getElementById('asr-close-wrap').innerHTML = renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', storeId);
 }
 
-function fillAddStockInputs(openingMap, closingMap){
+function fillAddStockInputs(openingMap, closingMap, remarks){
+  const remarksInput = document.getElementById('asr-remarks');
+  if(remarksInput) remarksInput.value = remarks || '';
   activeStockLocations(addStockStoreId).forEach(loc=>{
     const open = document.getElementById('asr-open-' + loc.id);
     const close = document.getElementById('asr-close-' + loc.id);
@@ -407,7 +417,7 @@ function onAddStockProductChange(){
     && canonicalSkuName(row.product_name)===canonicalSkuName(productName)
   );
   if(existing){
-    fillAddStockInputs(locationMap(existing,'opening'), locationMap(existing,'closing'));
+    fillAddStockInputs(locationMap(existing,'opening'), locationMap(existing,'closing'), existing.remarks);
     hint.textContent = "Today's record already exists — saving will update its counts, not add another row.";
     return;
   }
@@ -441,6 +451,7 @@ async function saveAddStockRecordForm(){
   const closing_location_qty = readLocationInputs('asr-close-', {}, store_id);
   const openingTotal = locationMapTotal(location_qty, store_id);
   const closingTotal = locationMapTotal(closing_location_qty, store_id);
+  const remarks = document.getElementById('asr-remarks').value.trim() || null;
 
   const btn = document.getElementById('add-stock-record-save-btn');
   btn.disabled = true;
@@ -452,12 +463,12 @@ async function saveAddStockRecordForm(){
       && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
     );
     if(existing){
-      await DB.updateSalesReport(existing.id,{ location_qty:{...locationMap(existing,'opening'),...location_qty}, closing_location_qty:{...locationMap(existing,'closing'),...closing_location_qty}, opening_qty:openingTotal, closing_qty:closingTotal });
+      await DB.updateSalesReport(existing.id,{ location_qty:{...locationMap(existing,'opening'),...location_qty}, closing_location_qty:{...locationMap(existing,'closing'),...closing_location_qty}, opening_qty:openingTotal, closing_qty:closingTotal, remarks });
     }else{
       await DB.addSalesReport({
         work_date, store_id, ...stockRecordAttribution(), product_name,
         opening_qty:openingTotal, sales_qty: 0, closing_qty:closingTotal,
-        remarks: null, photo_url: null, is_free_item: false,
+        remarks, photo_url: null, is_free_item: false,
         location_qty, closing_location_qty
       });
     }
