@@ -739,3 +739,40 @@ body{
 .phone{max-width:460px;}
 .tabbar,.fab{max-width:460px;}
 @media (min-width:600px){.content{padding:20px 16px 112px;}.fab{padding:0 20px;}}
+
+/* ============================================================
+   Theme: light golden / brown on white
+   ============================================================ */
+:root{
+  --bg:#FFFCF5;
+  --surface:#FFFFFF;
+  --ink:#4A3217;
+  --ink-soft:#7A6347;
+  --ink-faint:#8F7B60;
+  --gold:#D9A441;
+  --gold-deep:#8A5A1E;
+  --gold-tint:#FBF1D9;
+  --line:#EBDDBF;
+  --focus:rgba(217,164,65,.45);
+  --sun:#F5D67A;
+  --sun-soft:#FCF0C8;
+  --shadow:0 1px 2px rgba(138,90,30,.06),0 8px 22px rgba(138,90,30,.08);
+  --shadow-raised:0 12px 34px rgba(74,50,23,.18);
+}
+body{background:var(--bg);}
+.app-header{background:#FFFFFF;border-bottom:2px solid var(--sun);}
+.tabbar{background:#FFFFFF;border-top:2px solid var(--sun);}
+.btn-primary{background:var(--gold-deep);color:#fff;}
+.fab button{background:var(--gold-deep);box-shadow:0 8px 20px rgba(138,90,30,.3);}
+.fab .fab-memo{background:#fff;color:var(--gold-deep);}
+.fab .fab-calendar{background:var(--gold);}
+.mode-btn.active,.btn-gold,.stock-tab.active{background:var(--gold-deep);border-color:var(--gold-deep);}
+.btn.home-export{background:var(--sun);border-color:var(--sun);color:var(--ink);}
+.toast{background:var(--ink);}
+.ss-name{border-color:var(--gold-deep);}
+
+/* Bottom nav: icons only (labels stay available to screen readers). */
+.tab span{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.tab{min-height:50px;}
+.tab svg{width:25px;height:25px;}
+.tab-home svg{width:28px;height:28px;}
