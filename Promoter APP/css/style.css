@@ -1379,3 +1379,8 @@ button,input,select,textarea{font-family:inherit;}
 .sales-qty-adjust.ss-stepper button,.ss-row .sales-qty-adjust.ss-stepper button,.ss-row .sales-qty-adjust.ss-stepper button:first-child,.ss-row .sales-qty-adjust.ss-stepper button:last-child,.sales-qty-adjust.ss-stepper button:first-child,.sales-qty-adjust.ss-stepper button:last-child{border:none;background:transparent;border-radius:8px;font-size:22px;font-weight:400;color:var(--ink-soft);}
 .sales-qty-adjust.ss-stepper button:last-child,.ss-row .sales-qty-adjust.ss-stepper button:last-child{color:var(--ink);font-weight:500;}
 .sales-qty-adjust.ss-stepper button:active,.ss-row .sales-qty-adjust.ss-stepper button:active{background:var(--gold-tint);}
+
+/* Sales Report: the sales numbers use the plain font (the serif stays elsewhere) */
+.ss-row .sales-table-number,.sales-qty-adjust.ss-stepper .sales-table-number,.ss-locked .sales-table-number{
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-weight:600;font-size:17px;letter-spacing:0;
+}
