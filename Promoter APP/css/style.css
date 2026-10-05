@@ -1358,3 +1358,18 @@ button,input,select,textarea{font-family:inherit;}
   font-family:'Fraunces',Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:0;
 }
 .sales-qty-adjust.ss-stepper .sales-table-number{font-size:18px;}
+
+/* Compact job cards; the shift time sits on the right so the card has no dead space */
+.job-card{padding:12px 14px;gap:12px;}
+.job-date{width:46px;padding:6px 2px;}
+.job-date .dom{font-size:18px;}
+.job-store{margin:0 0 5px;}
+.job-side{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;white-space:nowrap;}
+.job-side b{font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}
+.job-side small{font-size:11px;color:var(--ink-faint);}
+
+/* Green date box fills the whole left side of the card, edge to edge */
+.job-card{align-items:stretch;overflow:hidden;}
+.job-date{align-self:stretch;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  width:62px;margin:-12px 0 -12px -14px;padding:8px 0;border-radius:0;}
+.job-body,.job-side,.job-actions{align-self:center;}

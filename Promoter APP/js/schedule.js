@@ -99,8 +99,8 @@ function renderJobList(list, sortDir){
         <div class="job-body">
           <div class="job-store">${esc(storeName)}${isTomorrow?' <span class="tomorrow-highlight-pill">Tomorrow</span>':isToday?' <span class="tomorrow-highlight-pill today-pill">Today</span>':''}</div>
           <span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>
-          <span class="job-time">${start}–${end} · ${hrs}h</span>
         </div>
+        <div class="job-side"><b>${start}–${end}</b><small>${hrs} hours</small></div>
       </div>
     `;
   });
