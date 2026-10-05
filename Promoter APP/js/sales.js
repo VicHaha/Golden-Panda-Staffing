@@ -158,6 +158,14 @@ function groupByOutlet(items){
   return groups;
 }
 
+// Full SKU names for the product field: the standard list plus any name
+// already used in a record.
+function getSkuSuggestions(){
+  const names = new Set(PRODUCT_SUGGESTIONS);
+  salesReports.forEach(r=>{ if(r.product_name) names.add(canonicalSkuName(r.product_name)); });
+  return [...names];
+}
+
 function getProductSuggestions(){
   const bases = new Set([...VARIANT_BASE_PRODUCTS, ...GIVEAWAY_ITEMS]);
   salesReports.forEach(r => { if(r.product_name) bases.add(parseProductName(r.product_name).base); });
@@ -401,15 +409,10 @@ function openSalesForm(id, reuseOverlay=false){
         </select>
       </div>
       <div class="field-row">
-        <div class="field" style="flex:1.6;">
-          <label>Product name</label>
-          <input id="s-product" list="product-list" value="${editing?esc(parseProductName(editing.product_name).base):''}" placeholder="e.g. Bio Dishwash 1L" oninput="onProductNameChange()" onchange="onProductNameChange()">
-          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
-        </div>
-        <div class="field">
-          <label>Variation (optional)</label>
-          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="e.g. Bidara" oninput="onProductNameChange()" onchange="onProductNameChange()">
-          <datalist id="variation-list">${getVariationSuggestions().map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+        <div class="field" style="flex:1;">
+          <label>Product name (full SKU, e.g. 1L Bio Dishwash (Bidara))</label>
+          <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. 1L Bio Dishwash (Bidara)" oninput="onProductNameChange()" onchange="onProductNameChange()">
+          <datalist id="product-list">${getSkuSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
       </div>
       <div class="field">
@@ -418,14 +421,17 @@ function openSalesForm(id, reuseOverlay=false){
           Free item (given away, not sold)
         </label>
       </div>
-      <div class="field-row" id="s-free-fields" style="display:none;">
-        <div class="field"><label for="s-opening">Opening</label><input id="s-opening" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
-        <div class="field"><label for="s-closing">Closing</label><input id="s-closing" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
+      <div class="qty-row" id="s-qty-row">
+        <div id="s-free-fields" style="display:none;">
+        <div class="field"><label for="s-opening">Opening</label><input id="s-opening" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
+        <div class="field"><label for="s-closing">Closing</label><input id="s-closing" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
       </div>
       <div class="field qty-small">
         <label id="s-sales-label" for="s-sales">Sales qty</label>
-        <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+        <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.sales_qty:''}" placeholder="0">
       </div>
+      </div>
+      <div class="field-hint" id="s-variance" style="display:none;"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
@@ -469,10 +475,29 @@ function onFreeItemToggle(){
 // Free items record opening, closing and given out right here (they are not
 // in Stock Management). Other products only take a sales quantity — their
 // opening and closing are kept in Stock Management.
+// Variance = opening - closing - given out (0 means it tallies). Shown for
+// free items; the Excel export calculates the same figure for every row.
+function updateFreeVariance(){
+  const box = document.getElementById('s-variance');
+  if(!box) return;
+  const free = document.getElementById('s-free-item').checked;
+  box.style.display = free ? '' : 'none';
+  if(!free) return;
+  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
+  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
+  const given = parseFloat(document.getElementById('s-sales').value) || 0;
+  const variance = opening - closing - given;
+  box.textContent = variance === 0 ? 'Variance 0 — tallies' : `Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}`;
+  box.className = 'field-hint ' + (variance === 0 ? 'variance-ok' : 'variance-off');
+}
+
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('s-sales-label').textContent = giveaway ? 'Given out' : 'Sales qty';
-  document.getElementById('s-free-fields').style.display = giveaway ? '' : 'none';
+  // Free items: Opening, Closing and Given out sit side by side in one row.
+  document.getElementById('s-free-fields').style.display = giveaway ? 'contents' : 'none';
+  document.getElementById('s-qty-row').classList.toggle('free', giveaway);
+  updateFreeVariance();
 }
 
 async function saveSalesForm(id){
@@ -480,8 +505,7 @@ async function saveSalesForm(id){
   const work_date = todayStr(); // promoters can only ever save into today
   const store_id = document.getElementById('s-store').value || null;
   const productBase = document.getElementById('s-product').value.trim();
-  const variation = document.getElementById('s-variation').value;
-  const product_name = composeProductName(productBase, variation);
+  const product_name = canonicalSkuName(productBase);
   // Bug fix: the checkbox is normally kept in sync live via
   // onProductNameChange() as the product name is typed — but selecting a
   // suggestion from the datalist dropdown (tap/click, not typing) doesn't

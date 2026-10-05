@@ -299,7 +299,7 @@ async function saveStockLocationForm(id, field='opening'){
   btn.disabled = true;
   try{
     btn.textContent = 'Saving…';
-    const payload = { store_id, remarks: document.getElementById('sl-remarks').value.trim() || null };
+    const payload = { store_id, remarks: document.getElementById('sl-remarks').value.trim() || null, ...stockRecordAttribution() };
     if(closing) Object.assign(payload,{ closing_location_qty:map, closing_qty:total });
     else Object.assign(payload,{ location_qty:map, opening_qty:total });
     await DB.updateSalesReport(id, payload);
@@ -463,7 +463,7 @@ async function saveAddStockRecordForm(){
       && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
     );
     if(existing){
-      await DB.updateSalesReport(existing.id,{ location_qty:{...locationMap(existing,'opening'),...location_qty}, closing_location_qty:{...locationMap(existing,'closing'),...closing_location_qty}, opening_qty:openingTotal, closing_qty:closingTotal, remarks });
+      await DB.updateSalesReport(existing.id,{ location_qty:{...locationMap(existing,'opening'),...location_qty}, closing_location_qty:{...locationMap(existing,'closing'),...closing_location_qty}, opening_qty:openingTotal, closing_qty:closingTotal, remarks, ...stockRecordAttribution() });
     }else{
       await DB.addSalesReport({
         work_date, store_id, ...stockRecordAttribution(), product_name,

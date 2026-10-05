@@ -235,7 +235,7 @@ async function adjustSalesQuantity(event, id, delta){
   const buttons = control ? [...control.querySelectorAll('button')] : [];
   buttons.forEach(button=>button.disabled = true);
   try{
-    await DB.updateSalesReport(id, { sales_qty: next });
+    await DB.updateSalesReport(id, { sales_qty: next, ...stockRecordAttribution() });
     row.sales_qty = next;
     try{
       const entry = await DB.addSalesLog({

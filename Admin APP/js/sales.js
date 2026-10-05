@@ -237,6 +237,14 @@ function renderOutletTabs(date, groups, active, onSelectFn){
 // as suggestions too — the list grows on its own. Only base names are
 // suggested here (no variation suffix); the Variation field next to it
 // handles the flavor.
+// Full SKU names for the product field: the standard list plus any name
+// already used in a record.
+function getSkuSuggestions(){
+  const names = new Set(PRODUCT_SUGGESTIONS);
+  salesReports.forEach(r=>{ if(r.product_name) names.add(canonicalSkuName(r.product_name)); });
+  return [...names];
+}
+
 function getProductSuggestions(){
   const bases = new Set([...VARIANT_BASE_PRODUCTS, ...GIVEAWAY_ITEMS]);
   salesReports.forEach(r => { if(r.product_name) bases.add(parseProductName(r.product_name).base); });
@@ -554,15 +562,10 @@ function openSalesForm(id, reuseOverlay=false){
         </select>
       </div>
       <div class="field-row">
-        <div class="field" style="flex:1.6;">
-          <label>Product name</label>
-          <input id="s-product" list="product-list" value="${editing?esc(parseProductName(editing.product_name).base):''}" placeholder="e.g. Bio Dishwash 1L" oninput="onProductNameChange()">
-          <datalist id="product-list">${getProductSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
-        </div>
-        <div class="field">
-          <label>Variation (optional)</label>
-          <input id="s-variation" list="variation-list" value="${editing?esc(parseProductName(editing.product_name).variation):''}" placeholder="Type any variation" oninput="onProductNameChange()">
-          <datalist id="variation-list">${getVariationSuggestions(editing?parseProductName(editing.product_name).base:'').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+        <div class="field" style="flex:1;">
+          <label>Product name (full SKU, e.g. 1L Bio Dishwash (Bidara))</label>
+          <input id="s-product" list="product-list" value="${editing?esc(editing.product_name):''}" placeholder="e.g. 1L Bio Dishwash (Bidara)" oninput="onProductNameChange()">
+          <datalist id="product-list">${getSkuSuggestions().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         </div>
       </div>
       <div class="field-hint" style="margin:-8px 0 14px;"></div>
@@ -573,14 +576,17 @@ function openSalesForm(id, reuseOverlay=false){
         </label>
         <div class="field-hint" id="s-free-item-hint"></div>
       </div>
-      <div class="field-row" id="s-free-fields" style="display:none;">
-        <div class="field"><label for="s-opening">Opening</label><input id="s-opening" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
-        <div class="field"><label for="s-closing">Closing</label><input id="s-closing" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
+      <div class="qty-row" id="s-qty-row">
+        <div id="s-free-fields" style="display:none;">
+        <div class="field"><label for="s-opening">Opening</label><input id="s-opening" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.opening_qty:''}" placeholder="0"></div>
+        <div class="field"><label for="s-closing">Closing</label><input id="s-closing" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.closing_qty:''}" placeholder="0"></div>
       </div>
       <div class="field qty-small">
         <label id="s-sales-label" for="s-sales">Sales qty</label>
-        <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" value="${editing?editing.sales_qty:''}" placeholder="0">
+        <input id="s-sales" type="number" inputmode="numeric" min="0" step="1" oninput="updateFreeVariance()" value="${editing?editing.sales_qty:''}" placeholder="0">
       </div>
+      </div>
+      <div class="field-hint" id="s-variance" style="display:none;"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="sales-save-btn" onclick="saveSalesForm('${editing?editing.id:''}')">Save</button>
@@ -626,10 +632,29 @@ function onFreeItemToggle(){
 // Free items record opening, closing and given out right here (they are not
 // in Stock Management). Other products only take a sales quantity — their
 // opening and closing are kept in Stock Management.
+// Variance = opening - closing - given out (0 means it tallies). Shown for
+// free items; the Excel export calculates the same figure for every row.
+function updateFreeVariance(){
+  const box = document.getElementById('s-variance');
+  if(!box) return;
+  const free = document.getElementById('s-free-item').checked;
+  box.style.display = free ? '' : 'none';
+  if(!free) return;
+  const opening = parseFloat(document.getElementById('s-opening').value) || 0;
+  const closing = parseFloat(document.getElementById('s-closing').value) || 0;
+  const given = parseFloat(document.getElementById('s-sales').value) || 0;
+  const variance = opening - closing - given;
+  box.textContent = variance === 0 ? 'Variance 0 — tallies' : `Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}`;
+  box.className = 'field-hint ' + (variance === 0 ? 'variance-ok' : 'variance-off');
+}
+
 function applyFreeItemFieldLayout(){
   const giveaway = document.getElementById('s-free-item').checked;
   document.getElementById('s-sales-label').textContent = giveaway ? 'Given out' : 'Sales qty';
-  document.getElementById('s-free-fields').style.display = giveaway ? '' : 'none';
+  // Free items: Opening, Closing and Given out sit side by side in one row.
+  document.getElementById('s-free-fields').style.display = giveaway ? 'contents' : 'none';
+  document.getElementById('s-qty-row').classList.toggle('free', giveaway);
+  updateFreeVariance();
 }
 
 async function saveSalesForm(id){
@@ -643,8 +668,7 @@ async function saveSalesForm(id){
   const promoter_id = editing ? (editing.promoter_id || null) : null;
   const store_id = document.getElementById('s-store').value || null;
   const productBase = document.getElementById('s-product').value.trim();
-  const variation = document.getElementById('s-variation').value;
-  const product_name = composeProductName(productBase, variation);
+  const product_name = canonicalSkuName(productBase);
   const is_free_item = document.getElementById('s-free-item').checked;
   const sales_qty = parseFloat(document.getElementById('s-sales').value) || 0;
   // Opening/closing stock and remarks are edited in Stock Management.
@@ -858,6 +882,28 @@ function wireStockExportControls(){
   if(eb) eb.addEventListener('click', exportStockExcel);
 }
 
+// What each sheet needs, and where it is keyed in:
+//   Raw Sales Data / Summary — Sales Section (sold, given out), Stock Management
+//     (opening + closing per location, remarks); free items: the Sales form
+//     (opening, closing, given out).
+//   Raw Stock Data — closing per location, Stock Management.
+//   Outlet Performance / Customer Analysis — Shift Report in the promoter app.
+function exportDataIssues(salesRows, shiftRows){
+  const label = r => `${formatDateShort(r.work_date)} · ${outletLabel(r)} · ${canonicalSkuName(r.product_name)}`;
+  const sample = list => list.slice(0,3).map(label).join('; ') + (list.length > 3 ? `; +${list.length-3} more` : '');
+  const notes = [];
+  const noOutlet = salesRows.filter(r=>!r.store_id);
+  if(noOutlet.length) notes.push(`• ${noOutlet.length} record(s) have no outlet (${sample(noOutlet)})`);
+  // Sold units but the closing count was never entered (closing still equals opening).
+  const noClosing = salesRows.filter(r=>!isFreeItem(r) && Number(r.sales_qty||0) > 0 && Number(r.closing_qty||0) === Number(r.opening_qty||0));
+  if(noClosing.length) notes.push(`• ${noClosing.length} product(s) have sales but no closing stock keyed in — Variance will be off (${sample(noClosing)})`);
+  const noFreeCounts = salesRows.filter(r=>isFreeItem(r) && Number(r.sales_qty||0) > 0 && Number(r.opening_qty||0) === 0 && Number(r.closing_qty||0) === 0);
+  if(noFreeCounts.length) notes.push(`• ${noFreeCounts.length} free item(s) have a given-out figure but no opening/closing (${sample(noFreeCounts)})`);
+  const noShift = [...new Set(salesRows.map(r=>r.work_date))].filter(date=>!shiftRows.some(sr=>sr.work_date === date));
+  if(noShift.length) notes.push(`• No shift report (Outlet Performance / Customer Analysis) for: ${noShift.slice(0,4).map(formatDateShort).join(', ')}${noShift.length > 4 ? `, +${noShift.length-4} more` : ''}`);
+  return notes;
+}
+
 function exportStockExcel(){
   const daily = stockExportMode === 'daily';
   const periodLabel = daily ? stockExportDate : stockExportMonth;
@@ -872,6 +918,11 @@ function exportStockExcel(){
     showToast(`No reports to export for this ${daily ? 'date' : 'month'}`);
     return;
   }
+
+  // The workbook is built from what people key in. Flag rows where something
+  // the sheets need is missing, and let the admin decide.
+  const issues = exportDataIssues(salesRows, shiftRows);
+  if(issues.length && !confirm('Some data looks incomplete:\n\n' + issues.join('\n') + '\n\nExport anyway?')) return;
 
   const wb = XLSX.utils.book_new();
 
@@ -978,9 +1029,22 @@ function exportStockExcel(){
   // follows whatever locations the office has set up. Free items carry no
   // location figures (Stock Management excludes them), so they're left out
   // rather than exporting all-zero rows.
-  const exportLocations = activeStockLocations();
-  const stockHeader = ['Date','Outlet','Product','Variation',...exportLocations.map(loc=>loc.name),'Total Stock'];
-  const stockRows = latestStockRowsForExport(salesRows.filter(r => !isFreeItem(r) && !isGiveaway(r.product_name)))
+  const stockSource = latestStockRowsForExport(salesRows.filter(r => !isFreeItem(r) && !isGiveaway(r.product_name)));
+  // One column per stock location: every active one, plus any removed location
+  // that still holds figures in this period, so history is never dropped.
+  const exportLocations = sortedStockLocations().filter(loc=>
+    loc.active !== false || stockSource.some(r=>locationQty(r,loc.id,'closing') || locationQty(r,loc.id,'opening'))
+  );
+  const usedHeaders = new Set(['Date','Outlet','Product','Variation','Total Stock']);
+  const locationHeader = {};
+  exportLocations.forEach(loc=>{
+    let name = loc.name, n = 2;
+    while(usedHeaders.has(name)) name = `${loc.name} (${n++})`;
+    usedHeaders.add(name);
+    locationHeader[loc.id] = name;
+  });
+  const stockHeader = ['Date','Outlet','Product','Variation',...exportLocations.map(loc=>locationHeader[loc.id]),'Total Stock'];
+  const stockRows = stockSource
     .sort((a,b)=> a.work_date.localeCompare(b.work_date) || outletLabel(a).localeCompare(outletLabel(b)) || compareSkuNames(a.product_name,b.product_name))
     .map(r=>{
       const { base, variation } = parseProductName(r.product_name);
@@ -990,12 +1054,12 @@ function exportStockExcel(){
         'Product': base,
         'Variation': variation
       };
-      exportLocations.forEach(loc=>{ row[loc.name] = locationQty(r, loc.id, 'closing'); });
+      exportLocations.forEach(loc=>{ row[locationHeader[loc.id]] = locationQty(r, loc.id, 'closing'); });
       row['Total Stock'] = stockTotal(r, 'closing');
       return row;
     });
   const stockFormats = { 'Date':'dd/mm/yyyy', 'Total Stock':'#,##0' };
-  exportLocations.forEach(loc=>{ stockFormats[loc.name] = '#,##0'; });
+  exportLocations.forEach(loc=>{ stockFormats[locationHeader[loc.id]] = '#,##0'; });
   addReportSheet(wb, 'Raw Stock Data', stockRows, stockHeader, [12,18,22,14,...exportLocations.map(()=>12),12], stockFormats);
 
   // ============================================================
