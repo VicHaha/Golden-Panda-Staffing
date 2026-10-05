@@ -1599,3 +1599,18 @@ button,input,select,textarea{font-family:inherit;}
 .pp-name{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere;}
 .pp-busy{color:var(--ink-faint);font-size:12px;}
 .pp-row .btn{cursor:pointer;}
+
+/* Product photo bigger, product name smaller */
+.ss-family{gap:8px;}
+.ss-family-name,.ss-family{font-size:11.5px;}
+.ss-family .ss-family-name{font-size:11.5px;font-weight:600;line-height:1.25;}
+.ss-family .ss-thumb{width:64px;height:64px;border-radius:8px;}
+
+/* Tighter rows in the Sales Report */
+.ss-row,.ss-row.ss-row-grouped{min-height:38px;}
+.ss-row.ss-row-free{min-height:42px;}
+.ss-row.ss-row-grouped{padding-top:2px;padding-bottom:2px;}
+.sales-qty-adjust.ss-stepper,.ss-row .sales-qty-adjust.ss-stepper,.ss-row-grouped .sales-qty-adjust.ss-stepper{height:32px;grid-template-columns:32px minmax(26px,1fr) 32px;}
+.ss-family{padding-top:9px;padding-bottom:6px;}
+.ss-sku-btn{padding:4px 0;}
+.ss-head{min-height:30px;}
