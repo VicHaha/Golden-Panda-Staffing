@@ -15,6 +15,19 @@ const LOW_STOCK_THRESHOLD = 10;
 
 let stockLocations = [];
 
+// Outlets that have someone scheduled on `date` (from the Schedule). Today's
+// Sales Section and Stock Management only show these outlets, so both stay in
+// sync with the schedule: no job today, no cards.
+function scheduledStoreIdsForDate(date){
+  const ids = new Set();
+  jobs.forEach(job=>{
+    if(job.work_date !== date) return;
+    const id = job.store_id || (job.stores && job.stores.id);
+    if(id) ids.add(id);
+  });
+  return ids;
+}
+
 function sortedStockLocations(){
   return [...stockLocations].sort((a,b)=>(a.sort_order-b.sort_order) || String(a.created_at||'').localeCompare(String(b.created_at||'')));
 }

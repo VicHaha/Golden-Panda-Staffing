@@ -124,7 +124,9 @@ function renderSalesSection(){
   const isToday = date === today;
   const canTapRow = isToday || canEditPastSales();
   const dates = salesDateOptions();
-  const rows = salesReports.filter(r=>r.work_date===date);
+  // Today only shows outlets that are scheduled today; earlier days show everything logged.
+  const scheduled = isToday ? scheduledStoreIdsForDate(date) : null;
+  const rows = salesReports.filter(r=>r.work_date===date && (!scheduled || scheduled.has(r.store_id)));
   const outlets = groupByOutlet(rows).sort((a,b)=>a.label.localeCompare(b.label));
 
   let html = `<div class="ss-date-row">
@@ -136,7 +138,10 @@ function renderSalesSection(){
   if(!isToday) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
 
   if(!rows.length){
-    html += emptyState('🧾', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Outlets appear here once someone is scheduled. Tap + to add a sales report.' : 'Pick another date above.');
+    html += isToday && !scheduled.size
+      ? emptyState('🗓️','Not a working day today','Sales tables appear here on days you are scheduled. Pick an earlier date above to look back.')
+      : emptyState('🧾', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
+    return html;
   }else{
     html += outlets.map(group=>renderSalesOutlet(group,isToday,canTapRow)).join('');
   }

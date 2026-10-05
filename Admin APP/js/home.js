@@ -54,7 +54,9 @@ function renderHomeStockRecord(){
   const date = stockActiveDate();
   const low = lowStockEntries(date);
   let body;
-  if(!stockDatesDesc().length){
+  if(!scheduledStoreIdsForDate(date).size){
+    body = `<p class="home-empty">Not a working day today.</p>`;
+  }else if(!stockDatesDesc().length){
     body = `<p class="home-empty">No stock records yet.</p>`;
   }else if(!low.length){
     body = `<p class="home-ok">✓ All stock OK</p>`;

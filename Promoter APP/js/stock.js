@@ -43,18 +43,14 @@ function stockDatesDesc(){
   return [...new Set(salesReports.filter(isStockManagedItem).map(r=>r.work_date))].sort((a,b)=>b.localeCompare(a));
 }
 
-// The day the main cards describe: today when anything is happening today
-// (stock rows or a scheduled job), otherwise the most recent stock day.
-function stockActiveDate(){
-  const today = todayStr();
-  const dates = stockDatesDesc();
-  if(dates.includes(today) || jobs.some(j=>j.work_date===today)) return today;
-  return dates[0] || today;
-}
+// The main cards always describe today; earlier days live under Past Records.
+function stockActiveDate(){ return todayStr(); }
 
-// [{ key, name, rows }] — outlets that have stock on `date`, A–Z.
+// [{ key, name, rows }] — outlets that have stock on `date`, A–Z. For today,
+// only outlets that are scheduled today (see the Schedule) are included.
 function outletStocksForDate(date){
-  const rows = dedupeStockRows(salesReports.filter(r=>r.work_date===date && isStockManagedItem(r)));
+  const scheduled = date === todayStr() ? scheduledStoreIdsForDate(date) : null;
+  const rows = dedupeStockRows(salesReports.filter(r=>r.work_date===date && isStockManagedItem(r) && (!scheduled || scheduled.has(r.store_id))));
   const byKey = new Map();
   rows.forEach(row=>{
     const key = stockOutletKey(row);
@@ -128,10 +124,12 @@ function renderStockManagement(){
       ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">⚙ Locations</button>`:''}
     </div>`;
   if(!outlets.length){
-    return html + emptyState('🏬','No outlet stock yet','Tap + to add the first stock record.');
+    html += scheduledStoreIdsForDate(date).size
+      ? emptyState('🏬','No stock records yet today','Tap + to add the first stock record.')
+      : emptyState('🗓️','Not a working day today','Stock cards appear here on days you are scheduled.');
+  }else{
+    html += `<div class="stock-outlet-grid">${outlets.map(outlet=>renderStockOutletCard(outlet,date)).join('')}</div>`;
   }
-  if(date !== todayStr()) html += `<div class="field-hint" style="margin:-6px 0 12px;">Nothing scheduled today — showing the latest records, ${formatDateLong(date)}.</div>`;
-  html += `<div class="stock-outlet-grid">${outlets.map(outlet=>renderStockOutletCard(outlet,date)).join('')}</div>`;
   html += renderStockPastRecords(date);
   return html;
 }

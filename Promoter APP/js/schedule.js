@@ -1,9 +1,8 @@
 // ============================================================
-// Schedule — read-only view of the roadshow calendar. Same rolling
-// 4-week window and layout as the office app's Schedule tab, but
-// promoters can only view here: no add/edit/delete, and no pay or
-// commission shown (that stays office-only). Everyone's jobs are
-// visible, not just this promoter's own.
+// Schedule — read-only list of the shifts THIS promoter is working. Only
+// their own cards are shown (no one else's, no open dates); a shift
+// tomorrow is highlighted with a "Tomorrow" tag, today's with "Today".
+// No add/edit/delete here — that stays in the office app.
 // ============================================================
 
 let scheduleShowMore = false;
@@ -11,8 +10,9 @@ let scheduleShowMore = false;
 function renderSchedule(){
   let html = renderMyMonthPay();
 
-  if(jobs.length===0){
-    return html + emptyState('🗓️','No jobs scheduled yet','Check back once the office assigns shifts.');
+  const myJobs = jobs.filter(j => j.promoter_id === currentPromoterId);
+  if(myJobs.length===0){
+    return html + emptyState('🗓️','No shifts scheduled for you yet','Check back once the office assigns your shifts.');
   }
 
   const today = new Date(); today.setHours(0,0,0,0);
@@ -25,12 +25,12 @@ function renderSchedule(){
     return end < now;
   }
 
-  const nearJobs = jobs.filter(j => !hasEnded(j) && j.work_date <= windowEndStr);
-  const pastJobs = jobs.filter(j => hasEnded(j));
-  const futureJobs = jobs.filter(j => !hasEnded(j) && j.work_date > windowEndStr);
+  const nearJobs = myJobs.filter(j => !hasEnded(j) && j.work_date <= windowEndStr);
+  const pastJobs = myJobs.filter(j => hasEnded(j));
+  const futureJobs = myJobs.filter(j => !hasEnded(j) && j.work_date > windowEndStr);
   const otherJobs = [...pastJobs, ...futureJobs];
 
-  html += `<div class="section-title">Current and upcoming activity <span class="count-pill">${nearJobs.length}</span></div>`;
+  html += `<div class="section-title">My upcoming shifts <span class="count-pill">${nearJobs.length}</span></div>`;
 
   if(nearJobs.length === 0){
     html += emptyState('🗓️','Nothing in the next 4 weeks','Check "earlier & later jobs" below.');
@@ -81,9 +81,8 @@ function renderJobList(list, sortDir){
       html += `<div class="day-group-label">${formatDateLong(j.work_date)}</div>`;
       lastDate = j.work_date;
     }
-    const unassigned = !j.promoter_id;
-    const promoterName = j.promoters ? displayName(j.promoters) : (unassigned ? 'Promoter not assigned' : '(promoter removed)');
-    const isMe = j.promoter_id === currentPromoterId;
+    const isTomorrow = j.work_date === tomorrowStr();
+    const isToday = j.work_date === todayStr();
     const storeName = j.stores ? j.stores.name : '(store removed)';
     const start = shortTime(j.start_time), end = shortTime(j.end_time);
     const d = new Date(j.work_date+'T00:00:00');
@@ -91,16 +90,15 @@ function renderJobList(list, sortDir){
     const position = j.position || 'Promoter';
 
     html += `
-      <div class="job-card">
+      <div class="job-card ${isTomorrow?'tomorrow-schedule-job':''}">
         <div class="job-date">
           <div class="dow">${d.toLocaleDateString('en-GB',{weekday:'short'})}</div>
           <div class="dom">${d.getDate()}</div>
           <div class="mon">${d.toLocaleDateString('en-GB',{month:'short'})}</div>
         </div>
         <div class="job-body">
-          <div class="job-store">${esc(storeName)}</div>
-          <div class="job-promoter">${esc(promoterName)}${isMe?' (you)':''}</div>
-          ${unassigned?'<span class="job-position job-position-open">Open date</span>':`<span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>`}
+          <div class="job-store">${esc(storeName)}${isTomorrow?' <span class="tomorrow-highlight-pill">Tomorrow</span>':isToday?' <span class="tomorrow-highlight-pill today-pill">Today</span>':''}</div>
+          <span class="job-position job-position-${position.toLowerCase()}">${esc(position)}</span>
           <span class="job-time">${start}–${end} · ${hrs}h</span>
         </div>
       </div>
