@@ -1540,3 +1540,41 @@ button,input,select,textarea{font-family:inherit;}
 
 /* Tomorrow: white card with a tan outline, so the date box and tags stay readable */
 .job-card.tomorrow-schedule-job{background:#fff;border:2px solid var(--gold);box-shadow:none;}
+
+/* ============================================================
+   Green accents — a muted bamboo green alongside the brown / beige / grey
+   ============================================================ */
+:root{--green:#3F6B4D;--green-soft:#E3EEE6;}
+
+/* page titles: short green bar underneath */
+.section-title{position:relative;padding-bottom:10px;}
+.section-title::after{content:'';position:absolute;left:2px;bottom:0;width:34px;height:3px;border-radius:2px;background:var(--green);}
+.section-title .count-pill{align-self:center;}
+
+/* panels: green marker before the heading */
+.panel-head h2::before{content:'';display:inline-block;width:3px;height:14px;margin-right:8px;border-radius:2px;background:var(--green);vertical-align:-1px;}
+.link-btn{color:var(--green);}
+
+/* summary tiles + counts */
+.kpi b{color:var(--green);}
+.kpi.is-low b{color:var(--brick);}
+.count-pill{background:var(--green-soft);color:var(--green);}
+.stock-total-btn span{color:var(--green);}
+
+/* actions */
+.btn-primary,.btn-gold{background:var(--green);border-color:var(--green);color:#fff;}
+.btn.home-export,.month-picker-row .btn{color:var(--green);border-color:var(--green);background:#fff;}
+.sales-qty-adjust.ss-stepper button:last-child,.ss-row .sales-qty-adjust.ss-stepper button:last-child{color:var(--green);font-weight:700;}
+.qty-btn.qty-plus{background:var(--green);color:#fff;}
+.fab button{background:var(--green);box-shadow:0 6px 16px rgba(63,107,77,.3);}
+.fab .fab-memo{background:#fff;color:var(--green);}
+.segmented .mode-btn.active,.period-btn.active{color:var(--green);}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--green);outline:3px solid rgba(63,107,77,.22);}
+
+/* footer: the open section's icon turns green and bold */
+.tab.active svg,.tab-home.active svg{stroke:var(--green);}
+.tab.active,.tab-home.active{color:var(--green);}
+
+/* good news is green */
+.home-ok,.variance-ok{color:var(--green);}
+.stock-variance.over,.stock-variance-line.over{background:var(--green-soft);color:var(--green);}
