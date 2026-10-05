@@ -53,6 +53,25 @@ function storeOptionsHtml(selectedId, editing){
     + list.map(s=>`<option value="${s.id}" ${selectedId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
 }
 
+// Only the promoter app defines jobCountsForSchedule (it counts the signed-in
+// promoter's own shifts), so its presence tells the apps apart.
+function isPromoterApp(){
+  return typeof jobCountsForSchedule === 'function';
+}
+// The most recent working date before today (for the promoter app: the last
+// day THIS promoter worked). On a non-working day the promoter app shows that
+// one previous record, view only.
+function previousWorkingDate(){
+  const today = todayStr();
+  let latest = null;
+  jobs.forEach(job=>{
+    if(job.work_date >= today) return;
+    if(isPromoterApp() && !jobCountsForSchedule(job)) return;
+    if(!latest || job.work_date > latest) latest = job.work_date;
+  });
+  return latest;
+}
+
 function normalizeStoreId(storeId){
   return storeId && storeId !== '__none__' ? storeId : null;
 }

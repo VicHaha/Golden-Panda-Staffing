@@ -122,13 +122,20 @@ async function undoLastSalesChange(){
 }
 
 function renderSalesSection(){
-  const date = salesViewDateValue();
+  let date = salesViewDateValue();
   const today = todayStr();
+  // Promoter app on a day the promoter isn't working: show their one previous
+  // record instead, view only.
+  let idle = false;
+  if(date === today && isPromoterApp() && !scheduledStoreIdsForDate(today).size){
+    const previous = previousWorkingDate();
+    if(previous){ date = previous; idle = true; }
+  }
   const isToday = date === today;
   const canTapRow = isToday || canEditPastSales();
   const dates = salesDateOptions();
-  // Today only shows outlets that are scheduled today; earlier days show everything logged.
-  const scheduled = isToday ? scheduledStoreIdsForDate(date) : null;
+  // Today (and the promoter app's own days) only show scheduled outlets; the admin app's earlier days show everything logged.
+  const scheduled = (isToday || idle) ? scheduledStoreIdsForDate(date) : null;
   const rows = salesReports.filter(r=>r.work_date===date && (!scheduled || scheduled.has(r.store_id)));
   const outlets = groupByOutlet(rows).sort((a,b)=>a.label.localeCompare(b.label));
 
@@ -137,14 +144,16 @@ function renderSalesSection(){
     return `<div class="section-title">Sales Report</div>` + emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
   }
 
-  let html = `<div class="section-title">Sales Report</div><div class="ss-date-row">
+  let html = idle
+    ? `<div class="section-title">Sales Report</div><div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(date)} (view only).</div><div hidden>`
+    : `<div class="section-title">Sales Report</div><div class="ss-date-row">
       <label class="ss-date-label" for="sales-date-select">Date</label>
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
         ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':'🔒 '}${formatDateShort(d)}</option>`).join('')}
       </select>
       ${isToday ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
     </div>`;
-  if(!isToday) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
+  if(!isToday && !idle) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed${canEditPastSales()?'. Tap a SKU name to correct an earlier record.':'.'}</div>`;
 
   if(!rows.length){
     html += emptyState('🧾', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');

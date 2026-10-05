@@ -51,7 +51,7 @@ function stockActiveDate(){ return todayStr(); }
 // [{ key, name, rows }] — outlets that have stock on `date`, A–Z. For today,
 // only outlets that are scheduled today (see the Schedule) are included.
 function outletStocksForDate(date){
-  const scheduled = date === todayStr() ? scheduledStoreIdsForDate(date) : null;
+  const scheduled = (date === todayStr() || isPromoterApp()) ? scheduledStoreIdsForDate(date) : null;
   const rows = dedupeStockRows(salesReports.filter(r=>r.work_date===date && isStockManagedItem(r) && (!scheduled || scheduled.has(r.store_id))));
   const byKey = new Map();
   rows.forEach(row=>{
@@ -138,8 +138,13 @@ function renderStockManagement(){
       ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">⚙ Locations</button>`:''}
     </div>`;
   if(!scheduledStoreIdsForDate(date).size){
-    // Not a working date: no records at all (Past Records included), just the message.
-    return html + emptyState('🗓️','Today is not a working date','Stock appears here on days you are scheduled.');
+    // Not a working date: no records, just the message — except the promoter
+    // app, which shows the one previous record (view only).
+    const previous = isPromoterApp() ? previousWorkingDate() : null;
+    const previousOutlets = previous ? outletStocksForDate(previous) : [];
+    if(!previousOutlets.length) return html + emptyState('🗓️','Today is not a working date','Stock appears here on days you are scheduled.');
+    return html + `<div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(previous)} (view only).</div>`
+      + `<div class="stock-outlet-grid">${previousOutlets.map(outlet=>renderStockOutletCard(outlet,previous)).join('')}</div>`;
   }
   if(!outlets.length){
     html += emptyState('🏬','No stock records yet today','Tap + to add the first stock record.');
@@ -185,17 +190,18 @@ function stockSummaryInnerHtml(outletKey, date){
   const activeGroup = productGroups.find(group=>group.key===active);
   const visibleRows = activeGroup ? activeGroup.items : [];
   const field = stockSummaryCountMode[stateKey] === 'closing' ? 'closing' : 'opening';
+  const editable = date === todayStr() || canEditPastSales();
   const rows = visibleRows.map(row=>{
     const total = stockTotal(row,field);
     const low = field === 'closing' && total < LOW_STOCK_THRESHOLD;
     const variance = field === 'closing' ? stockVariance(row) : 0;
     const sold = Number(row.sales_qty||0);
-    return `<button type="button" class="stock-summary-sku ${low?'is-low':''}" onclick="openStockLocationForm('${row.id}','${field}',true)">
+    return `<${editable?'button type="button"':'div'} class="stock-summary-sku ${low?'is-low':''}" ${editable?`onclick="openStockLocationForm('${row.id}','${field}',true)"`:''}>
       <span class="stock-summary-sku-head"><strong>${esc(displayProductName(row))}</strong><span><b>${total}</b> ${field} ${low?'<em>Low</em>':''}</span></span>
       ${field==='closing'?`<span class="stock-variance-line ${variance===0?'ok':variance<0?'short':'over'}">${variance===0?'Tallies':`Variance ${formatVariance(variance)}`} <small>opening ${stockTotal(row,'opening')} − sales ${sold} = ${stockTotal(row,'opening')-sold}, counted ${stockTotal(row,'closing')}</small></span>`:''}
       <span class="stock-location-chips">${stockLocationChips(row,field)}</span>
-      <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)} · Tap to edit</span>
-    </button>`;
+      <span class="stock-summary-edit">Counted ${formatDateShort(row.work_date)}${editable?' · Tap to edit':' · View only'}</span>
+    </${editable?'button':'div'}>`;
   }).join('');
   return `
     <div class="stock-summary-head"><div class="modal-title">${esc(outlet.name)} · ${field==='closing'?'Closing':'Opening'}</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
@@ -235,6 +241,7 @@ function openStockLocationForm(id, field='opening', reuseOverlay=false){
   const editing = salesReports.find(r=>r.id===id);
   if(!editing){ showToast('Could not find that record'); return; }
   if(!isStockManagedItem(editing)){ showToast('Free items are not tracked in Stock Management'); return; }
+  if(editing.work_date !== todayStr() && !canEditPastSales()){ showToast("Only today's stock can be edited"); return; }
   const closing = field === 'closing';
   stockFormStoreId = editing.store_id || null;
 

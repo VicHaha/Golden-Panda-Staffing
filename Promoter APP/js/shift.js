@@ -31,9 +31,15 @@ function ageRangeLabel(range){
 }
 
 function renderShift(){
-  // Not a working date for this promoter: no records, just the message.
+  // Not a working date for this promoter: show only the one previous record
+  // (their last working day), view only.
   if(!scheduledStoreIdsForDate(todayStr()).size){
-    return `<div class="section-title">Shift Report</div>` + emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
+    const title = `<div class="section-title">Shift Report</div>`;
+    const previous = previousWorkingDate();
+    const items = previous ? shiftReports.filter(r=>r.work_date === previous).sort((a,b)=>a.shift.localeCompare(b.shift)) : [];
+    if(!items.length) return title + emptyState('🗓️','Today is not a working date','Shift reports appear here on days you are scheduled.');
+    return title + `<div class="ss-lock-note">Today is not a working date — showing your last working day, ${formatDateShort(previous)} (view only).</div>
+      <div class="shift-report-group"><div class="shift-report-body">${renderShiftItems(items, true)}</div></div>`;
   }
   if(shiftReports.length === 0){
     return emptyState('📋','No shift reports yet','Tap + to log engagement numbers for a shift.');
@@ -70,7 +76,7 @@ function renderShift(){
             </div>
             <span class="shift-report-chevron ${expanded?'open':''}" aria-hidden="true">▾</span>
           </button>
-          ${expanded ? `<div class="shift-report-body">${renderShiftItems(items)}</div>` : ''}
+          ${expanded ? `<div class="shift-report-body">${renderShiftItems(items, !isToday)}</div>` : ''}
         </div>
       `;
     });
@@ -92,7 +98,7 @@ function toggleShiftShowPast(){
   render();
 }
 
-function renderShiftItems(items){
+function renderShiftItems(items, readOnly){
   return items.map(i=>{
     const engaged = Number(i.engaged||0);
     const successful = Number(i.successful_engagements||0);
@@ -112,10 +118,10 @@ function renderShiftItems(items){
           ${i.customer_age_range ? `<div class="sales-item-remarks">Customer age range: ${esc(ageRangeLabel(i.customer_age_range))}</div>` : ''}
           ${i.customer_feedback ? `<div class="sales-item-remarks">“${esc(i.customer_feedback)}”</div>` : ''}
         </div>
-        <div class="job-actions">
+        ${readOnly ? '' : `<div class="job-actions">
           <div class="icon-btn" onclick="openShiftForm('${i.id}')">✎</div>
           <div class="icon-btn danger" onclick="deleteShiftReport('${i.id}')">✕</div>
-        </div>
+        </div>`}
       </div>
     `;
   }).join('');
@@ -130,6 +136,7 @@ function toggleShiftDate(date){
 function openShiftForm(id){
   const editing = id ? shiftReports.find(r=>r.id===id) : null;
   const today = todayStr();
+  if(editing && editing.work_date !== today){ showToast("Only today's shift report can be edited"); return; }
   if(!editing && !scheduledStoreIdsForDate(today).size){ showToast('Today is not a working date — nothing to record'); return; }
   const formDate = editing ? editing.work_date : today;
   const overlay = document.createElement('div');

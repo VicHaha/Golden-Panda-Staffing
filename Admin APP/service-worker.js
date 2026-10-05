@@ -2,7 +2,7 @@
 // flaky connection — actual data still needs internet, since it lives in
 // Supabase. This does NOT cache Supabase data for offline editing.
 
-const CACHE_NAME = 'golden-panda-shell-v81';
+const CACHE_NAME = 'golden-panda-shell-v83';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -58,21 +58,19 @@ self.addEventListener('fetch', event => {
   // (Supabase API calls, fonts, CDN scripts) go straight to the network.
   if (url.origin !== self.location.origin) return;
 
+  // Network first, so a new version of the app is live on the very next
+  // load; the cache is only the offline fallback.
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const networkFetch = fetch(event.request)
-        .then(response => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(event.request)
+      .then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
-});
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
