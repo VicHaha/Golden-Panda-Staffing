@@ -158,23 +158,23 @@ function renderSalesSection(){
 
   // Not a working date and no earlier working day: just the message.
   if(isToday && !scheduled.size){
-    return `<div class="section-title">Sales Report</div>` + emptyState('🗓️','Today is not a working date','Sales appear here on days you are scheduled.');
+    return `<div class="section-title">Sales Report</div>` + emptyState('','Today is not a working date','Sales appear here on days you are scheduled.');
   }
 
   const dateRow = `<div class="ss-date-row">
       <label class="ss-date-label" for="sales-date-select">Date</label>
       <select id="sales-date-select" onchange="setSalesViewDate(this.value)">
         ${dates.includes(date) ? '' : `<option value="${date}" selected>${formatDateShort(date)}</option>`}
-        ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':(canEditPastSales()?'':'🔒 ')}${formatDateShort(d)}</option>`).join('')}
+        ${dates.map(d=>`<option value="${d}" ${d===date?'selected':''}>${d===today?'Today · ':(canEditPastSales()?'':'')}${formatDateShort(d)}</option>`).join('')}
       </select>
-      ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">↶ Undo</button>` : ''}
+      ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" id="sales-undo-btn" onclick="undoLastSalesChange()" ${lastUndoableSalesEntry()?'':'disabled'} title="Undo your last + or −">Undo</button>` : ''}
     </div>`;
   // Promoter app on a non-working day: just the previous record, with its date.
   let html = `<div class="section-title">Sales Report</div>` + (idle && isPromoterApp() ? `<div class="ss-prev-date">${formatDateShort(date)}</div>` : dateRow);
-  if(!canEdit && !idle) html += `<div class="ss-lock-note">🔒 Locked — only today's sales can be changed.</div>`;
+  if(!canEdit && !idle) html += `<div class="ss-lock-note">Locked — only today's sales can be changed.</div>`;
 
   if(!rows.length){
-    html += emptyState('🧾', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
+    html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Tap + to add a sales report.' : 'Pick another date above.');
     return html;
   }else{
     html += outlets.map(group=>renderSalesOutlet(group,canEdit,canEdit)).join('');

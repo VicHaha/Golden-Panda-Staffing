@@ -56,7 +56,7 @@ function renderHomeStockRecord(date){
   if(!stockDatesDesc().length){
     body = `<p class="home-empty">No stock records yet.</p>`;
   }else if(!low.length){
-    body = `<p class="home-ok">✓ All stock OK</p>`;
+    body = `<p class="home-ok">All stock OK</p>`;
   }else{
     const byOutlet = new Map();
     low.forEach(item=>{

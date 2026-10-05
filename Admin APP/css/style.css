@@ -1134,3 +1134,113 @@ body{background:var(--bg);color:var(--ink);}
 
 /* Focus clarity for keyboard / switch users */
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--sun);outline-offset:2px;}
+
+/* ============================================================
+   Theme v3 — brown / beige / grey (the Schedule look, everywhere)
+   Less yellow: tan and beige carry highlights, deep brown carries actions.
+   ============================================================ */
+:root{
+  --bg:#F4F1EC;            /* warm grey-beige page */
+  --surface:#FFFFFF;
+  --ink:#3B2A16;           /* dark brown text */
+  --ink-soft:#6B6258;      /* grey-brown */
+  --ink-faint:#8C857B;     /* warm grey */
+  --gold:#C4A37E;          /* tan */
+  --gold-deep:#5A4128;     /* deep brown: buttons, headings */
+  --gold-tint:#EDE4D6;     /* beige */
+  --sun:#D9C7AE;           /* light tan: highlights */
+  --sun-soft:#EFE8DC;
+  --line:#E3DCD1;
+  --focus:rgba(196,163,126,.5);
+  --shadow:0 1px 2px rgba(59,42,22,.05),0 6px 16px rgba(59,42,22,.06);
+}
+body{background:var(--bg);}
+
+/* header / nav: quiet grey-beige lines instead of yellow */
+.app-header{border-bottom:1px solid var(--line);}
+.brand-text h1{color:var(--ink);}
+.tabbar{border-top:1px solid var(--line);}
+.tab.active svg{fill:var(--sun);stroke:var(--gold-deep);}
+.tab-home.active{background:var(--gold-tint);color:var(--gold-deep);}
+.tab-home.active svg{fill:none;stroke:var(--gold-deep);}
+
+/* buttons */
+.btn-primary,.btn-gold,.mode-btn.active,.stock-tab.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+.btn.home-export{background:var(--gold-tint);border-color:var(--sun);color:var(--gold-deep);}
+.fab button{background:var(--gold-deep);box-shadow:0 8px 20px rgba(59,42,22,.28);}
+.fab .fab-memo{background:#fff;color:var(--gold-deep);border:1px solid var(--line);}
+.fab .fab-calendar{background:var(--gold);color:#fff;}
+
+/* titles + tags */
+.section-title,.ss-outlet-title,.modal-title,.stock-block-label{color:var(--gold-deep);}
+.home-card-tag{background:var(--gold-tint);color:var(--gold-deep);}
+.home-outlet{background:var(--sun-soft);color:var(--gold-deep);}
+.count-pill{background:var(--gold-tint);color:var(--gold-deep);}
+
+/* Sales steppers: − beige, + brown (clear to tell apart) */
+.ss-head{background:var(--gold-tint);}
+.sales-qty-adjust.ss-stepper button:first-child{background:var(--gold-tint);color:var(--gold-deep);}
+.sales-qty-adjust.ss-stepper button:last-child{background:var(--gold-deep);color:#fff;}
+.qty-btn.qty-plus{background:var(--gold-deep);color:#fff;}
+.qty-btn.qty-minus{background:var(--gold-tint);color:var(--gold-deep);}
+
+/* cards & boxes */
+.stock-block{background:var(--bg);}
+.stock-box.excluded{border:1px dashed var(--gold);}
+.job-card.tomorrow-schedule-job{background:var(--gold-tint);border:2px solid var(--gold);}
+.toast{background:var(--ink);}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);outline:3px solid var(--focus);}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--gold);}
+
+/* ============================================================
+   Theme v4 — professional: flat, tight corners, one sans-serif,
+   no decorative icons. Same brown / beige / grey palette.
+   ============================================================ */
+:root{--r:8px;--r-lg:12px;}
+body,h1,h2,h3,.section-title,.modal-title,.brand-text h1,.ss-outlet-title,.ss-card-title,.stock-outlet-total b,.stock-block-total b,.sales-date-total b,.job-date,.job-date .dom,.stat-card .num,.report-row .rtotal,.gate h2,.stock-section-heading h2{
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+.section-title,.modal-title,.brand-text h1,.ss-outlet-title,.ss-card-title{font-weight:700;letter-spacing:-.01em;}
+.brand-text h1{font-size:17px;}
+.section-title{font-size:17px;}
+.stock-block-total b,.stock-outlet-total b{font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+
+/* corners: tight, not bubbly */
+.btn,.mode-btn,.stock-tab,.period-btn,.field input,.field select,.field textarea,.ss-date-row select,.qty-stepper,.icon-btn,.modal-close-btn,.calculator-launch,.location-row input{border-radius:var(--r);}
+.home-card,.ss-card,.ss-table,.stock-outlet-card,.job-card,.stat-card,.report-row,.month-picker-row,.shift-report-group,.gate-form{border-radius:var(--r-lg);}
+.stock-block,.stock-box,.stock-location-chip,.stock-summary-sku,.stock-variance,.stock-variance-line,.memo-item,.ss-lock-note{border-radius:var(--r);}
+.modal-sheet{border-radius:16px 16px 0 0;}
+@media (min-width:600px){.modal-sheet{border-radius:16px;}}
+.brand-mark{border-radius:8px;}
+.identity-chip{border-radius:8px;padding:0 10px;}
+.sync-dot{width:8px;height:8px;box-shadow:none;}
+
+/* tags: small rectangles instead of pills */
+.count-pill,.home-card-tag,.home-outlet,.job-position,.job-time,.tomorrow-highlight-pill,.stock-low-flag,.stock-low-badge,.stock-ok-badge,.sales-variance,.memo-date,.stock-tab-count{border-radius:4px;}
+.home-card-tag{font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:3px 8px;}
+.home-outlet{font-size:12px;font-weight:700;padding:2px 8px;}
+.stock-low-flag{font-size:10px;padding:3px 6px;}
+
+/* steppers & floating button: squared-off */
+.sales-qty-adjust.ss-stepper button,.qty-btn{border-radius:var(--r);}
+.fab button{border-radius:14px;box-shadow:0 4px 14px rgba(59,42,22,.22);}
+
+/* bottom nav: top indicator bar, no bubble */
+.tab{border-radius:0;box-shadow:none;position:relative;}
+.tab.active{background:transparent;box-shadow:inset 0 3px 0 var(--gold-deep);}
+.tab-home,.tab-home.active{border-radius:0;width:100%;height:auto;align-self:stretch;}
+.tab-home svg{width:24px;height:24px;}
+.tab-home.active{background:transparent;color:var(--gold-deep);}
+.tab.active svg{fill:var(--gold-tint);stroke:var(--gold-deep);}
+.tab-home.active svg{fill:none;stroke:var(--gold-deep);}
+
+/* no decorative emoji */
+.empty-state .glyph{display:none;}
+.empty-state{padding:56px 20px;}
+.empty-state p{font-weight:600;color:var(--ink-soft);}
+
+/* tables: plainer headers */
+.ss-head{background:var(--bg);color:var(--ink-faint);font-size:11px;}
+.home-list li{border-bottom:1px solid var(--line);}
+.home-list li:last-child{border-bottom:none;}
+.toast{border-radius:var(--r);}
