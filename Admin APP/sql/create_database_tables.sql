@@ -239,6 +239,17 @@ create table if not exists product_photos (
   updated_at timestamptz not null default now()
 );
 
+-- The SKU list behind the "+" in Stock Management: every SKU (product +
+-- variation) that can be ticked onto an outlet. sku_key = canonical name,
+-- lower case. Deleting a SKU here never touches existing records.
+create table if not exists skus (
+  sku_key text primary key,
+  product_name text not null,
+  is_free_item boolean not null default false,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now()
+);
+
 -- Admin notes (Schedule > Memo).
 create table if not exists memos (
   id uuid primary key default gen_random_uuid(),
@@ -288,7 +299,7 @@ begin
   end loop;
 
   -- public read, signed-in write
-  foreach t in array array['sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos'] loop
+  foreach t in array array['sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos','skus'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "anon full access" on %I', t);
     execute format('drop policy if exists "anyone can read" on %I', t);
@@ -307,7 +318,7 @@ begin
   for r in
     select schemaname, tablename, policyname from pg_policies
     where schemaname = 'public'
-      and tablename in ('sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos')
+      and tablename in ('sales_reports','sales_log','shift_reports','day_photos','day_feedback','stock_locations','product_photos','skus')
       and policyname not in ('anyone can read', 'signed-in users can write')
   loop
     execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
@@ -405,7 +416,7 @@ declare
   t text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach t in array array['promoters','jobs','stores','sales_reports','sales_log','stock_locations','product_photos','day_photos','day_feedback','shift_reports'] loop
+    foreach t in array array['promoters','jobs','stores','sales_reports','sales_log','stock_locations','product_photos','skus','day_photos','day_feedback','shift_reports'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

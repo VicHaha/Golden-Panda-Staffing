@@ -307,7 +307,7 @@ async function ensureStockRowsForStore(date, storeId){
       plan.push({ name: row.product_name, free: isFreeItem(row), source: row });
     });
   }else{
-    PRODUCT_SUGGESTIONS.forEach(name=>plan.push({ name, free: isGiveaway(name), source: null }));
+    // A brand-new outlet has no SKUs until some are ticked in the SKU list.
   }
   for(const item of plan){
     if(existing.has(canonicalSkuName(item.name))) continue;
@@ -457,6 +457,52 @@ function openSalesForm(id, reuseOverlay=false){
 // Product photos: ONE photo per product type (e.g. 1L Bio Dishwash), shared by
 // all its variations, kept in the product_photos table; the picture itself
 // lives on Cloudinary.
+// One general feedback field per working date, sitting at the bottom of
+// that date's record — replaces the old per-product "Customer feedback"
+// field. Saved with a small Save button rather than autosaving on blur,
+// so a stray tap/click elsewhere in the card can't silently overwrite it.
+function renderDayFeedbackRow(date){
+  const entry = dayFeedback.find(d => d.work_date === date);
+  const value = entry ? (entry.feedback || '') : '';
+  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
+  return `
+    <div class="day-feedback-block">
+      <label for="day-feedback-${safeDate}">Notes</label>
+      <textarea id="day-feedback-${safeDate}" rows="2" placeholder="Add notes for this date (optional)" oninput="onDayFeedbackInput('${date}')">${esc(value)}</textarea>
+      <div class="day-feedback-actions">
+        <span class="field-hint" id="day-feedback-hint-${safeDate}"></span>
+        <button type="button" class="btn btn-gold btn-sm" id="day-feedback-save-${safeDate}" style="display:none;" onclick="saveDayFeedback('${date}')">Save notes</button>
+      </div>
+    </div>
+  `;
+}
+
+function onDayFeedbackInput(date){
+  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
+  const btn = document.getElementById(`day-feedback-save-${safeDate}`);
+  if(btn) btn.style.display = '';
+}
+
+async function saveDayFeedback(date){
+  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
+  const textarea = document.getElementById(`day-feedback-${safeDate}`);
+  const btn = document.getElementById(`day-feedback-save-${safeDate}`);
+  const hint = document.getElementById(`day-feedback-hint-${safeDate}`);
+  const feedback = textarea.value.trim();
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+  try{
+    await DB.upsertDayFeedback(date, feedback || null);
+    await refreshData();
+    if(hint) hint.textContent = 'Saved';
+    if(btn) btn.style.display = 'none';
+    render();
+  }catch(e){
+    console.error(e);
+    showToast('Could not save notes — ' + (e.message || 'check your connection'));
+    if(btn){ btn.disabled = false; btn.textContent = 'Save notes'; }
+  }
+}
+
 let productPhotos = [];
 function productFamilyName(name){
   return parseProductName(canonicalSkuName(name)).base;

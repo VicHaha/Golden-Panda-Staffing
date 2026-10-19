@@ -265,6 +265,34 @@ const DB = {
     if(error) throw error;
   },
 
+  // ---------------- SKU list (what the "+" in Stock Management manages) ----------------
+  async getSkus(){
+    const { data, error } = await sb.from('skus').select('*').order('sort_order').order('product_name');
+    if(error) throw error;
+    return data || [];
+  },
+  async upsertSkus(entries){
+    const { error } = await sb.from('skus').upsert(entries, { onConflict:'sku_key', ignoreDuplicates:true });
+    if(error) throw error;
+  },
+  async updateSku(key, entry){
+    const { error } = await sb.from('skus').update(entry).eq('sku_key', key);
+    if(error) throw error;
+  },
+  async deleteSku(key){
+    const { error } = await sb.from('skus').delete().eq('sku_key', key);
+    if(error) throw error;
+  },
+  // Renaming a SKU renames it in every record that used it.
+  async renameSkuRows(oldNames, newName, isFree){
+    const { error } = await sb.from('sales_reports').update({ product_name:newName, is_free_item:isFree }).in('product_name', oldNames);
+    if(error) throw error;
+  },
+  async addSalesReports(entries){
+    const { error } = await sb.from('sales_reports').insert(entries);
+    if(error) throw error;
+  },
+
   // ---------------- Stock locations (the editable list behind the stock boxes) ----------------
   async getStockLocations(){
     const { data, error } = await sb

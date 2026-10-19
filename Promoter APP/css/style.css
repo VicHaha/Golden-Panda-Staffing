@@ -1441,3 +1441,34 @@ button,input,select,textarea{font-family:inherit;}
 .ss-lock-note{display:none;}
 
 .stock-summary-edit{display:none;}
+
+/* ---- SKU list sheet ---- */
+.sku-pick{display:grid;gap:8px;margin-bottom:8px;}
+.sku-tools{display:flex;gap:8px;margin-bottom:8px;}
+.sku-list{border:1px solid var(--line);border-radius:12px;background:#fff;max-height:42vh;overflow-y:auto;}
+.sku-row{display:flex;align-items:center;gap:4px;padding:2px 6px 2px 12px;border-bottom:1px solid var(--line);}
+.sku-row:last-child{border-bottom:0;}
+.sku-row.is-present .sku-name{color:var(--gold-deep);opacity:.65;}
+.sku-check{flex:1;display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-size:14px;color:var(--ink);}
+.sku-check input{width:18px;height:18px;accent-color:var(--gold-deep);flex-shrink:0;}
+.sku-name em{font-style:normal;font-size:11px;color:var(--gold-deep);background:var(--gold-tint);border-radius:6px;padding:1px 6px;margin-left:4px;}
+.sku-add{display:grid;gap:8px;margin:12px 0;}
+.sku-empty{padding:16px;text-align:center;color:var(--gold-deep);font-size:13px;}
+
+/* ---- Notes (day feedback), same as the admin app ---- */
+.day-feedback-block{margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
+.day-feedback-block label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px;}
+.day-feedback-block textarea{
+  width:100%; padding:10px 11px; border-radius:9px; border:1px solid var(--line); background:var(--bg);
+  font-family:'Inter'; font-size:13.5px; color:var(--ink); resize:vertical; min-height:44px;
+}
+.day-feedback-block textarea:focus{outline:2px solid var(--gold); outline-offset:0; border-color:var(--gold);}
+.day-feedback-actions{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px;}
+.day-feedback-block textarea{font-family:inherit;font-size:16px;color:var(--ink);}
+
+/* ---- SKU Record ---- */
+.stock-head-actions{display:flex;gap:6px;}
+.pp-row .icon-btn{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--line);background:#fff;font-size:15px;}
+.sku-free-tag{font-style:normal;font-size:11px;color:var(--gold-deep);background:var(--gold-tint);border-radius:6px;padding:1px 6px;margin-left:4px;}
+.sku-mini{width:36px;height:36px;flex-shrink:0;}
+.sku-mini img{width:100%;height:100%;object-fit:cover;border-radius:8px;}

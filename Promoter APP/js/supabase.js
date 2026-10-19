@@ -194,6 +194,34 @@ const DB = {
     if(error) throw error;
   },
 
+  // ---------------- SKU list (what the "+" in Stock Management manages) ----------------
+  async getSkus(){
+    const { data, error } = await sb.from('skus').select('*').order('sort_order').order('product_name');
+    if(error) throw error;
+    return data || [];
+  },
+  async upsertSkus(entries){
+    const { error } = await sb.from('skus').upsert(entries, { onConflict:'sku_key', ignoreDuplicates:true });
+    if(error) throw error;
+  },
+  async updateSku(key, entry){
+    const { error } = await sb.from('skus').update(entry).eq('sku_key', key);
+    if(error) throw error;
+  },
+  async deleteSku(key){
+    const { error } = await sb.from('skus').delete().eq('sku_key', key);
+    if(error) throw error;
+  },
+  // Renaming a SKU renames it in every record that used it.
+  async renameSkuRows(oldNames, newName, isFree){
+    const { error } = await sb.from('sales_reports').update({ product_name:newName, is_free_item:isFree }).in('product_name', oldNames);
+    if(error) throw error;
+  },
+  async addSalesReports(entries){
+    const { error } = await sb.from('sales_reports').insert(entries);
+    if(error) throw error;
+  },
+
   // ---------------- Stock locations (read-only here — managed from the office app) ----------------
   async getStockLocations(){
     const { data, error } = await sb
@@ -201,6 +229,28 @@ const DB = {
       .select('*')
       .order('sort_order')
       .order('created_at');
+    if(error) throw error;
+    return data;
+  },
+
+  // ---------------- Day feedback (one general feedback field per working date) ----------------
+  async getDayFeedback(){
+    const { data, error } = await sb
+      .from('day_feedback')
+      .select('*')
+      .order('work_date', { ascending: false });
+    if(error) throw error;
+    return data;
+  },
+
+  // One row per work_date — saving again replaces the same row (upsert
+  // on work_date, same idea as the old single-photo-per-date behavior).
+  async upsertDayFeedback(work_date, feedback){
+    const { data, error } = await sb
+      .from('day_feedback')
+      .upsert({ work_date, feedback, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .select()
+      .single();
     if(error) throw error;
     return data;
   },

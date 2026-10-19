@@ -16,7 +16,6 @@ let stockSummaryActiveTab = {};
 let stockSummaryCountMode = {};
 let stockPastOpen = false;
 let stockFormStoreId = null;  // outlet whose locations the open edit form shows
-let addStockStoreId = null;   // same, for the add form
 
 function stockOutletKey(row){ return row.store_id || '__none__'; }
 function isStockManagedItem(row){ return !isFreeItem(row) && !isGiveaway(row.product_name); }
@@ -135,7 +134,10 @@ function renderStockManagement(){
   const manage = typeof canManageStockLocations === 'function' && canManageStockLocations();
   let html = `<div class="stock-page-head">
       <div class="section-title">Stock Management</div>
-      ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">Locations</button>`:''}
+      <span class="stock-head-actions">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openSkuRecord()">SKUs</button>
+        ${manage?`<button type="button" class="btn btn-ghost btn-sm" onclick="openStockLocationsManager()">Locations</button>`:''}
+      </span>
     </div>`;
   if(!scheduledStoreIdsForDate(date).size){
     // Not a working date: show the one previous working day instead (the
@@ -147,10 +149,20 @@ function renderStockManagement(){
       + `<div class="stock-outlet-grid">${previousOutlets.map(outlet=>renderStockOutletCard(outlet,previous)).join('')}</div>`;
     return isPromoterApp() ? html : html + renderStockPastRecords(previous);
   }
-  if(!outlets.length){
-    html += emptyState('','No stock records yet today','Tap + to add the first stock record.');
+  // Scheduled outlets that have no SKUs yet wait here for their SKU list.
+  const setupIds = [...scheduledStoreIdsForDate(date)].filter(id=>!outlets.some(o=>o.key===id));
+  const setupCards = setupIds.map(id=>{
+    const store = stores.find(x=>x.id===id);
+    if(!store) return '';
+    return `<section class="panel stock-card">
+      <header class="panel-head"><h2>${esc(store.name)}</h2><span class="panel-meta">Today · 0 SKUs</span></header>
+      <button type="button" class="btn btn-primary btn-block" onclick="openSkuListSheet('${id}')">Choose SKUs for this outlet</button>
+    </section>`;
+  }).join('');
+  if(!outlets.length && !setupCards){
+    html += emptyState('','No stock records yet today','Tap + to choose SKUs for an outlet.');
   }else{
-    html += `<div class="stock-outlet-grid">${outlets.map(outlet=>renderStockOutletCard(outlet,date)).join('')}</div>`;
+    html += `<div class="stock-outlet-grid">${outlets.map(outlet=>renderStockOutletCard(outlet,date)).join('')}${setupCards}</div>`;
   }
   html += renderStockPastRecords(date);
   return html;
@@ -335,260 +347,4 @@ async function saveStockLocationForm(id, field='opening'){
     btn.disabled = false;
     btn.textContent = 'Save';
   }
-}
-
-// ---------------- Add form ----------------
-// Lets someone add a brand-new stock record straight from this tab, rather
-// than only editing rows that were auto-seeded. Product name and Store reuse
-// the same suggestion list and outlet list as the Sales Section. If a record
-// already exists for this exact product + date + store, saving updates it.
-// Date the Add form is for: the admin picks any date; everyone else records for today.
-function addStockDate(){
-  const input = document.getElementById('asr-date');
-  return canEditPastSales() && input && input.value ? input.value : todayStr();
-}
-
-function openAddStockRecordForm(){
-  if(!canEditPastSales() && !scheduledStoreIdsForDate(todayStr()).size){ showToast('Today is not a working date — nothing to record'); return; }
-  const defaultStoreId = scheduledStoreIdForDate(todayStr());
-  addStockStoreId = defaultStoreId || null;
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal-sheet">
-      <div class="form-title-row"><div class="modal-title">Add stock record</div><button type="button" class="calculator-launch" onclick="openCalculator(this)" aria-label="Open calculator" title="Calculator">🧮</button></div>
-      ${canEditPastSales()
-        ? `<div class="field"><label for="asr-date">Date</label><input id="asr-date" type="date" value="${todayStr()}" onchange="onAddStockProductChange()"></div>`
-        : `<div class="field-hint" style="margin-bottom:12px;">${formatDateLong(todayStr())}</div>`}
-      <div class="field-row">
-        <div class="field" style="flex:1.6;">
-          <label>Product name</label>
-          <input id="asr-product" list="product-list" placeholder="e.g. 1L Bio Dishwash" oninput="onAddStockProductChange()">
-          <datalist id="product-list">${getProductSuggestions().filter(p=>!isGiveaway(p)).map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
-        </div>
-        <div class="field">
-          <label>Variation (optional)</label>
-          <input id="asr-variation" list="variation-list" placeholder="Type any variation" oninput="onAddStockProductChange()">
-          <datalist id="variation-list"></datalist>
-        </div>
-      </div>
-      <div class="field">
-        <label>Store</label>
-        <select id="asr-store" onchange="onAddStockProductChange()">
-          ${storeOptionsHtml(defaultStoreId, canEditPastSales())}
-        </select>
-      </div>
-      <div class="stock-section-heading"><h2>Opening stock</h2><span id="asr-opening-total">0</span></div>
-      <div id="asr-open-wrap">${renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
-      <div class="stock-section-heading"><h2>Closing stock</h2><span id="asr-closing-total">0</span></div>
-      <div id="asr-close-wrap">${renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', addStockStoreId)}</div>
-      <div id="asr-hint" hidden></div>
-      <div class="field">
-        <label for="asr-remarks">Remarks (optional)</label>
-        <input id="asr-remarks" placeholder="e.g. 2 units damaged">
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="add-stock-record-save-btn" onclick="saveAddStockRecordForm()">Save</button>
-      </div>
-    </div>
-  `;
-  showModal(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
-}
-
-function updateAddStockOpeningTotal(){
-  const opening = document.getElementById('asr-opening-total');
-  const closing = document.getElementById('asr-closing-total');
-  if(opening) opening.textContent = sumLocationInputs('asr-open-', addStockStoreId);
-  if(closing) closing.textContent = sumLocationInputs('asr-close-', addStockStoreId);
-}
-
-// The location boxes depend on the outlet picked in the form.
-function rebuildAddStockInputs(storeId){
-  if(storeId === addStockStoreId) return;
-  addStockStoreId = storeId;
-  document.getElementById('asr-open-wrap').innerHTML = renderLocationInputs('asr-open-', null, 'updateAddStockOpeningTotal()', storeId);
-  document.getElementById('asr-close-wrap').innerHTML = renderLocationInputs('asr-close-', null, 'updateAddStockOpeningTotal()', storeId);
-}
-
-function fillAddStockInputs(openingMap, closingMap, remarks){
-  const remarksInput = document.getElementById('asr-remarks');
-  if(remarksInput) remarksInput.value = remarks || '';
-  activeStockLocations(addStockStoreId).forEach(loc=>{
-    const open = document.getElementById('asr-open-' + loc.id);
-    const close = document.getElementById('asr-close-' + loc.id);
-    if(open) open.value = openingMap ? Number(openingMap[loc.id]||0) : '';
-    if(close) close.value = closingMap ? Number(closingMap[loc.id]||0) : '';
-  });
-  updateAddStockOpeningTotal();
-}
-
-// Re-fills the counts for whatever product/store is selected: today's
-// existing record if there is one, otherwise the product's last closing
-// figures carried forward (same store first), otherwise empty.
-function onAddStockProductChange(){
-  updateVariationDatalist('asr-product','variation-list');
-  rebuildAddStockInputs(document.getElementById('asr-store').value || null);
-  const base = document.getElementById('asr-product').value.trim();
-  const variation = document.getElementById('asr-variation').value;
-  const productName = composeProductName(base, variation);
-  const hint = document.getElementById('asr-hint');
-  if(!productName){
-    fillAddStockInputs(null,null);
-    hint.textContent = 'Opening and closing totals sync to Sales.';
-    return;
-  }
-  const storeId = document.getElementById('asr-store').value || null;
-  const formDate = addStockDate();
-  const existing = salesReports.find(row=>
-    row.work_date===formDate
-    && (row.store_id||null)===storeId
-    && canonicalSkuName(row.product_name)===canonicalSkuName(productName)
-  );
-  if(existing){
-    fillAddStockInputs(locationMap(existing,'opening'), locationMap(existing,'closing'), existing.remarks);
-    hint.textContent = `${formDate===todayStr()?"Today's":'That day\'s'} record already exists — saving will update its counts, not add another row.`;
-    return;
-  }
-  const priorEntries = salesReports
-    .filter(r => canonicalSkuName(r.product_name) === canonicalSkuName(productName) && r.work_date < formDate)
-    .sort((a,b) => b.work_date.localeCompare(a.work_date));
-  // Only this outlet's own history — never another outlet's counts.
-  const prior = priorEntries.find(r=>(r.store_id||null)===storeId);
-  if(prior){
-    const carried = locationMap(prior,'closing');
-    fillAddStockInputs(carried, carried);
-    hint.textContent = `Carried forward from ${formatDateShort(prior.work_date)}'s closing figures — edit if they've changed.`;
-  }else{
-    fillAddStockInputs(null,null);
-    hint.textContent = 'No prior record for this product yet — starting from 0.';
-  }
-}
-
-async function saveAddStockRecordForm(){
-  const work_date = addStockDate();
-  const productBase = document.getElementById('asr-product').value.trim();
-  const variation = document.getElementById('asr-variation').value;
-  const product_name = composeProductName(productBase, variation);
-  if(!productBase){ showToast('Product name is required'); return; }
-  if(isGiveaway(product_name)){ showToast('Free items are not tracked in Stock Management'); return; }
-
-  const store_id = document.getElementById('asr-store').value || null;
-  if(!store_id){ showToast('Choose the outlet'); return; }
-  addStockStoreId = store_id;
-  const location_qty = readLocationInputs('asr-open-', {}, store_id);
-  const closing_location_qty = readLocationInputs('asr-close-', {}, store_id);
-  const openingTotal = locationMapTotal(location_qty, store_id);
-  const closingTotal = locationMapTotal(closing_location_qty, store_id);
-  const remarks = document.getElementById('asr-remarks').value.trim() || null;
-
-  const btn = document.getElementById('add-stock-record-save-btn');
-  btn.disabled = true;
-  try{
-    btn.textContent = 'Saving…';
-    const existing = salesReports.find(row=>
-      row.work_date===work_date
-      && (row.store_id||null)===store_id
-      && canonicalSkuName(row.product_name)===canonicalSkuName(product_name)
-    );
-    if(existing){
-      await DB.updateSalesReport(existing.id,{ location_qty:{...locationMap(existing,'opening'),...location_qty}, closing_location_qty:{...locationMap(existing,'closing'),...closing_location_qty}, opening_qty:openingTotal, closing_qty:closingTotal, remarks, ...stockRecordAttribution() });
-    }else{
-      await DB.addSalesReport({
-        work_date, store_id, ...stockRecordAttribution(), product_name,
-        opening_qty:openingTotal, sales_qty: 0, closing_qty:closingTotal,
-        remarks, photo_url: null, is_free_item: false,
-        location_qty, closing_location_qty
-      });
-    }
-    await carryClosingToNextEvent(product_name,work_date,closingTotal,closing_location_qty,store_id);
-    await refreshData();
-    render();
-    openOutletStockSummary(store_id || '__none__',work_date,true);
-    showToast(`${existing ? 'Stock count updated' : 'Stock record added'} · Opening ${openingTotal} · Closing ${closingTotal}`);
-  }catch(e){
-    console.error(e);
-    showToast('Could not save — ' + (e.message || 'check your connection'));
-    btn.disabled = false;
-    btn.textContent = 'Save';
-  }
-}
-
-// ---------------- Product photos (camera button under the "+") ----------------
-// One photo per product type (e.g. 1L Bio Dishwash), shared by all its
-// variations. Pick the picture here; it uploads to Cloudinary and shows beside
-// the product name in the Sales Report.
-function productPhotoFamilies(){
-  const names = new Set();
-  PRODUCT_SUGGESTIONS.forEach(name=>names.add(productFamilyName(name)));
-  salesReports.forEach(row=>{ if(row.product_name) names.add(productFamilyName(row.product_name)); });
-  return [...names].sort((a,b)=>{
-    const ai = PRODUCT_SUGGESTIONS.findIndex(n=>productFamilyName(n)===a);
-    const bi = PRODUCT_SUGGESTIONS.findIndex(n=>productFamilyName(n)===b);
-    return (ai<0?999:ai)-(bi<0?999:bi) || a.localeCompare(b);
-  });
-}
-
-function productPhotosSheetHtml(busyFamily){
-  const rows = productPhotoFamilies().map(family=>{
-    const url = productPhotoFor(family);
-    const busy = busyFamily === family;
-    return `<div class="pp-row" data-family="${esc(family)}">
-      <span class="pp-thumb">${url?`<img src="${esc(url)}" alt="">`:''}</span>
-      <span class="pp-name">${esc(family)}</span>
-      ${busy ? '<span class="pp-busy">Uploading…</span>' : `
-        <label class="btn btn-ghost btn-sm">${url?'Change':'Add photo'}<input type="file" accept="image/*" hidden onchange="uploadProductPhoto(this)"></label>
-        ${url?'<button type="button" class="btn btn-ghost btn-sm" onclick="removeProductPhoto(this)">Remove</button>':''}`}
-    </div>`;
-  }).join('');
-  return `
-    <div class="stock-summary-head"><div class="modal-title">Product photos</div><button type="button" class="modal-close-btn" onclick="closeModal()" aria-label="Close">✕</button></div>
-    ${rows}`;
-}
-
-function openProductPhotosSheet(){
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-sheet" id="product-photos-sheet">${productPhotosSheetHtml()}</div>`;
-  showModal(overlay);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
-}
-
-function refreshProductPhotosSheet(busyFamily){
-  const sheet = document.getElementById('product-photos-sheet');
-  if(sheet) sheet.innerHTML = productPhotosSheetHtml(busyFamily);
-}
-
-async function uploadProductPhoto(input){
-  const file = input.files && input.files[0];
-  const family = input.closest('.pp-row').dataset.family;
-  if(!file) return;
-  refreshProductPhotosSheet(family);
-  try{
-    const compressed = await compressImageFile(file);
-    const url = await uploadPhotoToCloudinary(compressed);
-    await DB.setProductPhoto(family, url);
-    productPhotos = await DB.getProductPhotos();
-    showToast(`Photo saved for ${family}`);
-  }catch(e){
-    console.error(e);
-    showToast('Could not save the photo — ' + (e.message || 'check your connection'));
-  }
-  refreshProductPhotosSheet();
-  render();
-}
-
-async function removeProductPhoto(button){
-  const family = button.closest('.pp-row').dataset.family;
-  try{
-    await DB.deleteProductPhoto(family);
-    productPhotos = await DB.getProductPhotos();
-    showToast(`Photo removed for ${family}`);
-  }catch(e){
-    console.error(e);
-    showToast('Could not remove — ' + (e.message || 'check your connection'));
-  }
-  refreshProductPhotosSheet();
-  render();
 }

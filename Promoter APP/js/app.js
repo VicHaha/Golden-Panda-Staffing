@@ -7,6 +7,7 @@ let stores = [];
 let scheduledDates = [];
 let salesReports = [];
 let dayPhotos = [];
+let dayFeedback = [];
 let shiftReports = [];
 let jobs = [];
 let myMonthPay = null; // { pay, commission, count } for this promoter, current calendar month
@@ -264,7 +265,9 @@ async function loadInitialData(){
     await linkAllScheduledLocations().catch(e=>console.warn('Link scheduled locations failed (non-fatal):',e));
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up
-    setSyncDot(true);
+    try{ skuCatalog = await DB.getSkus(); await ensureSkuCatalog(); }
+  catch(e){ console.warn('Could not load the SKU list (non-fatal):', e); }
+  setSyncDot(true);
     subscribeRealtime();
   }catch(e){
     console.error(e);
@@ -293,15 +296,16 @@ async function refreshTomorrowJob(){
 }
 
 async function refreshData(){
-  const [s, sd, sr, dp, shr, jb, locations] = await Promise.all([
+  const [s, sd, sr, dp, shr, jb, locations, df] = await Promise.all([
     DB.getStores(), DB.getScheduledDates(), DB.getSalesReports(), DB.getDayPhotos(), DB.getShiftReports(), DB.getAllJobs(),
-    DB.getStockLocations()
+    DB.getStockLocations(), DB.getDayFeedback().catch(()=>dayFeedback)
   ]);
   stores = s;
   stockLocations = locations;
   scheduledDates = sd;
   salesReports = sr;
   dayPhotos = dp;
+  dayFeedback = df;
   shiftReports = shr;
   jobs = jb;
   // The tap log (for Undo) is a nice-to-have: a failure here must not take the whole app down.
@@ -338,11 +342,13 @@ function subscribeRealtime(){
     .channel('gp-stock-report-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'day_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'day_feedback' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_log' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_locations' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'product_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'skus' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, handleRemoteJobChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
@@ -445,7 +451,7 @@ function switchTab(tab){
 function openFab(){
   if(currentTab==='shift') openShiftForm();
   else if(currentTab==='sales') openSalesForm();
-  else if(currentTab==='stock') openAddStockRecordForm();
+  else if(currentTab==='stock') openSkuListSheet();
 }
 
 function render(){

@@ -394,7 +394,7 @@ async function ensureTodaysStockRows(){
 
 // Creates the missing SKU rows for one outlet on one working date. The SKU
 // list is the one this outlet used on its previous working date (a brand-new
-// outlet starts from the default list); each SKU's opening and closing figures
+// outlet starts empty until SKUs are ticked in the SKU list); each SKU's opening and closing figures
 // per location start from that outlet's last closing count. Gift Set / Sample
 // Set / Flyer / Coupon default to free items (editable per row).
 async function ensureStockRowsForStore(date, storeId){
@@ -410,7 +410,7 @@ async function ensureStockRowsForStore(date, storeId){
       plan.push({ name: row.product_name, free: isFreeItem(row), source: row });
     });
   }else{
-    PRODUCT_SUGGESTIONS.forEach(name=>plan.push({ name, free: isGiveaway(name), source: null }));
+    // A brand-new outlet has no SKUs until some are ticked in the SKU list.
   }
   for(const item of plan){
     if(existing.has(canonicalSkuName(item.name))) continue;

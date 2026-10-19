@@ -208,7 +208,7 @@ function renderApp(){
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/></svg>
         </button>
         <button type="button" class="fab-primary" onclick="openFab()" aria-label="Add job">+</button>
-        <button type="button" class="fab-photo hidden" onclick="openProductPhotosSheet()" aria-label="Product photos" title="Product photos">
+        <button type="button" class="fab-photo hidden" onclick="openSkuRecord()" aria-label="SKU Record" title="SKU Record">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>
         </button>
         <button type="button" class="fab-calendar hidden" onclick="openWorkDateForm()" aria-label="Add working date without promoter" title="Add working date without promoter">
@@ -252,7 +252,9 @@ async function loadInitialData(){
     await linkAllScheduledLocations().catch(e=>console.warn('Link scheduled locations failed (non-fatal):',e));
     await ensureTodaysStockRows().catch(e=>console.warn('Auto-seed today\'s stock rows failed (non-fatal):', e));
     await refreshData(); // re-fetch so any newly auto-created rows show up
-    setSyncDot(true);
+    try{ skuCatalog = await DB.getSkus(); await ensureSkuCatalog(); }
+  catch(e){ console.warn('Could not load the SKU list (non-fatal):', e); }
+  setSyncDot(true);
     subscribeRealtime();
     startJobReminderChecks();
   }catch(e){
@@ -302,6 +304,7 @@ function subscribeRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_log' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_locations' }, handleRemoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'product_photos' }, handleRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'skus' }, handleRemoteChange)
     .subscribe(status=>{
       setSyncDot(status === 'SUBSCRIBED');
     });
@@ -356,7 +359,7 @@ function openFab(){
     else openPromoterForm();
   }
   else if(currentTab==='sales') openSalesForm();
-  else if(currentTab==='stock') openAddStockRecordForm();
+  else if(currentTab==='stock') openSkuListSheet();
   else showToast('Switch to Schedule, Sales Section, or Stock Management to add');
 }
 
