@@ -1706,3 +1706,7 @@ button.sx-label{cursor:pointer;-webkit-tap-highlight-color:transparent;padding:1
 .sx-extras .day-photo-heading{background:transparent;padding:6px 16px 0;}
 .sx-extras .day-photo-strip{padding:6px 16px 4px;}
 .sx-extras .day-feedback-block{margin:6px 16px 10px;padding-top:10px;}
+
+.sx-extras-card .sx-outlet-head{padding-bottom:6px;}
+.sx-extras-card .sx-total{font-size:12px;font-weight:600;color:var(--ink-soft);}
+.sx-extras{border-top:none;}

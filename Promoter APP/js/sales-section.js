@@ -161,8 +161,10 @@ function renderSalesOutlet(group, isToday, canTapRow, date){
     <header class="sx-outlet-head"><h2>${esc(group.label)}</h2><span class="sx-total"><b>${total}</b> sold</span></header>
     ${sold.length ? renderSalesTable(sold,'SKU',isToday,canTapRow) : ''}
     ${given.length ? renderSalesTable(given,'Item',isToday,canTapRow) : ''}
+  </section>
+  <section class="panel sx-outlet sx-extras-card">
+    <header class="sx-outlet-head"><h2>Photos &amp; notes</h2><span class="sx-total">${esc(group.label)}</span></header>
     <div class="sx-extras">
-      <div class="sx-section-title">Photos &amp; notes</div>
       ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date, storeKey) : ''}
       ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date, storeKey) : ''}
     </div>
