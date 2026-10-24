@@ -207,7 +207,7 @@ create table if not exists shift_reports (
 alter table shift_reports add column if not exists customer_age_range text
   check (customer_age_range in ('under_18', '18_25', '26_35', '36_50', '50_plus'));
 
--- Photos and notes per working date.
+-- Photos and notes per OUTLET per working date.
 create table if not exists day_photos (
   id uuid primary key default gen_random_uuid(),
   work_date date not null,                  -- several photos per date are allowed
@@ -221,13 +221,20 @@ alter table day_photos drop constraint if exists day_photos_work_date_key;  -- o
 
 create table if not exists day_feedback (
   id uuid primary key default gen_random_uuid(),
-  work_date date not null unique,
+  work_date date not null,
   store_id uuid references stores(id) on delete set null,
   promoter_id uuid references promoters(id) on delete set null,
   feedback text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table day_feedback drop constraint if exists day_feedback_work_date_key;  -- old one-note-per-date rule
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'day_feedback_date_store_key') then
+    alter table day_feedback add constraint day_feedback_date_store_key unique (work_date, store_id);
+  end if;
+end $$;
 
 -- One photo per product TYPE (e.g. "1L Bio Dishwash"), shared by all its
 -- variations. The picture itself is hosted on Cloudinary; only its link is

@@ -458,7 +458,9 @@ function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const c = document.getElementById('content');
   if(!c) return;
+  const notesDraft = currentTab==='sales' ? captureNotesDraft() : null;
   c.innerHTML = currentTab==='shift' ? renderShift() : currentTab==='schedule' ? renderSchedule() : currentTab==='stock' ? renderStockManagement() : renderSalesSection();
+  if(currentTab==='sales') restoreNotesDraft(notesDraft);
   const fab = document.getElementById('fab');
   if(fab) fab.style.display = (currentTab==='schedule' || currentTab==='sales') ? 'none' : '';
 }

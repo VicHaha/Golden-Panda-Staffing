@@ -366,24 +366,82 @@ async function carryClosingToNextEvent(productName, workDate, closingQty, locati
 // opening/sales/closing row. All of a date's photos sit in a single
 // horizontally-scrolling row of thumbnails, with an "add" tile right
 // after the last photo (only for today — past dates are locked).
-function renderDayPhotoRow(date, isToday){
-  const photos = dayPhotos.filter(d => d.work_date === date);
+// Photos and notes belong to each OUTLET for the day. Older records saved
+// before this had no outlet; they show under the day's first outlet.
+let salesFirstOutletId = null;
+function belongsToOutlet(entry, storeId){
+  const sid = entry.store_id || null;
+  return sid === (storeId || null) || (!sid && (storeId || null) === salesFirstOutletId);
+}
+function extrasLocked(date){ return !canEditPastSales() && date !== todayStr(); }
+function outletDomKey(date, storeId){ return (date + '-' + (storeId || 'none')).replace(/[^0-9a-zA-Z]/g, ''); }
+
+function renderDayPhotoRow(date, storeId){
+  const locked = extrasLocked(date);
+  const photos = dayPhotos.filter(d => d.work_date === date && belongsToOutlet(d, storeId));
   const photoThumbs = photos.map(dp => `
-    <div class="day-photo-thumb" role="button" tabindex="0" onclick="openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')}" title="Enlarge photo" aria-label="Enlarge day photo">
+    <div class="day-photo-thumb" role="button" tabindex="0" onclick="openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPhotoLightbox('${esc(dp.photo_url||'')}','Photo from ${formatDateLong(date)}')}" title="Enlarge photo" aria-label="Enlarge photo">
       ${dp.photo_url
-        ? `<img src="${esc(dp.photo_url)}" alt="Day photo">`
+        ? `<img src="${esc(dp.photo_url)}" alt="Outlet photo">`
         : `<div class="day-photo-thumb-empty">📷</div>`}
-      ${isToday ? `<button class="day-photo-thumb-delete" onclick="event.stopPropagation(); closeModal(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>` : ''}
+      ${locked ? '' : `<button class="day-photo-thumb-delete" onclick="event.stopPropagation(); closeModal(); deleteDayPhotoRow('${dp.id}')" title="Delete">✕</button>`}
     </div>
   `).join('');
 
-  if(!isToday) return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}</div></div>`;
-
-  const addThumb = `
-    <div class="day-photo-thumb day-photo-add" onclick="closeModal(); openDayPhotoForm('${date}')" title="Add day photo">＋</div>
+  const addThumb = locked ? '' : `
+    <button type="button" class="day-photo-thumb day-photo-add" onclick="closeModal();openDayPhotoForm('${date}','','${storeId||''}')" title="Add photo" aria-label="Add photo">＋</button>
   `;
 
-  return `<div class="day-photo-section"><div class="day-photo-heading"><span>Photo of the day</span></div><div class="day-photo-strip">${photoThumbs}${addThumb}</div></div>`;
+  return `<div class="day-photo-section">
+    <div class="day-photo-heading"><span>Photo of the day</span></div>
+    <div class="day-photo-strip">${photoThumbs}${addThumb}${!photos.length && locked ? '<span class="field-hint" style="padding:6px 2px 10px;">No photos</span>' : ''}</div>
+  </div>`;
+}
+
+// One notes field per outlet per working date. Saved with a small Save button
+// rather than autosaving on blur, so a stray tap elsewhere can't overwrite it.
+function renderDayFeedbackRow(date, storeId){
+  const locked = extrasLocked(date);
+  const matches = dayFeedback.filter(d => d.work_date === date && belongsToOutlet(d, storeId));
+  const entry = matches.find(d => d.store_id) || matches[0];
+  const value = entry ? (entry.feedback || '') : '';
+  const key = outletDomKey(date, storeId);
+  const sid = storeId || '';
+  return `
+    <div class="day-feedback-block">
+      <label for="day-feedback-${key}">Notes</label>
+      <textarea id="day-feedback-${key}" rows="2" placeholder="${locked ? 'No notes' : 'Add notes for this outlet (optional)'}" ${locked ? 'readonly' : `oninput="onDayFeedbackInput('${date}','${sid}')"`}>${esc(value)}</textarea>
+      ${locked ? '' : `<div class="day-feedback-actions">
+        <span class="field-hint" id="day-feedback-hint-${key}"></span>
+        <button type="button" class="btn btn-gold btn-sm" id="day-feedback-save-${key}" style="display:none;" onclick="saveDayFeedback('${date}','${sid}')">Save notes</button>
+      </div>`}
+    </div>
+  `;
+}
+
+function onDayFeedbackInput(date, storeId){
+  const btn = document.getElementById(`day-feedback-save-${outletDomKey(date, storeId)}`);
+  if(btn) btn.style.display = '';
+}
+
+async function saveDayFeedback(date, storeId){
+  const key = outletDomKey(date, storeId);
+  const textarea = document.getElementById(`day-feedback-${key}`);
+  const btn = document.getElementById(`day-feedback-save-${key}`);
+  const hint = document.getElementById(`day-feedback-hint-${key}`);
+  const feedback = textarea.value.trim();
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+  try{
+    await DB.upsertDayFeedback(date, storeId || null, feedback || null);
+    await refreshData();
+    if(hint) hint.textContent = 'Saved';
+    if(btn) btn.style.display = 'none';
+    render();
+  }catch(e){
+    console.error(e);
+    showToast('Could not save notes — ' + (e.message || 'check your connection'));
+    if(btn){ btn.disabled = false; btn.textContent = 'Save notes'; }
+  }
 }
 
 function openSalesForm(id, reuseOverlay=false){
@@ -457,52 +515,6 @@ function openSalesForm(id, reuseOverlay=false){
 // Product photos: ONE photo per product type (e.g. 1L Bio Dishwash), shared by
 // all its variations, kept in the product_photos table; the picture itself
 // lives on Cloudinary.
-// One general feedback field per working date, sitting at the bottom of
-// that date's record — replaces the old per-product "Customer feedback"
-// field. Saved with a small Save button rather than autosaving on blur,
-// so a stray tap/click elsewhere in the card can't silently overwrite it.
-function renderDayFeedbackRow(date){
-  const entry = dayFeedback.find(d => d.work_date === date);
-  const value = entry ? (entry.feedback || '') : '';
-  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
-  return `
-    <div class="day-feedback-block">
-      <label for="day-feedback-${safeDate}">Notes</label>
-      <textarea id="day-feedback-${safeDate}" rows="2" placeholder="Add notes for this date (optional)" oninput="onDayFeedbackInput('${date}')">${esc(value)}</textarea>
-      <div class="day-feedback-actions">
-        <span class="field-hint" id="day-feedback-hint-${safeDate}"></span>
-        <button type="button" class="btn btn-gold btn-sm" id="day-feedback-save-${safeDate}" style="display:none;" onclick="saveDayFeedback('${date}')">Save notes</button>
-      </div>
-    </div>
-  `;
-}
-
-function onDayFeedbackInput(date){
-  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
-  const btn = document.getElementById(`day-feedback-save-${safeDate}`);
-  if(btn) btn.style.display = '';
-}
-
-async function saveDayFeedback(date){
-  const safeDate = date.replace(/[^0-9a-zA-Z]/g, '');
-  const textarea = document.getElementById(`day-feedback-${safeDate}`);
-  const btn = document.getElementById(`day-feedback-save-${safeDate}`);
-  const hint = document.getElementById(`day-feedback-hint-${safeDate}`);
-  const feedback = textarea.value.trim();
-  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
-  try{
-    await DB.upsertDayFeedback(date, feedback || null);
-    await refreshData();
-    if(hint) hint.textContent = 'Saved';
-    if(btn) btn.style.display = 'none';
-    render();
-  }catch(e){
-    console.error(e);
-    showToast('Could not save notes — ' + (e.message || 'check your connection'));
-    if(btn){ btn.disabled = false; btn.textContent = 'Save notes'; }
-  }
-}
-
 let productPhotos = [];
 function productFamilyName(name){
   return parseProductName(canonicalSkuName(name)).base;
@@ -686,6 +698,20 @@ async function startDayPhotoCamera(){
   }
 }
 
+// Picks an existing picture from the device (gallery / files).
+function pickDayPhotoFile(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  capturedDayPhotoBlob = file;
+  stopDayPhotoCamera();
+  const panel = document.getElementById('day-photo-camera-panel');
+  if(panel) panel.hidden = true;
+  const preview = document.getElementById('photo-preview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = '';
+  document.getElementById('photo-preview-empty').style.display = 'none';
+}
+
 function captureDayPhoto(){
   const video = document.getElementById('day-photo-camera');
   if(!video || !video.videoWidth){ showToast('Camera is still starting'); return; }
@@ -705,7 +731,7 @@ function captureDayPhoto(){
   },'image/jpeg',.9);
 }
 
-function openDayPhotoForm(date, id){
+function openDayPhotoForm(date, id, storeId){
   const today = todayStr();
   if(date !== today){
     showToast("Only today's photo can be edited"); return;
@@ -716,7 +742,7 @@ function openDayPhotoForm(date, id){
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-sheet">
-      <div class="modal-title">${existing ? 'Edit' : 'Add'} day photo — ${formatDateLong(date)}</div>
+      <div class="modal-title">${existing ? 'Edit' : 'Add'} photo — ${esc(((stores.find(x=>x.id===storeId)||{}).name)||'')} · ${formatDateShort(date)}</div>
       <div class="field">
         <label>Photo</label>
         <div class="photo-picker">
@@ -724,6 +750,7 @@ function openDayPhotoForm(date, id){
           <div id="photo-preview-empty" class="photo-preview photo-preview-empty" style="${existing&&existing.photo_url?'display:none;':''}">📷</div>
           <div class="photo-picker-actions">
             <button type="button" class="btn btn-ghost" onclick="startDayPhotoCamera()">Take photo</button>
+            <label class="btn btn-ghost">Upload from device<input type="file" accept="image/*" hidden onchange="pickDayPhotoFile(this)"></label>
           </div>
         </div>
         <div class="camera-panel" id="day-photo-camera-panel" hidden>
@@ -737,7 +764,7 @@ function openDayPhotoForm(date, id){
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}','${id||''}')">Save</button>
+        <button class="btn btn-primary" id="day-photo-save-btn" onclick="saveDayPhotoForm('${date}','${id||''}','${storeId||''}')">Save</button>
       </div>
     </div>
   `;
@@ -745,7 +772,7 @@ function openDayPhotoForm(date, id){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 }
 
-async function saveDayPhotoForm(date, id){
+async function saveDayPhotoForm(date, id, storeId){
   if(date !== todayStr()){
     showToast("Only today's photo can be edited"); return;
   }
@@ -766,9 +793,9 @@ async function saveDayPhotoForm(date, id){
     }
     btn.textContent = 'Saving…';
     if(id){
-      await DB.updateDayPhoto(id, { store_id: null, promoter_id: currentPromoterId, photo_url });
+      await DB.updateDayPhoto(id, { store_id: storeId || null, promoter_id: currentPromoterId, photo_url });
     }else{
-      await DB.addDayPhoto(date, { store_id: null, promoter_id: currentPromoterId, photo_url });
+      await DB.addDayPhoto(date, { store_id: storeId || null, promoter_id: currentPromoterId, photo_url });
     }
     await refreshData();
     closeModal();

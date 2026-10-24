@@ -60,19 +60,21 @@ async function setSalesViewDate(value){
 // The day-notes box (admin app) is a plain textarea inside the page, so a
 // redraw would wipe a half-typed note. render() saves and restores it.
 function captureNotesDraft(){
-  const textarea = document.querySelector('.day-feedback-block textarea');
-  if(!textarea) return null;
-  const saveButton = document.getElementById(textarea.id.replace('day-feedback-','day-feedback-save-'));
-  if(!saveButton || saveButton.style.display === 'none') return null; // nothing unsaved
-  return { id: textarea.id, value: textarea.value };
+  const drafts = [];
+  document.querySelectorAll('.day-feedback-block textarea').forEach(textarea=>{
+    const saveButton = document.getElementById(textarea.id.replace('day-feedback-','day-feedback-save-'));
+    if(saveButton && saveButton.style.display !== 'none') drafts.push({ id: textarea.id, value: textarea.value }); // unsaved only
+  });
+  return drafts.length ? drafts : null;
 }
-function restoreNotesDraft(draft){
-  if(!draft) return;
-  const textarea = document.getElementById(draft.id);
-  if(!textarea) return;
-  textarea.value = draft.value;
-  const saveButton = document.getElementById(draft.id.replace('day-feedback-','day-feedback-save-'));
-  if(saveButton) saveButton.style.display = '';
+function restoreNotesDraft(drafts){
+  (drafts || []).forEach(draft=>{
+    const textarea = document.getElementById(draft.id);
+    if(!textarea) return;
+    textarea.value = draft.value;
+    const saveButton = document.getElementById(draft.id.replace('day-feedback-','day-feedback-save-'));
+    if(saveButton) saveButton.style.display = '';
+  });
 }
 
 // Small product photo (one per product type), shown beside the product name.
@@ -88,35 +90,42 @@ function salesRowControl(row, steppable){
   const qty = Number(row.sales_qty||0);
   const full = esc(canonicalSkuName(row.product_name));
   return steppable
-    ? `<span class="sales-qty-adjust ss-stepper">
+    ? `<span class="sales-qty-adjust sx-step">
         <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',-1)" aria-label="Minus one ${full}">−</button>
         <b class="sales-table-number">${qty}</b>
         <button type="button" onclick="adjustSalesQuantity(event,'${row.id}',1)" aria-label="Add one ${full}">+</button>
       </span>`
-    : `<span class="ss-locked"><b class="sales-table-number">${qty}</b></span>`;
+    : `<span class="ss-locked sx-qty"><b class="sales-table-number">${qty}</b></span>`;
 }
 
-// Sold SKUs, grouped by product: the product name once, then one row per
-// variation —   1L Bio Dishwash | Bidara | − 4 +
-// Free items ("Given out") list name, opening/closing, and the stepper.
+// The tappable (admin / today) or plain name of a SKU row.
+function salesSkuLabel(row, text, canTapRow, cls){
+  const full = esc(canonicalSkuName(row.product_name));
+  return canTapRow
+    ? `<button type="button" class="sx-label ${cls||''}" onclick="openSalesForm('${row.id}')" aria-label="Edit ${full}">${text}</button>`
+    : `<span class="sx-label ${cls||''}">${text}</span>`;
+}
+
+// Sold SKUs: one block per product — photo and name on top, then one big,
+// easy-to-tap row per variation (name left, − n + right).
+// Free items ("Given out"): name with its opening / closing, then the stepper.
 function renderSalesTable(rows, title, isToday, canTapRow){
   if(title !== 'SKU'){
     const body = rows.map(row=>{
-      const full = esc(canonicalSkuName(row.product_name));
-      const sku = canTapRow
-        ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${row.id}')" aria-label="Edit ${full}">${full}</button>`
-        : `<span class="ss-sku">${full}</span>`;
       const variance = Number(row.opening_qty||0) - Number(row.closing_qty||0) - Number(row.sales_qty||0);
-      const varianceNote = variance !== 0 ? `<small class="ss-meta ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</small>` : '';
-      return `<div class="ss-row ss-row-free ss-free-grid"><span class="ss-name-cell"><span class="ss-var-cell">${sku}${productThumb(row.product_name)}</span>${varianceNote}</span>
-        <span class="ss-free-num">${Number(row.opening_qty||0)}</span>
-        <span class="ss-free-num">${Number(row.closing_qty||0)}</span>
-        ${salesRowControl(row, isToday)}</div>`;
+      const varianceNote = variance !== 0 ? `<span class="ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</span>` : '';
+      return `<div class="sx-free">
+        <div class="sx-free-main">
+          ${productThumb(row.product_name)}
+          <div class="sx-free-text">
+            ${salesSkuLabel(row, esc(canonicalSkuName(row.product_name)), canTapRow, 'sx-free-name')}
+            <span class="sx-free-meta">Opening ${Number(row.opening_qty||0)} · Closing ${Number(row.closing_qty||0)} ${varianceNote}</span>
+          </div>
+        </div>
+        ${salesRowControl(row, isToday)}
+      </div>`;
     }).join('');
-    return `<div class="ss-table">
-      <div class="ss-head ss-head-free ss-free-grid"><span>${title}</span><span>Opening</span><span>Closing</span><span>Given out</span></div>
-      ${body}
-    </div>`;
+    return `<div class="sx-section"><div class="sx-section-title">Given out</div>${body}</div>`;
   }
   const groups = [];
   rows.forEach(row=>{
@@ -125,37 +134,38 @@ function renderSalesTable(rows, title, isToday, canTapRow){
     if(!group){ group = { base, items: [] }; groups.push(group); }
     group.items.push({ row, variation });
   });
-  // One block per product: the name (and photo) on the left, and a tight stack of
-  // variation rows on the right. The rows keep their own height, whatever the
-  // size of the photo.
-  const body = groups.map(group=>{
-    const variationRows = group.items.map(item=>{
-      const full = esc(canonicalSkuName(item.row.product_name));
-      const variation = esc(item.variation || '—');
-      const variationCell = canTapRow
-        ? `<button type="button" class="ss-sku ss-sku-btn" onclick="openSalesForm('${item.row.id}')" aria-label="Edit ${full}">${variation}</button>`
-        : `<span class="ss-sku">${variation}</span>`;
-      return `<div class="ss-vrow">${variationCell}${salesRowControl(item.row, isToday)}</div>`;
-    }).join('');
-    return `<div class="ss-group">
-      <span class="ss-family"><span class="ss-family-name">${esc(group.base)}</span>${productThumb(group.items[0].row.product_name)}</span>
-      <div class="ss-variations">${variationRows}</div>
+  return `<div class="sx-section">` + groups.map(group=>{
+    const thumb = productThumb(group.items[0].row.product_name);
+    const sum = group.items.reduce((acc,item)=>acc + Number(item.row.sales_qty||0), 0);
+    if(group.items.length === 1 && !group.items[0].variation){
+      const item = group.items[0];
+      return `<div class="sx-product sx-single">
+        <div class="sx-product-head">${thumb}${salesSkuLabel(item.row, esc(group.base), canTapRow, 'sx-product-name')}${salesRowControl(item.row, isToday)}</div>
+      </div>`;
+    }
+    const variationRows = group.items.map(item=>`<div class="sx-var">${salesSkuLabel(item.row, esc(item.variation || '—'), canTapRow)}${salesRowControl(item.row, isToday)}</div>`).join('');
+    return `<div class="sx-product">
+      <div class="sx-product-head">${thumb}<span class="sx-product-name">${esc(group.base)}</span><span class="sx-product-sum">${sum} sold</span></div>
+      <div class="sx-vars">${variationRows}</div>
     </div>`;
-  }).join('');
-  return `<div class="ss-table">
-    <div class="ss-head ss-head-grouped"><span>SKU</span><span>Variation</span><span>Sales</span></div>
-    ${body}
-  </div>`;
+  }).join('') + `</div>`;
 }
 
-function renderSalesOutlet(group, isToday, canTapRow){
+function renderSalesOutlet(group, isToday, canTapRow, date){
   const sorted = [...group.items].sort((a,b)=>skuOrderIndex(a)-skuOrderIndex(b));
   const sold = sorted.filter(r=>!isFreeItem(r));
   const given = sorted.filter(r=>isFreeItem(r));
-  return `<section class="panel ss-outlet">
-    <header class="panel-head"><h2>${esc(group.label)}</h2></header>
+  const total = sold.reduce((acc,r)=>acc + Number(r.sales_qty||0), 0);
+  const storeKey = group.key === '__none__' ? null : group.key;
+  return `<section class="panel sx-outlet">
+    <header class="sx-outlet-head"><h2>${esc(group.label)}</h2><span class="sx-total"><b>${total}</b> sold</span></header>
     ${sold.length ? renderSalesTable(sold,'SKU',isToday,canTapRow) : ''}
     ${given.length ? renderSalesTable(given,'Item',isToday,canTapRow) : ''}
+    <div class="sx-extras">
+      <div class="sx-section-title">Photos &amp; notes</div>
+      ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date, storeKey) : ''}
+      ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date, storeKey) : ''}
+    </div>
   </section>`;
 }
 
@@ -230,17 +240,10 @@ function renderSalesSection(){
     html += emptyState('', isToday ? 'No sales to log yet today' : 'No sales recorded for this day', isToday ? 'Add SKUs in Stock Management and they appear here.' : 'Pick another date above.');
     return html;
   }else{
-    html += outlets.map(group=>renderSalesOutlet(group,isToday,canEdit)).join('');
+    salesFirstOutletId = (outlets.find(g=>g.key !== '__none__') || {}).key || null;
+    html += outlets.map(group=>renderSalesOutlet(group,isToday,canEdit,date)).join('');
   }
 
-  // Day photos and the day's general notes sit under the tables.
-  html += `<section class="panel ss-photos">
-    <header class="panel-head"><h2>Photos &amp; notes</h2></header>
-    <div class="panel-body">
-      ${typeof renderDayPhotoRow === 'function' ? renderDayPhotoRow(date,isToday) : ''}
-      ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date) : ''}
-    </div>
-  </section>`;
   return html;
 }
 

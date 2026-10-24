@@ -171,7 +171,7 @@ const DB = {
   // Removing the last job at an outlet on a day also removes that outlet's
   // records for that day (stock/sales, tap history, shift reports).
   async deleteOutletDayRecords(storeId, workDate){
-    for(const table of ['sales_reports','sales_log','shift_reports']){
+    for(const table of ['sales_reports','sales_log','shift_reports','day_photos','day_feedback']){
       const { error } = await sb.from(table).delete().eq('store_id', storeId).eq('work_date', workDate);
       if(error) throw error;
     }
@@ -484,10 +484,10 @@ const DB = {
 
   // One row per work_date — saving again replaces the same row (upsert
   // on work_date, same idea as the old single-photo-per-date behavior).
-  async upsertDayFeedback(work_date, feedback){
+  async upsertDayFeedback(work_date, store_id, feedback){
     const { data, error } = await sb
       .from('day_feedback')
-      .upsert({ work_date, feedback, updated_at: new Date().toISOString() }, { onConflict: 'work_date' })
+      .upsert({ work_date, store_id, feedback, updated_at: new Date().toISOString() }, { onConflict: 'work_date,store_id' })
       .select()
       .single();
     if(error) throw error;
