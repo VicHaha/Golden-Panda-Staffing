@@ -114,15 +114,22 @@ function renderSalesTable(rows, title, isToday, canTapRow){
     const body = rows.map(row=>{
       const variance = Number(row.opening_qty||0) - Number(row.closing_qty||0) - Number(row.sales_qty||0);
       const varianceNote = variance !== 0 ? `<span class="ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</span>` : '';
+      const field = (key, label, value) => canTapRow
+        ? `<label class="sx-go-field"><span>${label}</span><input type="number" inputmode="numeric" min="0" step="1" id="go-${key}-${row.id}" value="${value}" onchange="saveGivenOutField('${row.id}','${key}')" onfocus="this.select()"></label>`
+        : `<div class="sx-go-field"><span>${label}</span><b>${value}</b></div>`;
       return `<div class="sx-free">
         <div class="sx-free-main">
           ${productThumb(row.product_name)}
           <div class="sx-free-text">
             ${salesSkuLabel(row, esc(canonicalSkuName(row.product_name)), canTapRow, 'sx-free-name')}
-            <span class="sx-free-meta">Opening ${Number(row.opening_qty||0)} · Closing ${Number(row.closing_qty||0)} ${varianceNote}</span>
+            <span class="sx-free-meta" id="go-note-${row.id}">${varianceNote}</span>
           </div>
         </div>
-        ${salesRowControl(row, isToday)}
+        <div class="sx-go-grid">
+          ${field('open','Opening',Number(row.opening_qty||0))}
+          ${field('close','Closing',Number(row.closing_qty||0))}
+          ${field('given','Given out',Number(row.sales_qty||0))}
+        </div>
       </div>`;
     }).join('');
     return `<div class="sx-section"><div class="sx-section-title">Given out</div>${body}</div>`;
@@ -169,6 +176,35 @@ function renderSalesOutlet(group, isToday, canTapRow, date){
       ${typeof renderDayFeedbackRow === 'function' ? renderDayFeedbackRow(date, storeKey) : ''}
     </div>
   </section>`;
+}
+
+// Given-out items: Opening, Closing and Given out sit in one row and work each
+// other out once there is an opening count (opening = closing + given out).
+//   closing typed  → given out = opening − closing
+//   given out typed → closing  = opening − given out
+//   opening typed   → closing  = opening − given out
+async function saveGivenOutField(id, changed){
+  const row = salesReports.find(r=>r.id===id);
+  if(!row) return;
+  const box = key => document.getElementById(`go-${key}-${id}`);
+  const num = key => Math.max(0, Math.floor(parseFloat(box(key).value) || 0));
+  let opening = num('open'), closing = num('close'), given = num('given');
+  if(opening > 0){
+    if(changed === 'close'){ closing = Math.min(closing, opening); given = opening - closing; }
+    else if(changed === 'given'){ given = Math.min(given, opening); closing = opening - given; }
+    else { given = Math.min(given, opening); closing = opening - given; }
+  }
+  box('open').value = opening; box('close').value = closing; box('given').value = given;
+  const note = document.getElementById(`go-note-${id}`);
+  const variance = opening - closing - given;
+  if(note) note.innerHTML = variance !== 0 ? `<span class="ss-variance-note">Variance ${variance > 0 ? '+' : '−'}${Math.abs(variance)}</span>` : '';
+  try{
+    await DB.updateSalesReport(id, { opening_qty:opening, closing_qty:closing, sales_qty:given, ...stockRecordAttribution() });
+    row.opening_qty = opening; row.closing_qty = closing; row.sales_qty = given;
+  }catch(e){
+    console.error(e);
+    showToast('Could not save — ' + (e.message || 'check your connection'));
+  }
 }
 
 // The last +/- tap made today by THIS person (newest first in salesLog), if any.

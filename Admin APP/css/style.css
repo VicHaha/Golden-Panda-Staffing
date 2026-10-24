@@ -1720,3 +1720,14 @@ button.sx-label{cursor:pointer;-webkit-tap-highlight-color:transparent;padding:1
 .panel .sx-extras .day-feedback-block{margin:0;padding:0;border:none;}
 #root .panel .sx-extras .day-photo-section{padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid var(--line);}
 #root .panel .sx-extras .day-photo-strip{border:none;border-bottom:none;box-shadow:none;}
+
+.sx-free{display:block;padding:12px 16px 14px;}
+.sx-free-main{margin-bottom:10px;}
+.sx-go-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.sx-go-field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.sx-go-field span{font-size:11px;font-weight:600;color:var(--ink-soft);}
+.sx-go-field input{width:100%;min-height:46px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:700 17px/1 'Inter',sans-serif;text-align:center;}
+.sx-go-field input:focus{outline:2px solid var(--gold);outline-offset:0;border-color:var(--gold);background:#fff;}
+.sx-go-field b{display:block;min-height:46px;line-height:46px;text-align:center;font-size:17px;font-weight:700;color:var(--ink);}
+.sx-free-meta:empty{display:none;}
+.sx-go-field b{border:1px solid var(--line);border-radius:10px;background:var(--bg);}
