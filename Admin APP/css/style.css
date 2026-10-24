@@ -1718,3 +1718,5 @@ button.sx-label{cursor:pointer;-webkit-tap-highlight-color:transparent;padding:1
 .panel .sx-extras .day-photo-section{margin:0 0 14px;padding:0;background:transparent;border:none;}
 .panel .sx-extras .day-photo-strip{margin:0;padding:0;background:transparent;gap:10px;}
 .panel .sx-extras .day-feedback-block{margin:0;padding:0;border:none;}
+#root .panel .sx-extras .day-photo-section{padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid var(--line);}
+#root .panel .sx-extras .day-photo-strip{border:none;border-bottom:none;box-shadow:none;}
