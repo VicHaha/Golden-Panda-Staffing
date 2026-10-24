@@ -496,7 +496,6 @@ function renderDayPhotoRow(date, storeId){
   `;
 
   return `<div class="day-photo-section">
-    <div class="day-photo-heading"><span>Photo of the day</span></div>
     <div class="day-photo-strip">${photoThumbs}${addThumb}${!photos.length && locked ? '<span class="field-hint" style="padding:6px 2px 10px;">No photos</span>' : ''}</div>
   </div>`;
 }
@@ -512,8 +511,7 @@ function renderDayFeedbackRow(date, storeId){
   const sid = storeId || '';
   return `
     <div class="day-feedback-block">
-      <label for="day-feedback-${key}">Notes</label>
-      <textarea id="day-feedback-${key}" rows="2" placeholder="${locked ? 'No notes' : 'Add notes for this outlet (optional)'}" ${locked ? 'readonly' : `oninput="onDayFeedbackInput('${date}','${sid}')"`}>${esc(value)}</textarea>
+      <textarea id="day-feedback-${key}" aria-label="Notes" rows="2" placeholder="${locked ? 'No notes' : 'Add notes for this outlet (optional)'}" ${locked ? 'readonly' : `oninput="onDayFeedbackInput('${date}','${sid}')"`}>${esc(value)}</textarea>
       ${locked ? '' : `<div class="day-feedback-actions">
         <span class="field-hint" id="day-feedback-hint-${key}"></span>
         <button type="button" class="btn btn-gold btn-sm" id="day-feedback-save-${key}" style="display:none;" onclick="saveDayFeedback('${date}','${sid}')">Save notes</button>
