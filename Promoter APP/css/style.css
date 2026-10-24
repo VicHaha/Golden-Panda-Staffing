@@ -1523,3 +1523,8 @@ button.sx-label{cursor:pointer;-webkit-tap-highlight-color:transparent;padding:1
 .sx-extras .day-photo-section{background:transparent;}
 .sx-extras .day-photo-strip{padding-top:0;}
 .sx-extras .day-feedback-block{border-top:none;padding-top:0;margin-top:2px;}
+
+.panel .sx-extras{padding:4px 16px 16px;}
+.panel .sx-extras .day-photo-section{margin:0 0 14px;padding:0;background:transparent;border:none;}
+.panel .sx-extras .day-photo-strip{margin:0;padding:0;background:transparent;gap:10px;}
+.panel .sx-extras .day-feedback-block{margin:0;padding:0;border:none;}
