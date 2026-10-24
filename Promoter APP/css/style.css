@@ -1541,3 +1541,4 @@ button.sx-label{cursor:pointer;-webkit-tap-highlight-color:transparent;padding:1
 .sx-go-field b{display:block;min-height:46px;line-height:46px;text-align:center;font-size:17px;font-weight:700;color:var(--ink);}
 .sx-free-meta:empty{display:none;}
 .sx-go-field b{border:1px solid var(--line);border-radius:10px;background:var(--bg);}
+.job-position-supervisor{color:#3F5A73; background:#E4ECF3;}

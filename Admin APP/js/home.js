@@ -73,7 +73,7 @@ function renderHomeStockRecord(date){
 }
 
 function renderHomeOnDuty(date){
-  // Everyone scheduled on the chosen day — Promoter, Assistant and Mascot — by outlet.
+  // Everyone scheduled on the chosen day — Promoter, Assistant, Mascot and Supervisor — by outlet.
   const dayJobs = jobs
     .filter(job=>job.work_date === date)
     .sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)) || displayName(a.promoters).localeCompare(displayName(b.promoters)));

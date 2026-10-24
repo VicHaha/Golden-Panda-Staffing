@@ -75,7 +75,7 @@ create table if not exists jobs (
   pay numeric(10,2) default 0,
   commission numeric(10,2) default 0,
   remarks text,
-  position text not null default 'Promoter',   -- Promoter / Assistant / Mascot
+  position text not null default 'Promoter',   -- Promoter / Assistant / Mascot / Supervisor
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

@@ -2,7 +2,7 @@
 // Schedule — assign jobs, view the rolling 4-week roadshow calendar
 // ============================================================
 
-const JOB_POSITIONS = ['Promoter', 'Assistant', 'Mascot'];
+const JOB_POSITIONS = ['Promoter', 'Assistant', 'Mascot', 'Supervisor'];
 let scheduleShowMore = false; // toggled by the "Show earlier & later jobs" button
 
 // Default shift presets: pay auto-fills when a position is chosen.
